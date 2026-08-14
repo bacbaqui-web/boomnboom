@@ -11,10 +11,28 @@ const DIRS = { up:[0,-1], down:[0,1], left:[-1,0], right:[1,0], wait:[0,0] };
 let tick=0, nextPlayerNumber=1, nextBombNumber=1, nextTickAt=Date.now()+TICK_MS;
 let flames=[];
 const players=new Map(), bombs=new Map(), destroyed=new Map(), cleared=new Set();
+const chunkCache=new Map();
 const key=(x,y)=>`${x},${y}`;
 const permanent=(x,y)=>x%2===0&&y%2===0;
 function hash(x,y){let n=Math.imul(x,374761393)+Math.imul(y,668265263)+0x9e3779b9;n=Math.imul(n^(n>>>13),1274126177);return(n^(n>>>16))>>>0}
-function naturalCrate(x,y){return !permanent(x,y)&&!cleared.has(key(x,y))&&hash(x,y)%100<43}
+function chunkCrates(chunkX,chunkY){
+  const chunkKey=key(chunkX,chunkY);if(chunkCache.has(chunkKey))return chunkCache.get(chunkKey);
+  const candidates=[],corridorX=chunkX%2===0?3:4,corridorY=chunkY%2===0?3:4;
+  for(let localY=0;localY<9;localY++)for(let localX=0;localX<9;localX++){
+    const x=chunkX*9+localX,y=chunkY*9+localY;
+    if(!permanent(x,y)&&localX!==corridorX&&localY!==corridorY)candidates.push({x,y,order:hash(x,y)});
+  }
+  candidates.sort((a,b)=>a.order-b.order);const crates=new Set();
+  const occupied=(x,y)=>crates.has(key(x,y));
+  const makesLine=(x,y)=>[[[-2,0],[-1,0]],[[ -1,0],[1,0]],[[1,0],[2,0]],[[0,-2],[0,-1]],[[0,-1],[0,1]],[[0,1],[0,2]]].some(pair=>pair.every(([dx,dy])=>occupied(x+dx,y+dy)));
+  for(const cell of candidates){
+    if(crates.size>=18)break;
+    let nearby=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)if(occupied(cell.x+dx,cell.y+dy))nearby++;
+    if(nearby<4&&!makesLine(cell.x,cell.y))crates.add(key(cell.x,cell.y));
+  }
+  chunkCache.set(chunkKey,crates);if(chunkCache.size>512)chunkCache.delete(chunkCache.keys().next().value);return crates;
+}
+function naturalCrate(x,y){return !cleared.has(key(x,y))&&chunkCrates(Math.floor(x/9),Math.floor(y/9)).has(key(x,y))}
 function hasCrate(x,y){return naturalCrate(x,y)&&!destroyed.has(key(x,y))}
 function tileState(x,y){
   if(permanent(x,y))return"wall";
@@ -23,7 +41,7 @@ function tileState(x,y){
   return respawnTick!==undefined&&respawnTick-tick<=2?"warning":"floor";
 }
 function blocked(x,y){return permanent(x,y)||hasCrate(x,y)||[...bombs.values()].some(b=>b.x===x&&b.y===y)}
-function clearSpawn(x,y){for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)if(Math.abs(dx)+Math.abs(dy)<=1)cleared.add(key(x+dx,y+dy))}
+function clearSpawn(x,y){for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)cleared.add(key(x+dx,y+dy))}
 
 function freeSpawn(isAI=false){
   if(isAI&&!players.size)return[1,1];
@@ -98,8 +116,10 @@ function broadcast(){for(const player of players.values())if(player.socket?.read
 function runTick(){
   tick++;
   for(const[k,respawnTick]of destroyed)if(respawnTick<=tick){
-    const occupied=[...players.values()].some(p=>p.alive&&key(p.x,p.y)===k)||[...bombs.values()].some(b=>key(b.x,b.y)===k);
-    if(occupied)destroyed.set(k,tick+1);else destroyed.delete(k);
+    const[x,y]=k.split(",").map(Number);
+    const nearPlayer=[...players.values()].some(p=>p.alive&&Math.abs(p.x-x)<=2&&Math.abs(p.y-y)<=2);
+    const bombHere=[...bombs.values()].some(b=>b.x===x&&b.y===y);
+    if(nearPlayer||bombHere)destroyed.set(k,tick+1);else destroyed.delete(k);
   }
   resolveActions();explodeBombs();nextTickAt=Date.now()+TICK_MS;broadcast();
 }
