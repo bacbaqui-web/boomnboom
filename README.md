@@ -1,4 +1,10 @@
-# vinext-starter
+# BOOM n BOOM
+
+120 BPM 음악의 스네어마다 모든 플레이어가 동시에 행동하는 실시간 웹 폭탄 게임입니다.
+
+- [게임 바로 실행](https://bubble-boom-arcade.bacbaqui2.chatgpt.site/)
+- 실시간 월드와 턴 시간선은 Oracle WebSocket 서버가 관리합니다.
+- 웹 화면은 Sites에 배포되며 GitHub Pages 주소에서도 게임으로 연결됩니다.
 
 A clean full-stack starter running on
 [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
