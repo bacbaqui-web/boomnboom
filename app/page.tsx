@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 type Tile = "floor" | "wall" | "crate" | "warning";
 type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; power:number; range:number; shield:number; moved:boolean; nickname:string; joined:boolean; alive:boolean };
@@ -32,6 +32,7 @@ export default function Home() {
   const nicknameRef = useRef("");
   const moveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastBgmTickRef = useRef(-1);
+  const worldLayerRef = useRef<HTMLDivElement | null>(null);
 
   const syncBgm=useCallback((state:State,force=false)=>{
     const track=bgmRef.current;if(!track)return;
@@ -100,6 +101,15 @@ export default function Home() {
 
   const me=game?.players.find(p=>p.id===myId);
   const centerBomb=game?.bombs.find(b=>b.x===Math.floor(game.width/2)&&b.y===Math.floor(game.height/2));
+  useLayoutEffect(()=>{
+    const layer=worldLayerRef.current;
+    if(!layer||!game||(game.cameraDx===0&&game.cameraDy===0))return;
+    layer.getAnimations().forEach(animation=>animation.cancel());
+    layer.animate([
+      {transform:`translate(${game.cameraDx*100/game.width}%,${game.cameraDy*100/game.height}%)`},
+      {transform:"translate(0,0)"}
+    ],{duration:115,easing:"cubic-bezier(.2,.75,.3,1)",fill:"both"});
+  },[game?.worldX,game?.worldY,game?.cameraDx,game?.cameraDy,game?.width,game?.height]);
   return <main>
     <header>
       <div className="brand"><span className="logoBomb">●</span><div><b>BOOM <i>n</i> BOOM</b><small>1초마다 모두가 동시에 움직이는 폭탄 수싸움</small></div></div>
@@ -111,7 +121,7 @@ export default function Home() {
         <div key={`meter-${game?.tick??0}`} className="tickMeter" aria-label="다음 턴까지 1초 게이지"/>
       </div>
       {game ? <div className="board" style={{aspectRatio:`${game.width}/${game.height}`}}>
-        <div className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,"--camera-dx":game.cameraDx,"--camera-dy":game.cameraDy,"--cols":game.width,"--rows":game.height} as React.CSSProperties}>
+        <div ref={worldLayerRef} className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,"--cols":game.width,"--rows":game.height} as React.CSSProperties}>
         {game.tiles.flatMap((row,y)=>row.map((tile,x)=>{
           const people=game.players.filter(p=>p.x===x&&p.y===y);
           const bomb=game.bombs.find(b=>b.x===x&&b.y===y);
@@ -125,7 +135,7 @@ export default function Home() {
             {flame&&<span className="flame">✦</span>}
           </div>
         }))}</div>
-        {me?.alive&&<span key={`me-${game.frame}`} className={`fighter me centerPlayer ${me.shield>0?"shielded":""} ${me.moved?"moving":""}`}><em>{me.nickname}</em>◉<i className={`actionCue cue-${queued}`} title="내 현재 행동">{actionIcon[queued]}</i></span>}
+        {me?.alive&&<span className={`fighter me centerPlayer ${me.shield>0?"shielded":""}`}><em>{me.nickname}</em>◉<i className={`actionCue cue-${queued}`} title="내 현재 행동">{actionIcon[queued]}</i></span>}
         {centerBomb&&<span className="bomb centerBomb"><span>✦</span><i>{centerBomb.fuse}</i></span>}
         {game.enemyDirections?.map(enemy=>{const maxX=game.width/2-.8,maxY=game.height/2-.8,scale=Math.min(maxX/Math.max(Math.abs(enemy.dx),.001),maxY/Math.max(Math.abs(enemy.dy),.001)),left=50+enemy.dx*scale/game.width*100,top=50+enemy.dy*scale/game.height*100,angle=Math.atan2(enemy.dy,enemy.dx)*180/Math.PI+90;return <span key={enemy.id} className={`enemyPointer ${enemy.isAI?"ai":"rival"}`} style={{left:`${left}%`,top:`${top}%`}} title={`${enemy.nickname} · 약 ${enemy.distance}칸`}><i style={{transform:`rotate(${angle}deg)`}}>▲</i><small>{enemy.distance}</small></span>})}
         <span className="coordinates">{game.worldX}, {game.worldY}</span>
