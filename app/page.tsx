@@ -31,6 +31,7 @@ export default function Home() {
   const joinedRef = useRef(false);
   const nicknameRef = useRef("");
   const moveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastBgmTickRef = useRef(-1);
 
   const syncBgm=useCallback((state:State,force=false)=>{
     const track=bgmRef.current;if(!track)return;
@@ -64,7 +65,7 @@ export default function Home() {
         if(msg.type==="welcome") { myIdRef.current=msg.id; setMyId(msg.id); if(joinedRef.current)ws.send(JSON.stringify({type:"join",nickname:nicknameRef.current})); }
         if(msg.type==="state") {
           setGame(msg);
-          syncBgm(msg);
+          if(msg.tick!==lastBgmTickRef.current){lastBgmTickRef.current=msg.tick;syncBgm(msg)}
           const me=msg.players.find((p:Player)=>p.id===myIdRef.current);
           if(me) setQueued(me.action);
         }
@@ -110,7 +111,7 @@ export default function Home() {
         <div key={`meter-${game?.tick??0}`} className="tickMeter" aria-label="다음 턴까지 1초 게이지"/>
       </div>
       {game ? <div className="board" style={{aspectRatio:`${game.width}/${game.height}`}}>
-        <div key={game.frame} className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,"--camera-dx":game.cameraDx,"--camera-dy":game.cameraDy,"--cols":game.width,"--rows":game.height} as React.CSSProperties}>
+        <div className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,"--camera-dx":game.cameraDx,"--camera-dy":game.cameraDy,"--cols":game.width,"--rows":game.height} as React.CSSProperties}>
         {game.tiles.flatMap((row,y)=>row.map((tile,x)=>{
           const people=game.players.filter(p=>p.x===x&&p.y===y);
           const bomb=game.bombs.find(b=>b.x===x&&b.y===y);

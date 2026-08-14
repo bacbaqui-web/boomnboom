@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 
 const PORT = Number(process.env.PORT || 3300);
 const TICK_MS = Number(process.env.TICK_MS || 1000);
-const MOVE_INTERVAL_MS = 90, AI_INTERVAL_MS = 250;
+const MOVE_INTERVAL_MS = 90, AI_INTERVAL_MS = 500;
 // One permanent world clock. It keeps advancing across restarts and even while
 // nobody is connected. At every whole second the track is on a snare.
 const WORLD_EPOCH_MS = Number(process.env.WORLD_EPOCH_MS || Date.UTC(2026, 7, 14, 0, 0, 0));
