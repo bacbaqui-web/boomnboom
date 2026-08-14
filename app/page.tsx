@@ -9,6 +9,9 @@ type State = { tick:number; nextTickAt:number; width:number; height:number; orig
 type Action = "up" | "down" | "left" | "right" | "bomb" | "wait";
 
 const WS_URL = "wss://insight.magamiscom.ing/boom-ws";
+const BGM_URL = "/midnight-tile-loop.mp3";
+const BGM_DURATION = 209.9955;
+const SNARE_OFFSET = .255;
 const actionLabel:Record<Action,string> = { up:"위로", down:"아래로", left:"왼쪽", right:"오른쪽", bomb:"폭탄 설치", wait:"대기" };
 
 export default function Home() {
@@ -23,6 +26,7 @@ export default function Home() {
   const wsRef = useRef<WebSocket | null>(null);
   const myIdRef = useRef("");
   const audioRef = useRef<AudioContext | null>(null);
+  const bgmRef = useRef<HTMLAudioElement | null>(null);
   const soundRef = useRef(true);
   const joinedRef = useRef(false);
   const nicknameRef = useRef("");
@@ -36,6 +40,22 @@ export default function Home() {
     gain.gain.setValueAtTime(finalBeat ? .07 : .035,now);gain.gain.exponentialRampToValueAtTime(.001,now+(finalBeat ? .11 : .09));
     o.connect(gain);gain.connect(a.destination);o.start(now);o.stop(now+(finalBeat ? .12 : .1));
   },[]);
+  const syncBgm=useCallback((state:State,force=false)=>{
+    const track=bgmRef.current;if(!track)return;
+    const untilNext=(state.nextTickAt-Date.now())/1000;
+    const nextSnare=((state.tick+1)%210)+SNARE_OFFSET;
+    const expected=((nextSnare-untilNext)%BGM_DURATION+BGM_DURATION)%BGM_DURATION;
+    const apply=()=>{
+      const raw=Math.abs(track.currentTime-expected),drift=Math.min(raw,BGM_DURATION-raw);
+      if(force||drift>.065)track.currentTime=expected;
+      if(soundRef.current&&track.paused)track.play().catch(()=>{});
+    };
+    if(track.readyState>=1)apply();else track.addEventListener("loadedmetadata",apply,{once:true});
+  },[]);
+  const startBgm=useCallback((state:State|null)=>{
+    if(!bgmRef.current){const track=new Audio(BGM_URL);track.loop=true;track.preload="auto";track.volume=.3;bgmRef.current=track}
+    if(state)syncBgm(state,true);
+  },[syncBgm]);
 
   useEffect(() => {
     let stopped=false, retry:ReturnType<typeof setTimeout>;
@@ -48,6 +68,7 @@ export default function Home() {
         if(msg.type==="welcome") { myIdRef.current=msg.id; setMyId(msg.id); if(joinedRef.current)ws.send(JSON.stringify({type:"join",nickname:nicknameRef.current})); }
         if(msg.type==="state") {
           setGame(msg);
+          syncBgm(msg);
           const me=msg.players.find((p:Player)=>p.id===myIdRef.current);
           if(me) setQueued(me.action);
         }
@@ -55,11 +76,11 @@ export default function Home() {
       ws.onclose=()=>{setStatus("offline");if(!stopped)retry=setTimeout(connect,1500)};
     };
     connect(); return()=>{stopped=true;clearTimeout(retry);wsRef.current?.close()};
-  },[]);
+  },[syncBgm]);
 
   useEffect(()=>{
     if(!game)return;setBeatStep(-1);const timers:ReturnType<typeof setTimeout>[]=[];
-    [750,500,250,15].forEach((before,index)=>{const delay=game.nextTickAt-before-Date.now();timers.push(setTimeout(()=>{setBeatStep(index);beatSound(index===3)},Math.max(0,delay)))});
+    [750,500,250,15].forEach((before,index)=>{const delay=game.nextTickAt-before-Date.now();timers.push(setTimeout(()=>{setBeatStep(index);if(index<3)beatSound(false);else if(bgmRef.current?.paused)beatSound(true)},Math.max(0,delay)))});
     return()=>timers.forEach(clearTimeout);
   },[game?.tick,game?.nextTickAt,beatSound]);
 
@@ -69,7 +90,7 @@ export default function Home() {
   },[unlockAudio]);
 
   const enterWorld=(e:React.FormEvent)=>{
-    e.preventDefault();const clean=nickname.trim().slice(0,12);if(!clean)return;unlockAudio();
+    e.preventDefault();const clean=nickname.trim().slice(0,12);if(!clean)return;unlockAudio();startBgm(game);
     nicknameRef.current=clean;joinedRef.current=true;setJoined(true);
     wsRef.current?.send(JSON.stringify({type:"join",nickname:clean}));
   };
@@ -121,7 +142,7 @@ export default function Home() {
         <div className="rules"><b>{me?.nickname?`${me.nickname}으로 참가 중`:"참가 준비 중"}</b><span>뿅 · 뿅 · 뿅 · 딱! 마지막 박자에 움직입니다.</span><span>방향은 계속 유지되고 폭탄은 한 번만 설치됩니다.</span></div>
         <button className="boomBtn" onClick={()=>send("bomb")}>BOMB<small>한 틱 사용</small></button>
       </div>
-      <div className="legend"><span><i className="gray"/>고정 벽</span><span><i className="yellow"/>노란 상자</span><span><i className="warning"/>2초 뒤 재생성</span><span><i className="cyan"/>나</span><span><i className="coral"/>AI / 다른 플레이어</span><button onClick={()=>setSound(v=>{const next=!v;soundRef.current=next;if(next)unlockAudio();return next})}>{sound?"♪ 박자 소리 켜짐":"× 소리 꺼짐"}</button></div>
+      <div className="legend"><span><i className="gray"/>고정 벽</span><span><i className="yellow"/>노란 상자</span><span><i className="warning"/>2초 뒤 재생성</span><span><i className="cyan"/>나</span><span className="bgmTitle">♫ Midnight Tile Loop</span><button onClick={()=>setSound(v=>{const next=!v;soundRef.current=next;if(next){unlockAudio();startBgm(game)}else bgmRef.current?.pause();return next})}>{sound?"♪ BGM 켜짐":"× 소리 꺼짐"}</button></div>
     </section>
   </main>;
 }
