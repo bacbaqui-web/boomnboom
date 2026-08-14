@@ -147,7 +147,8 @@ export default function Home() {
           const bomb=game.bombs.find(b=>b.x===x&&b.y===y);
           const item=game.items?.find(i=>i.x===x&&i.y===y);
           const flame=game.flames.some(f=>f.x===x&&f.y===y);
-          return <div className={`tile ${tile}`} key={`${x},${y}`} style={{"--depth-x":`${Math.sign(x-Math.floor(game.width/2))*4}px`,"--depth-y":`${Math.sign(y-Math.floor(game.height/2))*4}px`} as React.CSSProperties}>
+          const floorAlt=((game.originX+x+game.originY+y)&1)!==0;
+          return <div className={`tile ${tile} ${floorAlt?"floorAlt":""}`} key={`${x},${y}`} style={{"--depth-x":`${Math.sign(x-Math.floor(game.width/2))*4}px`,"--depth-y":`${Math.sign(y-Math.floor(game.height/2))*4}px`} as React.CSSProperties}>
             {tile==="crate"&&<span className="box"/>}
             {bomb&&<span className="bomb"><span>✦</span><i>{bomb.fuse}</i></span>}
             {item&&<span className={`item item-${item.type}`} title={item.type==="bomb"?"폭탄 수 증가":item.type==="shield"?"폭발 1회 방어":"폭탄 화력 증가"}>{item.type==="bomb"?"●":item.type==="shield"?"◆":"🔥"}</span>}
