@@ -24,16 +24,17 @@ export default function Home() {
   const myIdRef = useRef("");
   const audioRef = useRef<AudioContext | null>(null);
   const soundRef = useRef(true);
-  const lastTick = useRef(0);
   const joinedRef = useRef(false);
   const nicknameRef = useRef("");
 
-  const tickSound = useCallback((tick:number) => {
-    if (!soundRef.current || !audioRef.current) return;
-    const a=audioRef.current, o=a.createOscillator(), gain=a.createGain();
-    o.type="square"; o.frequency.value=tick%2 ? 410 : 300;
-    gain.gain.setValueAtTime(.045,a.currentTime); gain.gain.exponentialRampToValueAtTime(.001,a.currentTime+.085);
-    o.connect(gain); gain.connect(a.destination); o.start(); o.stop(a.currentTime+.09);
+  const unlockAudio=useCallback(()=>{if(!audioRef.current)audioRef.current=new AudioContext();audioRef.current.resume()},[]);
+  const beatSound=useCallback((finalBeat:boolean)=>{
+    if(!soundRef.current||!audioRef.current)return;
+    const a=audioRef.current,o=a.createOscillator(),gain=a.createGain(),now=a.currentTime;
+    o.type=finalBeat?"square":"sine";o.frequency.setValueAtTime(finalBeat?190:520,now);
+    if(!finalBeat)o.frequency.exponentialRampToValueAtTime(720,now+.075);
+    gain.gain.setValueAtTime(finalBeat ? .07 : .035,now);gain.gain.exponentialRampToValueAtTime(.001,now+(finalBeat ? .11 : .09));
+    o.connect(gain);gain.connect(a.destination);o.start(now);o.stop(now+(finalBeat ? .12 : .1));
   },[]);
 
   useEffect(() => {
@@ -49,14 +50,12 @@ export default function Home() {
           setGame(msg);
           const me=msg.players.find((p:Player)=>p.id===myIdRef.current);
           if(me) setQueued(me.action);
-          if(lastTick.current && msg.tick!==lastTick.current) tickSound(msg.tick);
-          lastTick.current=msg.tick;
         }
       };
       ws.onclose=()=>{setStatus("offline");if(!stopped)retry=setTimeout(connect,1500)};
     };
     connect(); return()=>{stopped=true;clearTimeout(retry);wsRef.current?.close()};
-  },[tickSound]);
+  },[]);
 
   useEffect(()=>{
     let frame=0;
@@ -64,14 +63,19 @@ export default function Home() {
     frame=requestAnimationFrame(draw);return()=>cancelAnimationFrame(frame);
   },[game]);
 
+  useEffect(()=>{
+    if(!game)return;const timers:ReturnType<typeof setTimeout>[]=[];
+    [750,500,250,0].forEach((before,index)=>{const delay=game.nextTickAt-before-Date.now();timers.push(setTimeout(()=>beatSound(index===3),Math.max(0,delay)))});
+    return()=>timers.forEach(clearTimeout);
+  },[game?.tick,game?.nextTickAt,beatSound]);
+
   const send=useCallback((action:Action)=>{
-    if(!audioRef.current) audioRef.current=new AudioContext();
-    audioRef.current.resume(); setQueued(action);
+    unlockAudio();setQueued(action);
     if(wsRef.current?.readyState===WebSocket.OPEN) wsRef.current.send(JSON.stringify({type:"action",action}));
-  },[]);
+  },[unlockAudio]);
 
   const enterWorld=(e:React.FormEvent)=>{
-    e.preventDefault();const clean=nickname.trim().slice(0,12);if(!clean)return;
+    e.preventDefault();const clean=nickname.trim().slice(0,12);if(!clean)return;unlockAudio();
     nicknameRef.current=clean;joinedRef.current=true;setJoined(true);
     wsRef.current?.send(JSON.stringify({type:"join",nickname:clean}));
   };
@@ -87,6 +91,7 @@ export default function Home() {
 
   const me=game?.players.find(p=>p.id===myId);
   const centerBomb=game?.bombs.find(b=>b.x===Math.floor(game.width/2)&&b.y===Math.floor(game.height/2));
+  const beatStep=Math.min(3,Math.floor(progress*4));
   return <main>
     <header>
       <div className="brand"><span className="logoBomb">●</span><div><b>BOOM <i>n</i> BOOM</b><small>1초마다 모두가 동시에 움직이는 폭탄 수싸움</small></div></div>
@@ -95,7 +100,7 @@ export default function Home() {
     <section className="gameShell">
       <div className="tickHud">
         <div><small>LIVE WORLD</small><strong>접속 즉시 같은 맵에 스폰</strong></div>
-        <div className="tickMeter" style={{"--tick":progress} as React.CSSProperties}><span>{(game?.tick??0)%2?"똑":"딱"}</span></div>
+        <div className="tickMeter" style={{"--tick":progress} as React.CSSProperties}><span>{beatStep<3?"뿅":"딱!"}</span><div className="beatDots">{[0,1,2,3].map(i=><i key={i} className={i===beatStep?"on":""}/>)}</div></div>
         <div className="queue"><small>다음 행동</small><strong>{actionLabel[queued]}</strong></div>
       </div>
       {game ? <div className="board" style={{aspectRatio:`${game.width}/${game.height}`}}>
@@ -107,11 +112,11 @@ export default function Home() {
           return <div className={`tile ${tile}`} key={`${x},${y}`}>
             {tile==="crate"&&<span className="box"/>}
             {bomb&&<span className="bomb"><span>✦</span><i>{bomb.fuse}</i></span>}
-            {people.filter(p=>p.id!==myId).map(p=><span key={p.id} className={`fighter ${p.isAI?"ai":"rival"}`} title={p.nickname}><em>{p.nickname}</em>{p.isAI?"AI":"◉"}</span>)}
+            {people.filter(p=>p.id!==myId).map(p=><span key={`${p.id}-${beatStep}`} className={`fighter ${p.isAI?"ai":"rival"}`} title={p.nickname}><em>{p.nickname}</em>{p.isAI?"AI":"◉"}</span>)}
             {flame&&<span className="flame">✦</span>}
           </div>
         }))}</div>
-        {me?.alive&&<span key={`me-${game.tick}`} className="fighter me centerPlayer"><em>{me.nickname}</em>◉</span>}
+        {me?.alive&&<span key={`me-${game.tick}-${beatStep}`} className="fighter me centerPlayer"><em>{me.nickname}</em>◉</span>}
         {centerBomb&&<span className="bomb centerBomb"><span>✦</span><i>{centerBomb.fuse}</i></span>}
         <span className="coordinates">{game.worldX}, {game.worldY}</span>
         {!joined&&<div className="gameOverlay"><form onSubmit={enterWorld}><small>ENTER THE WORLD</small><h2>닉네임을 정해주세요</h2><p>캐릭터 머리 위에 표시됩니다.</p><input autoFocus maxLength={12} value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="닉네임 (최대 12자)" aria-label="닉네임"/><button disabled={!nickname.trim()}>게임 시작</button></form></div>}
@@ -119,10 +124,10 @@ export default function Home() {
       </div> : <div className="loading"><span>●</span><b>Oracle 게임 서버에 접속하는 중…</b></div>}
       <div className="controls">
         <div className="dpad"><button onClick={()=>send("up")}>▲</button><button onClick={()=>send("left")}>◀</button><button onClick={()=>send("down")}>▼</button><button onClick={()=>send("right")}>▶</button></div>
-        <div className="rules"><b>{me?.nickname?`${me.nickname}으로 참가 중`:"참가 준비 중"}</b><span>누른 행동이 다음 똑딱에 실행됩니다.</span><span>방향은 계속 유지되고 폭탄은 한 번만 설치됩니다.</span></div>
+        <div className="rules"><b>{me?.nickname?`${me.nickname}으로 참가 중`:"참가 준비 중"}</b><span>뿅 · 뿅 · 뿅 · 딱! 마지막 박자에 움직입니다.</span><span>방향은 계속 유지되고 폭탄은 한 번만 설치됩니다.</span></div>
         <button className="boomBtn" onClick={()=>send("bomb")}>BOMB<small>한 틱 사용</small></button>
       </div>
-      <div className="legend"><span><i className="gray"/>고정 벽</span><span><i className="yellow"/>노란 상자</span><span><i className="warning"/>2초 뒤 재생성</span><span><i className="cyan"/>나</span><span><i className="coral"/>AI / 다른 플레이어</span><button onClick={()=>setSound(v=>{soundRef.current=!v;return !v})}>{sound?"♪ 똑딱 소리 켜짐":"× 소리 꺼짐"}</button></div>
+      <div className="legend"><span><i className="gray"/>고정 벽</span><span><i className="yellow"/>노란 상자</span><span><i className="warning"/>2초 뒤 재생성</span><span><i className="cyan"/>나</span><span><i className="coral"/>AI / 다른 플레이어</span><button onClick={()=>setSound(v=>{const next=!v;soundRef.current=next;if(next)unlockAudio();return next})}>{sound?"♪ 박자 소리 켜짐":"× 소리 꺼짐"}</button></div>
     </section>
   </main>;
 }
