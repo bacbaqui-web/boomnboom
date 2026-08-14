@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 type Tile = "floor" | "wall" | "crate" | "warning";
 type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; power:number; range:number; shield:number; moved:boolean; nickname:string; joined:boolean; alive:boolean };
@@ -33,7 +33,7 @@ export default function Home() {
   const moveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastBgmTickRef = useRef(-1);
   const worldLayerRef = useRef<HTMLDivElement | null>(null);
-  const cameraRef = useRef({ready:false,visualX:0,visualY:0,startX:0,startY:0,targetX:0,targetY:0,startAt:0,duration:150,originX:0,originY:0,width:17,height:13});
+  const cameraRef = useRef({ready:false,visualX:0,visualY:0,startX:0,startY:0,targetX:0,targetY:0,startAt:0,duration:150,originX:0,originY:0,width:23,height:19});
 
   const paintCamera=useCallback(()=>{
     const layer=worldLayerRef.current,camera=cameraRef.current;if(!layer||!camera.ready)return;
@@ -77,8 +77,7 @@ export default function Home() {
           const teleported=!camera.ready||Math.hypot(msg.worldX-camera.visualX,msg.worldY-camera.visualY)>2;
           if(teleported){camera.ready=true;camera.visualX=msg.worldX;camera.visualY=msg.worldY;camera.startX=msg.worldX;camera.startY=msg.worldY;camera.targetX=msg.worldX;camera.targetY=msg.worldY}
           else if(msg.worldX!==camera.targetX||msg.worldY!==camera.targetY){camera.startX=camera.visualX;camera.startY=camera.visualY;camera.targetX=msg.worldX;camera.targetY=msg.worldY;camera.startAt=performance.now()}
-          camera.originX=msg.originX;camera.originY=msg.originY;camera.width=msg.width;camera.height=msg.height;
-          setGame(msg);
+          startTransition(()=>setGame(msg));
           if(msg.tick!==lastBgmTickRef.current){lastBgmTickRef.current=msg.tick;syncBgm(msg)}
           const me=msg.players.find((p:Player)=>p.id===myIdRef.current);
           if(me) setQueued(me.action);

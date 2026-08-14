@@ -9,7 +9,7 @@ const MOVE_INTERVAL_MS = 140, AI_INTERVAL_MS = 500;
 const WORLD_EPOCH_MS = Number(process.env.WORLD_EPOCH_MS || Date.UTC(2026, 7, 14, 0, 0, 0));
 const BGM_DURATION_MS = 209995.5;
 const BGM_SNARE_OFFSET_MS = 255;
-const VIEW_WIDTH = 15, VIEW_HEIGHT = 11, WIDTH = 17, HEIGHT = 13;
+const VIEW_WIDTH = 15, VIEW_HEIGHT = 11, WIDTH = 23, HEIGHT = 19, RECENTER_THRESHOLD = 3;
 const BOT_COUNT = 6;
 const CRATE_RESPAWN_TICKS = 8, BOMB_FUSE_TICKS = 3;
 const ITEM_TYPES = ["bomb","shield","flame"];
@@ -130,7 +130,10 @@ function placeBomb(player){
 }
 function stateFor(viewer){
   const serverNow=Date.now();
-  const centerX=Math.round(viewer.x),centerY=Math.round(viewer.y),originX=centerX-Math.floor(WIDTH/2),originY=centerY-Math.floor(HEIGHT/2);
+  const centerX=Math.round(viewer.x),centerY=Math.round(viewer.y);
+  if(!Number.isFinite(viewer.viewOriginX)||Math.abs(centerX-(viewer.viewOriginX+Math.floor(WIDTH/2)))>=RECENTER_THRESHOLD)viewer.viewOriginX=centerX-Math.floor(WIDTH/2);
+  if(!Number.isFinite(viewer.viewOriginY)||Math.abs(centerY-(viewer.viewOriginY+Math.floor(HEIGHT/2)))>=RECENTER_THRESHOLD)viewer.viewOriginY=centerY-Math.floor(HEIGHT/2);
+  const originX=viewer.viewOriginX,originY=viewer.viewOriginY;
   const visible=(x,y)=>x>=originX&&x<originX+WIDTH&&y>=originY&&y<originY+HEIGHT;
   return{type:"state",tick,frame,nextTickAt,serverNow,nextTickInMs:Math.max(0,nextTickAt-serverNow),worldEpochMs:WORLD_EPOCH_MS,bgmDurationMs:BGM_DURATION_MS,bgmSnareOffsetMs:BGM_SNARE_OFFSET_MS,width:WIDTH,height:HEIGHT,viewWidth:VIEW_WIDTH,viewHeight:VIEW_HEIGHT,originX,originY,worldX:viewer.x,worldY:viewer.y,cameraDx:viewer.x-viewer.prevX,cameraDy:viewer.y-viewer.prevY,cameraOffsetX:viewer.x-centerX,cameraOffsetY:viewer.y-centerY,
     tiles:Array.from({length:HEIGHT},(_,sy)=>Array.from({length:WIDTH},(_,sx)=>tileState(originX+sx,originY+sy))),
