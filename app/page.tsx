@@ -7,7 +7,7 @@ type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; powe
 type Bomb = { id:number; x:number; y:number; fuse:number };
 type Item = { x:number; y:number; type:"bomb"|"shield"|"flame" };
 type EnemyDirection = { id:string; dx:number; dy:number; distance:number; nickname:string; isAI:boolean };
-type State = { tick:number; frame:number; nextTickAt:number; serverNow:number; nextTickInMs:number; worldEpochMs:number; bgmDurationMs:number; bgmSnareOffsetMs:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; cameraOffsetX:number; cameraOffsetY:number; tiles:Tile[][]; players:Player[]; enemyDirections:EnemyDirection[]; bombs:Bomb[]; items:Item[]; flames:{x:number;y:number}[] };
+type State = { tick:number; frame:number; nextTickAt:number; serverNow:number; nextTickInMs:number; worldEpochMs:number; bgmDurationMs:number; bgmSnareOffsetMs:number; width:number; height:number; viewWidth:number; viewHeight:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; cameraOffsetX:number; cameraOffsetY:number; tiles:Tile[][]; players:Player[]; enemyDirections:EnemyDirection[]; bombs:Bomb[]; items:Item[]; flames:{x:number;y:number}[] };
 type Action = "up" | "down" | "left" | "right" | "bomb" | "wait";
 
 const WS_URL = "wss://insight.magamiscom.ing/boom-ws";
@@ -80,7 +80,7 @@ export default function Home() {
     if(wsRef.current?.readyState===WebSocket.OPEN) wsRef.current.send(JSON.stringify({type:"action",action}));
   },[]);
   const stopMoving=useCallback(()=>{if(!moveTimerRef.current)return;clearInterval(moveTimerRef.current);moveTimerRef.current=null;send("wait")},[send]);
-  const startMoving=useCallback((action:Extract<Action,"up"|"down"|"left"|"right">)=>{if(moveTimerRef.current)clearInterval(moveTimerRef.current);send(action);moveTimerRef.current=setInterval(()=>send(action),100)},[send]);
+  const startMoving=useCallback((action:Extract<Action,"up"|"down"|"left"|"right">)=>{if(moveTimerRef.current)clearInterval(moveTimerRef.current);send(action);moveTimerRef.current=setInterval(()=>send(action),60)},[send]);
 
   const enterWorld=(e:React.FormEvent)=>{
     e.preventDefault();const clean=nickname.trim().slice(0,12);if(!clean)return;startBgm(game);
@@ -110,8 +110,8 @@ export default function Home() {
         <div><small>LIVE WORLD</small><strong>접속 즉시 같은 맵에 스폰</strong></div>
         <div key={`meter-${game?.tick??0}`} className="tickMeter" aria-label="다음 턴까지 1초 게이지"/>
       </div>
-      {game ? <div className="board" style={{aspectRatio:`${game.width}/${game.height}`}}>
-        <div key={`${game.originX},${game.originY}`} className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,transform:`translate(${-game.cameraOffsetX*100/game.width}%,${-game.cameraOffsetY*100/game.height}%)`,"--cols":game.width,"--rows":game.height} as React.CSSProperties}>
+      {game ? <div className="board" style={{aspectRatio:`${game.viewWidth}/${game.viewHeight}`}}>
+        <div key={`${game.originX},${game.originY}`} className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,width:`${game.width/game.viewWidth*100}%`,height:`${game.height/game.viewHeight*100}%`,left:`${-(game.width-game.viewWidth)/2/game.viewWidth*100}%`,top:`${-(game.height-game.viewHeight)/2/game.viewHeight*100}%`,right:"auto",bottom:"auto",transform:`translate(${-game.cameraOffsetX*100/game.width}%,${-game.cameraOffsetY*100/game.height}%)`,"--cols":game.width,"--rows":game.height} as React.CSSProperties}>
         {game.tiles.flatMap((row,y)=>row.map((tile,x)=>{
           const people=game.players.filter(p=>p.x===x&&p.y===y);
           const bomb=game.bombs.find(b=>b.x===x&&b.y===y);
