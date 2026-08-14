@@ -12,6 +12,7 @@ type Action = "up" | "down" | "left" | "right" | "bomb" | "wait";
 
 const WS_URL = "wss://insight.magamiscom.ing/boom-ws";
 const BGM_URL = "/midnight-tile-loop.mp3";
+const VOLUME_LEVELS = [0,.3,.58,.9];
 const actionIcon:Record<Action,string> = { up:"↑", down:"↓", left:"←", right:"→", bomb:"●", wait:"Ⅱ" };
 
 export default function Home() {
@@ -19,12 +20,13 @@ export default function Home() {
   const [myId, setMyId] = useState("");
   const [status, setStatus] = useState<"connecting"|"online"|"offline">("connecting");
   const [queued, setQueued] = useState<Action>("wait");
-  const [sound, setSound] = useState(true);
+  const [volumeLevel, setVolumeLevel] = useState(1);
   const [nickname, setNickname] = useState("");
   const [joined, setJoined] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const myIdRef = useRef("");
   const bgmRef = useRef<HTMLAudioElement | null>(null);
+  const volumeRef = useRef(1);
   const soundRef = useRef(true);
   const joinedRef = useRef(false);
   const nicknameRef = useRef("");
@@ -45,9 +47,10 @@ export default function Home() {
     if(track.readyState>=1)apply();else track.addEventListener("loadedmetadata",apply,{once:true});
   },[]);
   const startBgm=useCallback((state:State|null)=>{
-    if(!bgmRef.current){const track=new Audio(BGM_URL);track.loop=true;track.preload="auto";track.volume=.3;bgmRef.current=track}
+    if(!bgmRef.current){const track=new Audio(BGM_URL);track.loop=true;track.preload="auto";track.volume=VOLUME_LEVELS[volumeRef.current];bgmRef.current=track}
     if(state)syncBgm(state,true);
   },[syncBgm]);
+  const cycleVolume=()=>setVolumeLevel(current=>{const next=current===3?0:current+1;volumeRef.current=next;soundRef.current=next>0;const track=bgmRef.current;if(next===0)track?.pause();else{if(track)track.volume=VOLUME_LEVELS[next];startBgm(game)}return next});
 
   useEffect(() => {
     let stopped=false, retry:ReturnType<typeof setTimeout>;
@@ -129,7 +132,7 @@ export default function Home() {
         <div className="rules"><b>{me?.nickname?`${me.nickname}으로 참가 중`:"참가 준비 중"}</b><span>1초 게이지가 차면 선택한 행동이 실행됩니다.</span><span>{me?`폭탄 ${me.power}개 · 화력 ${me.range}칸 · 방어막 ${me.shield}회`:"AI를 쓰러뜨리고 아이템을 획득하세요."}</span></div>
         <button className="boomBtn" onClick={()=>send("bomb")}>BOMB<small>한 틱 사용</small></button>
       </div>
-      <div className="legend"><span><i className="warning"/>2초 뒤 재생성</span><span><i className="itemIcon bombUp">●</i>폭탄 수</span><span><i className="itemIcon shieldUp">◆</i>방어막</span><span><i className="itemIcon flameUp">🔥</i>화력</span><span className="bgmTitle">♫ Midnight Tile Loop</span><button onClick={()=>setSound(v=>{const next=!v;soundRef.current=next;if(next)startBgm(game);else bgmRef.current?.pause();return next})}>{sound?"♪ BGM 켜짐":"× 소리 꺼짐"}</button></div>
+      <div className="legend"><span><i className="warning"/>2초 뒤 재생성</span><span><i className="itemIcon bombUp">●</i>폭탄 수</span><span><i className="itemIcon shieldUp">◆</i>방어막</span><span><i className="itemIcon flameUp">🔥</i>화력</span><span className="bgmTitle">♫ Midnight Tile Loop</span><button className={`volumeButton level-${volumeLevel}`} onClick={cycleVolume} aria-label={volumeLevel===0?"BGM 음소거됨, 눌러서 작게 재생":`BGM 음량 ${volumeLevel}단계, 눌러서 변경`} title="BGM 음량"><span className="speakerBody"/><span className="volumeWaves">{[1,2,3].map(level=><i key={level} className={level<=volumeLevel?"on":""}/>)}</span>{volumeLevel===0&&<b>×</b>}</button></div>
     </section>
   </main>;
 }
