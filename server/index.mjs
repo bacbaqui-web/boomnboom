@@ -53,7 +53,12 @@ function blastCells(bomb){
   return cells;
 }
 function explodeBombs(){
-  const exploding=[...bombs.values()].filter(b=>--b.fuse<=0),cells=[];
+  const exploding=[];
+  for(const bomb of bombs.values()){
+    if(bomb.bornTick===tick)continue;
+    if(--bomb.fuse<=0)exploding.push(bomb);
+  }
+  const cells=[];
   for(const bomb of exploding){bombs.delete(bomb.id);cells.push(...blastCells(bomb))}
   const unique=new Map(cells.map(c=>[key(c.x,c.y),c]));flames=[...unique.values()];
   for(const cell of flames)if(hasCrate(cell.x,cell.y))destroyed.set(key(cell.x,cell.y),tick+CRATE_RESPAWN_TICKS);
@@ -68,7 +73,7 @@ function resolveActions(){
   for(const player of active){player.prevX=player.x;player.prevY=player.y;if(player.isAI)player.action=chooseBotAction(player)}
   for(const player of active)if(player.action==="bomb"){
     const occupied=[...bombs.values()].some(b=>b.x===player.x&&b.y===player.y),owns=[...bombs.values()].some(b=>b.owner===player.id);
-    if(!occupied&&!owns)bombs.set(nextBombNumber,{id:nextBombNumber++,x:player.x,y:player.y,owner:player.id,fuse:BOMB_FUSE_TICKS});player.action="wait";
+    if(!occupied&&!owns)bombs.set(nextBombNumber,{id:nextBombNumber++,x:player.x,y:player.y,owner:player.id,fuse:BOMB_FUSE_TICKS,bornTick:tick});player.action="wait";
   }
   const intents=new Map();
   for(const player of active){const[dx,dy]=DIRS[player.action]||DIRS.wait,x=player.x+dx,y=player.y+dy;intents.set(player.id,blocked(x,y)?{x:player.x,y:player.y}:{x,y})}
@@ -84,7 +89,7 @@ function stateFor(viewer){
     bombs:[...bombs.values()].filter(b=>visible(b.x,b.y)).map(b=>({...b,x:b.x-originX,y:b.y-originY})),flames:flames.filter(f=>visible(f.x,f.y)).map(f=>({x:f.x-originX,y:f.y-originY}))};
 }
 function broadcast(){for(const player of players.values())if(player.socket?.readyState===WebSocket.OPEN)player.socket.send(JSON.stringify(stateFor(player)))}
-function runTick(){tick++;for(const[k,respawnTick]of destroyed)if(respawnTick<=tick)destroyed.delete(k);explodeBombs();resolveActions();nextTickAt=Date.now()+TICK_MS;broadcast()}
+function runTick(){tick++;for(const[k,respawnTick]of destroyed)if(respawnTick<=tick)destroyed.delete(k);resolveActions();explodeBombs();nextTickAt=Date.now()+TICK_MS;broadcast()}
 
 const server=http.createServer((req,res)=>{if(req.url==="/health"){res.writeHead(200,{"content-type":"application/json"});return res.end(JSON.stringify({ok:true,tick,players:players.size,destroyed:destroyed.size,uptime:Math.round(process.uptime())}))}res.writeHead(404).end()});
 const wss=new WebSocketServer({noServer:true});
