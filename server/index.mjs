@@ -21,7 +21,7 @@ const timelineAt=(now=Date.now())=>{
 };
 let {tick,nextTickAt}=timelineAt(), nextPlayerNumber=1, nextBotNumber=1, nextBombNumber=1;
 let flames=[];
-const players=new Map(), bombs=new Map(), items=new Map(), destroyed=new Map(), cleared=new Set(), respawnHeld=new Set();
+const players=new Map(), bombs=new Map(), items=new Map(), destroyed=new Map(), cleared=new Set(), respawnCommitted=new Set();
 const chunkCache=new Map();
 const key=(x,y)=>`${x},${y}`;
 const permanent=(x,y)=>x%2===0&&y%2===0;
@@ -49,8 +49,8 @@ function tileState(x,y){
   if(permanent(x,y))return"wall";
   if(hasCrate(x,y))return"crate";
   const respawnTick=destroyed.get(key(x,y));
-  const playerNearby=[...players.values()].some(p=>p.alive&&Math.abs(p.x-x)<=2&&Math.abs(p.y-y)<=2);
-  return respawnTick!==undefined&&respawnTick-tick<=2&&!playerNearby?"warning":"floor";
+  const playerNearby=[...players.values()].some(p=>p.alive&&Math.abs(p.x-x)<=4&&Math.abs(p.y-y)<=4);
+  return respawnTick!==undefined&&(respawnCommitted.has(key(x,y))||(respawnTick-tick<=2&&!playerNearby))?"warning":"floor";
 }
 function blocked(x,y){return permanent(x,y)||hasCrate(x,y)||[...bombs.values()].some(b=>b.x===x&&b.y===y)}
 function clearSpawn(x,y){for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)if(Math.abs(dx)+Math.abs(dy)<=1)cleared.add(key(x+dx,y+dy))}
@@ -98,7 +98,7 @@ function explodeBombs(){
   const cells=[];
   for(const bomb of exploding){bombs.delete(bomb.id);cells.push(...blastCells(bomb))}
   const unique=new Map(cells.map(c=>[key(c.x,c.y),c]));flames=[...unique.values()];
-  for(const cell of flames)if(hasCrate(cell.x,cell.y)){const cellKey=key(cell.x,cell.y);respawnHeld.delete(cellKey);destroyed.set(cellKey,tick+CRATE_RESPAWN_TICKS)}
+  for(const cell of flames)if(hasCrate(cell.x,cell.y)){const cellKey=key(cell.x,cell.y);respawnCommitted.delete(cellKey);destroyed.set(cellKey,tick+CRATE_RESPAWN_TICKS)}
   for(const player of players.values())if(player.alive&&unique.has(key(player.x,player.y))){
     player.action="wait";
     if(player.shield>0){player.shield--;continue}
@@ -145,13 +145,18 @@ function runTick(){
   const timeline=timelineAt();
   if(timeline.tick<=tick){nextTickAt=timeline.nextTickAt;return}
   tick=timeline.tick;
-  for(const[k,respawnTick]of destroyed)if(respawnTick<=tick){
+  for(const[k,respawnTick]of destroyed){
     const[x,y]=k.split(",").map(Number);
-    const nearPlayer=[...players.values()].some(p=>p.alive&&Math.abs(p.x-x)<=2&&Math.abs(p.y-y)<=2);
+    const nearPlayer=[...players.values()].some(p=>p.alive&&Math.abs(p.x-x)<=4&&Math.abs(p.y-y)<=4);
     const bombHere=[...bombs.values()].some(b=>b.x===x&&b.y===y);
-    if(nearPlayer||bombHere){respawnHeld.add(k);destroyed.set(k,tick+1)}
-    else if(respawnHeld.delete(k))destroyed.set(k,tick+2);
-    else destroyed.delete(k);
+    if(!respawnCommitted.has(k)&&respawnTick-tick<=2){
+      if(nearPlayer||bombHere){destroyed.set(k,tick+3);continue}
+      respawnCommitted.add(k);
+    }
+    if(respawnTick<=tick){
+      if(bombHere)destroyed.set(k,tick+1);
+      else{destroyed.delete(k);respawnCommitted.delete(k)}
+    }
   }
   resolveActions();explodeBombs();nextTickAt=timeline.nextTickAt;broadcast();
 }
