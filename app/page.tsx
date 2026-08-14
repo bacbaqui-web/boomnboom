@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type Tile = "floor" | "wall" | "crate";
+type Tile = "floor" | "wall" | "crate" | "warning";
 type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; nickname:string; joined:boolean; alive:boolean };
 type Bomb = { id:number; x:number; y:number; fuse:number };
 type State = { tick:number; nextTickAt:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; tiles:Tile[][]; players:Player[]; bombs:Bomb[]; flames:{x:number;y:number}[] };
@@ -120,7 +120,7 @@ export default function Home() {
         <div className="rules"><b>{me?.nickname?`${me.nickname}으로 참가 중`:"참가 준비 중"}</b><span>누른 행동이 다음 똑딱에 실행됩니다.</span><span>방향은 계속 유지되고 폭탄은 한 번만 설치됩니다.</span></div>
         <button className="boomBtn" onClick={()=>send("bomb")}>BOMB<small>한 틱 사용</small></button>
       </div>
-      <div className="legend"><span><i className="gray"/>고정 벽</span><span><i className="yellow"/>파괴 후 8초 뒤 복구</span><span><i className="cyan"/>나</span><span><i className="coral"/>AI / 다른 플레이어</span><button onClick={()=>setSound(v=>{soundRef.current=!v;return !v})}>{sound?"♪ 똑딱 소리 켜짐":"× 소리 꺼짐"}</button></div>
+      <div className="legend"><span><i className="gray"/>고정 벽</span><span><i className="yellow"/>노란 상자</span><span><i className="warning"/>2초 뒤 재생성</span><span><i className="cyan"/>나</span><span><i className="coral"/>AI / 다른 플레이어</span><button onClick={()=>setSound(v=>{soundRef.current=!v;return !v})}>{sound?"♪ 똑딱 소리 켜짐":"× 소리 꺼짐"}</button></div>
     </section>
   </main>;
 }

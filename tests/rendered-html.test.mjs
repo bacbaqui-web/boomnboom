@@ -18,7 +18,7 @@ test("server-renders the BOOMnBOOM tick game shell", async () => {
   assert.match(html, /<title>BOOMnBOOM — 1초 틱 폭탄 대전<\/title>/);
   assert.match(html, /Oracle 게임 서버에 접속하는 중/);
   assert.match(html, /다음 행동/);
-  assert.match(html, /파괴 후 8초 뒤 복구/);
+  assert.match(html, /2초 뒤 재생성/);
   assert.match(html, /og-tick\.png/);
 });
 
