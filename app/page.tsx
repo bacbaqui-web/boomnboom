@@ -86,6 +86,7 @@ export default function Home() {
   },[send]);
 
   const me=game?.players.find(p=>p.id===myId);
+  const centerBomb=game?.bombs.find(b=>b.x===Math.floor(game.width/2)&&b.y===Math.floor(game.height/2));
   return <main>
     <header>
       <div className="brand"><span className="logoBomb">●</span><div><b>BOOM <i>n</i> BOOM</b><small>1초마다 모두가 동시에 움직이는 폭탄 수싸움</small></div></div>
@@ -105,12 +106,13 @@ export default function Home() {
           const flame=game.flames.some(f=>f.x===x&&f.y===y);
           return <div className={`tile ${tile}`} key={`${x},${y}`}>
             {tile==="crate"&&<span className="box"/>}
-            {bomb&&<span className="bomb">●<i>{bomb.fuse}</i></span>}
+            {bomb&&<span className="bomb"><span>✦</span><i>{bomb.fuse}</i></span>}
             {people.filter(p=>p.id!==myId).map(p=><span key={p.id} className={`fighter ${p.isAI?"ai":"rival"}`} title={p.nickname}><em>{p.nickname}</em>{p.isAI?"AI":"◉"}</span>)}
             {flame&&<span className="flame">✦</span>}
           </div>
         }))}</div>
-        {me?.alive&&<span className="fighter me centerPlayer"><em>{me.nickname}</em>◉</span>}
+        {me?.alive&&<span key={`me-${game.tick}`} className="fighter me centerPlayer"><em>{me.nickname}</em>◉</span>}
+        {centerBomb&&<span className="bomb centerBomb"><span>✦</span><i>{centerBomb.fuse}</i></span>}
         <span className="coordinates">{game.worldX}, {game.worldY}</span>
         {!joined&&<div className="gameOverlay"><form onSubmit={enterWorld}><small>ENTER THE WORLD</small><h2>닉네임을 정해주세요</h2><p>캐릭터 머리 위에 표시됩니다.</p><input autoFocus maxLength={12} value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="닉네임 (최대 12자)" aria-label="닉네임"/><button disabled={!nickname.trim()}>게임 시작</button></form></div>}
         {joined&&me&&!me.alive&&<div className="gameOverlay death"><div><small>BOOM!</small><h2>폭탄에 맞았어요</h2><p>새로운 위치에서 다시 시작할 수 있어요.</p><button onClick={respawn}>다시 접속하기</button></div></div>}
