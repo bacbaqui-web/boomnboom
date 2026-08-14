@@ -12,7 +12,7 @@ type Action = "up" | "down" | "left" | "right" | "bomb" | "wait";
 
 const WS_URL = "wss://insight.magamiscom.ing/boom-ws";
 const BGM_URL = "/midnight-tile-loop.mp3";
-const actionLabel:Record<Action,string> = { up:"위로", down:"아래로", left:"왼쪽", right:"오른쪽", bomb:"폭탄 설치", wait:"대기" };
+const actionIcon:Record<Action,string> = { up:"↑", down:"↓", left:"←", right:"→", bomb:"●", wait:"Ⅱ" };
 
 export default function Home() {
   const [game, setGame] = useState<State | null>(null);
@@ -101,7 +101,6 @@ export default function Home() {
       <div className="tickHud">
         <div><small>LIVE WORLD</small><strong>접속 즉시 같은 맵에 스폰</strong></div>
         <div key={`meter-${game?.tick??0}`} className="tickMeter" aria-label="다음 턴까지 1초 게이지"/>
-        <div className="queue"><small>다음 행동</small><strong>{actionLabel[queued]}</strong></div>
       </div>
       {game ? <div className="board" style={{aspectRatio:`${game.width}/${game.height}`}}>
         <div key={game.tick} className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,"--camera-dx":game.cameraDx,"--camera-dy":game.cameraDy,"--cols":game.width,"--rows":game.height} as React.CSSProperties}>
@@ -118,7 +117,7 @@ export default function Home() {
             {flame&&<span className="flame">✦</span>}
           </div>
         }))}</div>
-        {me?.alive&&<span key={`me-${game.tick}`} className={`fighter me centerPlayer ${me.shield>0?"shielded":""} ${me.moved?"moving":""}`}><em>{me.nickname}</em>◉</span>}
+        {me?.alive&&<span key={`me-${game.tick}`} className={`fighter me centerPlayer ${me.shield>0?"shielded":""} ${me.moved?"moving":""}`}><em>{me.nickname}</em>◉<i className={`actionCue cue-${queued}`} title="내 다음 행동">{actionIcon[queued]}</i></span>}
         {centerBomb&&<span className="bomb centerBomb"><span>✦</span><i>{centerBomb.fuse}</i></span>}
         {game.enemyDirections?.map(enemy=>{const maxX=game.width/2-.8,maxY=game.height/2-.8,scale=Math.min(maxX/Math.max(Math.abs(enemy.dx),.001),maxY/Math.max(Math.abs(enemy.dy),.001)),left=50+enemy.dx*scale/game.width*100,top=50+enemy.dy*scale/game.height*100,angle=Math.atan2(enemy.dy,enemy.dx)*180/Math.PI+90;return <span key={enemy.id} className={`enemyPointer ${enemy.isAI?"ai":"rival"}`} style={{left:`${left}%`,top:`${top}%`}} title={`${enemy.nickname} · 약 ${enemy.distance}칸`}><i style={{transform:`rotate(${angle}deg)`}}>▲</i><small>{enemy.distance}</small></span>})}
         <span className="coordinates">{game.worldX}, {game.worldY}</span>

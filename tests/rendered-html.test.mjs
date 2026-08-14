@@ -17,7 +17,7 @@ test("server-renders the BOOMnBOOM tick game shell", async () => {
   const html = await response.text();
   assert.match(html, /<title>BOOMnBOOM — 1초 틱 폭탄 대전<\/title>/);
   assert.match(html, /Oracle 게임 서버에 접속하는 중/);
-  assert.match(html, /다음 행동/);
+  assert.match(html, /다음 턴까지 1초 게이지/);
   assert.match(html, /2초 뒤 재생성/);
   assert.match(html, /og-tick\.png/);
 });
@@ -28,5 +28,7 @@ test("client connects to the authoritative WebSocket server", async () => {
   assert.match(page, /type:\s*"action"/);
   assert.doesNotMatch(page, /requestAnimationFrame/);
   assert.match(page, /다음 턴까지 1초 게이지/);
+  assert.match(page, /actionCue cue-/);
+  assert.doesNotMatch(page, /className="queue"/);
   assert.doesNotMatch(page, /setBeatStep|new AudioContext|beatBounce/);
 });
