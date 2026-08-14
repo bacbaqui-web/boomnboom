@@ -42,4 +42,8 @@ export class MovementPrediction {
       y: this.#authoritative.y + offset.y,
     };
   }
+
+  get authoritative(): Position | null {
+    return this.#authoritative ? { ...this.#authoritative } : null;
+  }
 }

@@ -54,7 +54,7 @@ Browser
 
 ### Runtime과 Controller
 
-- `movement-prediction.ts`: pending input을 한 칸 앞 visual target으로 제한하고 ack에 수렴
+- `movement-prediction.ts`: pending input을 한 칸 앞 visual target으로 제한하고 ack/session에 수렴
 - `camera-runtime.ts`: current visual에서 새 integer target으로 175ms linear retarget, respawn snap
 - `input-runtime.ts`, `use-game-input.ts`: keyboard/pointer 145ms hold, stop/bomb와 cleanup
 - `audio-runtime.ts`: BGM Audio, server clock seek/drift와 4단계 volume
@@ -274,7 +274,8 @@ source/import/fetch caller 0건을 재확인한 뒤 R6A rollback 단위로 다�
   source contract 2건
 - `tests/world-store.test.mjs`: snapshot/delta/gap/stale, chunk selector와 reconnect 4건
 - `tests/camera-runtime.test.mjs`: linear monotonic/final target와 retarget/teleport 2건
-- `tests/movement-prediction.test.mjs`: 즉시 target, ack, 연속 입력과 reject 복귀 4건
+- `tests/movement-prediction.test.mjs`: 즉시 target, ack, 연속 입력, reject와 session reset 5건
+- `tests/game-socket.test.mjs`: 닫힌 socket 전송 실패 sequence가 prediction에 안 들어가는지 검증
 - `tests/input-runtime.test.mjs`: movement hold/stop/bomb/unmount cleanup 2건
 - `server/test/world-core.test.mjs`: 음수 좌표, 결정성, 청크 경계, materialize once,
   shared revision과 spawn non-mutation
@@ -301,6 +302,6 @@ source/import/fetch caller 0건을 재확인한 뒤 R6A rollback 단위로 다�
 | client chunk/entity store | revision 검증 external Store 구현 완료 |
 | terrain/entity/camera layer | fixed chunk / entity / rAF camera로 분리 완료 |
 | bounded lifecycle metrics | base-only cold trim과 chunk health count, 장기 관찰 미실행 |
-| behavior regression tests | server 27건 + client/store/camera/input/prediction/SSR 14건 |
+| behavior regression tests | server 27건 + client/store/socket/camera/input/prediction/SSR 17건 |
 
 이 차이는 `docs/98_sprint_plan.md`의 6단계에서 순차적으로 해소한다.

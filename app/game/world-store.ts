@@ -150,6 +150,23 @@ export class ClientWorldStore {
   getEntitySnapshot = () => this.#entitySnapshot;
   getChunk = (chunkKey: string) => this.#chunks.get(chunkKey) ?? null;
 
+  canEnterCell(x: number, y: number, localPlayerId = this.#snapshot.localPlayerId) {
+    const chunkSize = this.#snapshot.metadata?.chunkSize ?? 16;
+    const chunkX = Math.floor(x / chunkSize);
+    const chunkY = Math.floor(y / chunkSize);
+    const chunk = this.#chunks.get(`${chunkX},${chunkY}`);
+    if (!chunk) return false;
+    const localX = ((x % chunkSize) + chunkSize) % chunkSize;
+    const localY = ((y % chunkSize) + chunkSize) % chunkSize;
+    const tile = chunk.tiles[localY * chunkSize + localX];
+    if (tile === "wall" || tile === "crate" || !tile) return false;
+    return ![...this.#entities.values()].some((entity) => {
+      if (entity.x !== x || entity.y !== y) return false;
+      if (entity.kind === "bomb") return true;
+      return entity.kind === "player" && entity.id !== localPlayerId && entity.alive;
+    });
+  }
+
   getKnownChunkRevisions() {
     return Object.fromEntries([...this.#chunks].map(([key, chunk]) => [key, chunk.revision]));
   }

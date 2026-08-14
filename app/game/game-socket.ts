@@ -61,14 +61,16 @@ export class GameSocket {
 
   sendInput(action: Action) {
     if (!this.#store.getSnapshot().initialized) return -1;
-    const clientSeq = ++this.#clientSeq;
-    this.#send({ protocol: 2, type: "input", clientSeq, action });
+    const clientSeq = this.#clientSeq + 1;
+    if (!this.#send({ protocol: 2, type: "input", clientSeq, action })) return -1;
+    this.#clientSeq = clientSeq;
     return clientSeq;
   }
 
   respawn() {
-    const clientSeq = ++this.#clientSeq;
-    this.#send({ protocol: 2, type: "respawn", clientSeq });
+    const clientSeq = this.#clientSeq + 1;
+    if (!this.#send({ protocol: 2, type: "respawn", clientSeq })) return -1;
+    this.#clientSeq = clientSeq;
     return clientSeq;
   }
 
@@ -125,6 +127,8 @@ export class GameSocket {
   #send(message: object) {
     if (this.#socket?.readyState === 1) {
       this.#socket.send(JSON.stringify(message));
+      return true;
     }
+    return false;
   }
 }

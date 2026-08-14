@@ -31,3 +31,11 @@ test("a rejected move returns to the authoritative cell", () => {
   prediction.enqueue(7, "up");
   assert.deepEqual(prediction.reconcile(7, { x: 3, y: 3 }), { x: 3, y: 3 });
 });
+
+test("reset clears pending input at a reconnect or life boundary", () => {
+  const prediction = new MovementPrediction();
+  prediction.reset({ x: 0, y: 0 });
+  prediction.enqueue(4, "right");
+  assert.deepEqual(prediction.reset({ x: 20, y: -8 }), { x: 20, y: -8 });
+  assert.deepEqual(prediction.authoritative, { x: 20, y: -8 });
+});

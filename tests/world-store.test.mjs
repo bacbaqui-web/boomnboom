@@ -174,3 +174,23 @@ test("reconnect validates world identity and authoritative initial revisions", (
   assert.equal(store.getChunk("0,0"), null);
   assert.deepEqual(store.getSnapshot().chunkKeys, []);
 });
+
+test("client prediction refuses terrain, bombs, and other players", () => {
+  const store = new ClientWorldStore();
+  initialize(store);
+  store.apply(chunkSnapshot(1, "wall"));
+  store.apply(message("entity_snapshot", {
+    entityRevision: 1,
+    players: [{
+      kind: "player", id: "P2", x: 2, y: 1, isAI: false, action: "wait",
+      score: 0, power: 1, range: 2, shield: 0, nickname: "P2", joined: true, alive: true,
+    }],
+    bombs: [{ kind: "bomb", id: 1, x: 3, y: 1, owner: "P2", fuse: 3, bornTick: 0, range: 2 }],
+    items: [], flames: [], enemies: [],
+  }));
+  assert.equal(store.canEnterCell(0, 0), false);
+  assert.equal(store.canEnterCell(1, 1), true);
+  assert.equal(store.canEnterCell(2, 1), false);
+  assert.equal(store.canEnterCell(3, 1), false);
+  assert.equal(store.canEnterCell(-1, -1), false);
+});

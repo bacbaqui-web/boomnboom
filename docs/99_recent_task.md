@@ -5,13 +5,16 @@
 대규모 refactor 6A로 caller가 없는 D1/starter 경로를 제거했다. Oracle에는
 Protocol V1/V2를 함께 받는 새 World Owner 서버를 먼저 배포했고, health와 실제
 WebSocket V1/V2 연결을 확인했다. 공개 Sites client 배포 전 로컬 브라우저 두 창,
-모바일 viewport, 폭탄 layer와 음량 UI를 검증했다.
+모바일 viewport, 폭탄 layer와 음량 UI를 검증했다. 공개 Sites version 40에서도
+같은 화면과 즉시 이동을 확인했다.
 
 이동 QA에서 입력 뒤 서버 왕복을 기다리는 약 160ms 정지와 tile별 ease-out 감속을
 찾았다. canonical server 좌표는 그대로 유지하면서 client pending input이 한 칸
 앞의 visual target을 즉시 만들고, ack/correction으로 수렴하도록 수정했다. camera는
 175ms linear retarget으로 연속 입력 사이의 정지를 없애고 마지막 승인 칸 중심에
-정확히 정착한다.
+정확히 정착한다. 추가 review에서 찾은 재연결 pending 보존, 닫힌 socket sequence,
+벽 hold speculative 이동도 session/life reset, send 성공 반환과 client
+terrain/entity preflight로 막았다.
 
 ## 제거 Manifest
 
@@ -35,7 +38,7 @@ Oracle Gateway의 Protocol V1/V2 동시 수용은 유지한다. Oracle server를
 
 - root ESLint: 오류/경고 0
 - TypeScript `--noEmit`: 오류 0
-- client production build + tests: 14/14 PASS
+- client production build + tests: 17/17 PASS
 - server tests: 27/27 PASS
 - D1/Drizzle/auth/style/starter asset caller audit: 0건
 - `git diff --check`, syntax와 health smoke: PASS
