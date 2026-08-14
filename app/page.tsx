@@ -33,7 +33,7 @@ export default function Home() {
   const moveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastBgmTickRef = useRef(-1);
   const worldLayerRef = useRef<HTMLDivElement | null>(null);
-  const cameraRef = useRef({ready:false,visualX:0,visualY:0,targetX:0,targetY:0,originX:0,originY:0,width:17,height:13});
+  const cameraRef = useRef({ready:false,visualX:0,visualY:0,startX:0,startY:0,targetX:0,targetY:0,startAt:0,duration:150,originX:0,originY:0,width:17,height:13});
 
   const paintCamera=useCallback(()=>{
     const layer=worldLayerRef.current,camera=cameraRef.current;if(!layer||!camera.ready)return;
@@ -74,8 +74,10 @@ export default function Home() {
         if(msg.type==="welcome") { myIdRef.current=msg.id; setMyId(msg.id); if(joinedRef.current)ws.send(JSON.stringify({type:"join",nickname:nicknameRef.current})); }
         if(msg.type==="state") {
           const camera=cameraRef.current;
-          if(!camera.ready||Math.hypot(msg.worldX-camera.visualX,msg.worldY-camera.visualY)>2){camera.ready=true;camera.visualX=msg.worldX;camera.visualY=msg.worldY}
-          camera.targetX=msg.worldX;camera.targetY=msg.worldY;camera.originX=msg.originX;camera.originY=msg.originY;camera.width=msg.width;camera.height=msg.height;
+          const teleported=!camera.ready||Math.hypot(msg.worldX-camera.visualX,msg.worldY-camera.visualY)>2;
+          if(teleported){camera.ready=true;camera.visualX=msg.worldX;camera.visualY=msg.worldY;camera.startX=msg.worldX;camera.startY=msg.worldY;camera.targetX=msg.worldX;camera.targetY=msg.worldY}
+          else if(msg.worldX!==camera.targetX||msg.worldY!==camera.targetY){camera.startX=camera.visualX;camera.startY=camera.visualY;camera.targetX=msg.worldX;camera.targetY=msg.worldY;camera.startAt=performance.now()}
+          camera.originX=msg.originX;camera.originY=msg.originY;camera.width=msg.width;camera.height=msg.height;
           setGame(msg);
           if(msg.tick!==lastBgmTickRef.current){lastBgmTickRef.current=msg.tick;syncBgm(msg)}
           const me=msg.players.find((p:Player)=>p.id===myIdRef.current);
@@ -88,15 +90,13 @@ export default function Home() {
   },[syncBgm]);
 
   useEffect(()=>{
-    let animationFrame=0,last=performance.now();
+    let animationFrame=0;
     const animate=(now:number)=>{
-      const camera=cameraRef.current,elapsed=Math.min(50,now-last);last=now;
+      const camera=cameraRef.current;
       if(camera.ready){
-        const smoothing=1-Math.exp(-elapsed/48);
-        camera.visualX+=(camera.targetX-camera.visualX)*smoothing;
-        camera.visualY+=(camera.targetY-camera.visualY)*smoothing;
-        if(Math.abs(camera.targetX-camera.visualX)<.0005)camera.visualX=camera.targetX;
-        if(Math.abs(camera.targetY-camera.visualY)<.0005)camera.visualY=camera.targetY;
+        const progress=Math.min(1,Math.max(0,(now-camera.startAt)/camera.duration));
+        camera.visualX=camera.startX+(camera.targetX-camera.startX)*progress;
+        camera.visualY=camera.startY+(camera.targetY-camera.startY)*progress;
         paintCamera();
       }
       animationFrame=requestAnimationFrame(animate);
@@ -109,7 +109,7 @@ export default function Home() {
     if(wsRef.current?.readyState===WebSocket.OPEN) wsRef.current.send(JSON.stringify({type:"action",action}));
   },[]);
   const stopMoving=useCallback(()=>{if(!moveTimerRef.current)return;clearInterval(moveTimerRef.current);moveTimerRef.current=null;send("wait")},[send]);
-  const startMoving=useCallback((action:Extract<Action,"up"|"down"|"left"|"right">)=>{if(moveTimerRef.current)clearInterval(moveTimerRef.current);send(action);moveTimerRef.current=setInterval(()=>send(action),60)},[send]);
+  const startMoving=useCallback((action:Extract<Action,"up"|"down"|"left"|"right">)=>{if(moveTimerRef.current)clearInterval(moveTimerRef.current);send(action);moveTimerRef.current=setInterval(()=>send(action),145)},[send]);
 
   const enterWorld=(e:React.FormEvent)=>{
     e.preventDefault();const clean=nickname.trim().slice(0,12);if(!clean)return;startBgm(game);

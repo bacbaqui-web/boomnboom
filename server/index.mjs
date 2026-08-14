@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 
 const PORT = Number(process.env.PORT || 3300);
 const TICK_MS = Number(process.env.TICK_MS || 1000);
-const MOVE_INTERVAL_MS = 55, MOVE_STEP = .1, SNAP_INTERVAL_MS = 45, SNAP_STEP = .16, AI_INTERVAL_MS = 500;
+const MOVE_INTERVAL_MS = 140, AI_INTERVAL_MS = 500;
 // One permanent world clock. It keeps advancing across restarts and even while
 // nobody is connected. At every whole second the track is on a snare.
 const WORLD_EPOCH_MS = Number(process.env.WORLD_EPOCH_MS || Date.UTC(2026, 7, 14, 0, 0, 0));
@@ -117,29 +117,13 @@ function collectItem(player){
   items.delete(itemKey);
 }
 function movePlayer(player,action){
-  player.snapTarget=null;
-  const[dx,dy]=DIRS[action]||DIRS.wait,step=player.isAI?1:MOVE_STEP,x=player.x+dx*step,y=player.y+dy*step;
+  const[dx,dy]=DIRS[action]||DIRS.wait,x=player.x+dx,y=player.y+dy;
   player.prevX=player.x;player.prevY=player.y;player.action=action;
-  const fromX=Math.round(player.x),fromY=Math.round(player.y),toX=Math.round(x),toY=Math.round(y);
-  if((dx===0&&dy===0)||((fromX!==toX||fromY!==toY)&&blocked(toX,toY))||[...players.values()].some(p=>p!==player&&p.alive&&Math.hypot(p.x-x,p.y-y)<.58))return false;
+  if((dx===0&&dy===0)||blocked(x,y)||[...players.values()].some(p=>p!==player&&p.alive&&p.x===x&&p.y===y))return false;
   player.x=x;player.y=y;collectItem(player);return true;
 }
-function directionalCell(player,action=player.action){
-  let x=Math.round(player.x),y=Math.round(player.y);
-  if(action==="right"&&player.x%1!==0)x=Math.ceil(player.x);
-  else if(action==="left"&&player.x%1!==0)x=Math.floor(player.x);
-  else if(action==="down"&&player.y%1!==0)y=Math.ceil(player.y);
-  else if(action==="up"&&player.y%1!==0)y=Math.floor(player.y);
-  return{x,y};
-}
-function startSnap(player){
-  const target=directionalCell(player);
-  const occupied=[...players.values()].some(p=>p!==player&&p.alive&&Math.hypot(p.x-target.x,p.y-target.y)<.58);
-  player.snapTarget=blocked(target.x,target.y)||occupied?{x:Math.round(player.x),y:Math.round(player.y)}:target;
-  player.action="wait";
-}
 function placeBomb(player){
-  const{x,y}=directionalCell(player),occupied=[...bombs.values()].some(b=>b.x===x&&b.y===y),owned=[...bombs.values()].filter(b=>b.owner===player.id).length;
+  const x=player.x,y=player.y,occupied=[...bombs.values()].some(b=>b.x===x&&b.y===y),owned=[...bombs.values()].filter(b=>b.owner===player.id).length;
   player.action="bomb";
   if(occupied||owned>=player.power)return false;
   bombs.set(nextBombNumber,{id:nextBombNumber++,x,y,owner:player.id,fuse:BOMB_FUSE_TICKS,bornTick:tick,range:player.range});return true;
@@ -178,10 +162,9 @@ function runTick(){
 const server=http.createServer((req,res)=>{if(req.url==="/health"){res.writeHead(200,{"content-type":"application/json"});return res.end(JSON.stringify({ok:true,tick,players:players.size,destroyed:destroyed.size,uptime:Math.round(process.uptime())}))}res.writeHead(404).end()});
 const wss=new WebSocketServer({noServer:true});
 server.on("upgrade",(req,socket,head)=>{if(req.url!=="/boom-ws"&&req.url!=="/")return socket.destroy();wss.handleUpgrade(req,socket,head,ws=>wss.emit("connection",ws))});
-wss.on("connection",ws=>{const player=addPlayer({socket:ws});ws.send(JSON.stringify({type:"welcome",id:player.id,tickMs:TICK_MS}));ws.send(JSON.stringify(stateFor(player)));ws.on("message",raw=>{try{const msg=JSON.parse(raw.toString());if(msg.type==="join"&&!player.joined){player.nickname=String(msg.nickname||"").trim().slice(0,12)||`플레이어${player.id.slice(1)}`;player.joined=true;player.alive=true;player.action="wait";broadcast()}else if(msg.type==="respawn"&&player.joined&&!player.alive){const[x,y]=freeSpawn();clearSpawn(x,y);player.x=x;player.y=y;player.prevX=x;player.prevY=y;player.alive=true;player.action="wait";broadcast()}else if(msg.type==="action"&&player.alive&&ACTIONS.has(msg.action)){if(msg.action==="bomb"){placeBomb(player);broadcast()}else if(msg.action==="wait"){startSnap(player);broadcast()}else if(Date.now()-player.lastMoveAt>=MOVE_INTERVAL_MS){player.lastMoveAt=Date.now();movePlayer(player,msg.action);broadcast()}}}catch{/* ignore malformed input */}});ws.on("close",()=>players.delete(player.id))});
+wss.on("connection",ws=>{const player=addPlayer({socket:ws});ws.send(JSON.stringify({type:"welcome",id:player.id,tickMs:TICK_MS}));ws.send(JSON.stringify(stateFor(player)));ws.on("message",raw=>{try{const msg=JSON.parse(raw.toString());if(msg.type==="join"&&!player.joined){player.nickname=String(msg.nickname||"").trim().slice(0,12)||`플레이어${player.id.slice(1)}`;player.joined=true;player.alive=true;player.action="wait";broadcast()}else if(msg.type==="respawn"&&player.joined&&!player.alive){const[x,y]=freeSpawn();clearSpawn(x,y);player.x=x;player.y=y;player.prevX=x;player.prevY=y;player.alive=true;player.action="wait";broadcast()}else if(msg.type==="action"&&player.alive&&ACTIONS.has(msg.action)){if(msg.action==="bomb"){placeBomb(player);broadcast()}else if(msg.action==="wait"){player.action="wait";broadcast()}else if(Date.now()-player.lastMoveAt>=MOVE_INTERVAL_MS){player.lastMoveAt=Date.now();movePlayer(player,msg.action);broadcast()}}}catch{/* ignore malformed input */}});ws.on("close",()=>players.delete(player.id))});
 let timer;
 function scheduleTick(){timer=setTimeout(()=>{runTick();scheduleTick()},Math.max(1,nextTickAt-Date.now()));timer.unref()}
 const aiTimer=setInterval(()=>{let changed=false;for(const bot of players.values())if(bot.isAI&&bot.alive){const action=chooseBotAction(bot);changed=action==="bomb"?placeBomb(bot)||changed:movePlayer(bot,action)||changed}if(changed)broadcast()},AI_INTERVAL_MS);aiTimer.unref();
-const snapTimer=setInterval(()=>{let changed=false;for(const player of players.values())if(player.alive&&player.snapTarget){const dx=player.snapTarget.x-player.x,dy=player.snapTarget.y-player.y,distance=Math.hypot(dx,dy);player.prevX=player.x;player.prevY=player.y;if(distance<=SNAP_STEP){player.x=player.snapTarget.x;player.y=player.snapTarget.y;player.snapTarget=null;collectItem(player)}else{player.x+=dx/distance*SNAP_STEP;player.y+=dy/distance*SNAP_STEP}changed=true}if(changed)broadcast()},SNAP_INTERVAL_MS);snapTimer.unref();
 scheduleTick();server.listen(PORT,"127.0.0.1",()=>console.log(`BOOMnBOOM real-time movement server listening on 127.0.0.1:${PORT}`));
-for(const signal of["SIGINT","SIGTERM"])process.on(signal,()=>{clearInterval(aiTimer);clearInterval(snapTimer);for(const client of wss.clients)client.terminate();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),1000).unref()});
+for(const signal of["SIGINT","SIGTERM"])process.on(signal,()=>{clearInterval(aiTimer);for(const client of wss.clients)client.terminate();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),1000).unref()});
