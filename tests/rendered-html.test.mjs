@@ -27,6 +27,6 @@ test("client connects to the authoritative WebSocket server", async () => {
   assert.match(page, /wss:\/\/insight\.magamiscom\.ing\/boom-ws/);
   assert.match(page, /type:\s*"action"/);
   assert.doesNotMatch(page, /requestAnimationFrame/);
-  assert.match(page, /setBeatStep/);
-  assert.match(page, /new AudioContext/);
+  assert.match(page, /다음 턴까지 1초 게이지/);
+  assert.doesNotMatch(page, /setBeatStep|new AudioContext|beatBounce/);
 });
