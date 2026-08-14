@@ -12,6 +12,7 @@ type Game = {
 };
 
 function key(x: number, y: number) { return `${x},${y}`; }
+function hash(x:number,y:number,seed=1){let n=Math.imul(x,374761393)+Math.imul(y,668265263)+seed*69069;n=(n^(n>>>13))*1274126177;return(n^(n>>>16))>>>0}
 function fresh(): Game {
   const safe = new Set(["1,1","1,2","2,1",`${W-2},${H-2}`,`${W-3},${H-2}`,`${W-2},${H-3}`]);
   const tiles: Tile[][] = Array.from({ length: H }, (_, y) => Array.from({ length: W }, (_, x) => {
@@ -32,6 +33,9 @@ export default function Home() {
   const [role, setRole] = useState<"p1"|"p2"|null>(null);
   const [waiting, setWaiting] = useState(false);
   const [lobby, setLobby] = useState(true);
+  const [friendMode, setFriendMode] = useState(false);
+  const [matching, setMatching] = useState(false);
+  const [endless, setEndless] = useState(false);
   const onlineRef = useRef<{room:string;role:"p1"|"p2"}|null>(null);
   const loop = useRef<ReturnType<typeof setInterval> | null>(null);
   const beep = useCallback((freq=160, length=.08) => {
@@ -56,9 +60,10 @@ export default function Home() {
     beep(110); return {...old,bombs:[...old.bombs,{...old.player,owner:"p",at:Date.now()+1800,range:old.range}]};
   })},[beep,send]);
 
-  const applyOnline=useCallback((s:any,r:"p1"|"p2")=>{const me=s.players[r],other=s.players[r==="p1"?"p2":"p1"];setWaiting(s.status==="waiting");smooth(()=>setG(old=>({...old,tiles:s.tiles,player:{x:me.x,y:me.y},bot:{x:other.x,y:other.y},power:me.power,range:me.range,bombs:s.bombs.map((b:any)=>({...b,owner:b.owner===r?"p":"b"})),flames:s.flames,status:s.status==="ended"?(me.alive?"win":"lose"):"playing"})))},[]);
+  const applyOnline=useCallback((s:any,r:"p1"|"p2")=>{const me=s.players[r],other=s.players[r==="p1"?"p2":"p1"],isEndless=s.mode==="random";setEndless(isEndless);setWaiting(s.status==="waiting");setMatching(s.status==="waiting"&&isEndless);let tiles=s.tiles,player={x:me.x,y:me.y},bot={x:other.x,y:other.y},bombs=s.bombs,flames=s.flames;if(isEndless){const ox=me.x-Math.floor(W/2),oy=me.y-Math.floor(H/2),destroyed=s.destroyed||{};tiles=Array.from({length:H},(_,y)=>Array.from({length:W},(_,x)=>{const wx=ox+x,wy=oy+y;if(wx%2===0&&wy%2===0)return"wall";if(destroyed[`${wx},${wy}`])return"floor";return hash(wx,wy,s.seed)%100<58?"crate":"floor"}));player={x:Math.floor(W/2),y:Math.floor(H/2)};bot={x:other.x-ox,y:other.y-oy};bombs=s.bombs.map((b:any)=>({...b,x:b.x-ox,y:b.y-oy}));flames=s.flames.map((f:any)=>({x:f.x-ox,y:f.y-oy}))}smooth(()=>setG(old=>({...old,tiles,player,bot,power:me.power,range:me.range,bombs:bombs.map((b:any)=>({...b,owner:b.owner===r?"p":"b"})),flames,status:s.status==="ended"?(me.alive?"win":"lose"):"playing"})))},[]);
   const enter=useCallback(async(c:string,r:"p1"|"p2",join=false)=>{const code=c.toUpperCase();onlineRef.current={room:code,role:r};setRoom(code);setRole(r);setLobby(false);if(join)await fetch(`/api/rooms/${code}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({role:r,action:"join"})});},[]);
   const createRoom=async()=>{const res=await fetch("/api/rooms",{method:"POST"}),data=await res.json();if(data.code)enter(data.code,"p1")};
+  const randomMatch=async()=>{setMatching(true);setLobby(false);setEndless(true);const res=await fetch("/api/match",{method:"POST"}),data=await res.json();if(data.code)enter(data.code,data.role);else{setLobby(true);setMatching(false)}};
   const joinRoom=()=>{if(joinCode.trim().length===4)enter(joinCode.trim(),"p2",true)};
   const solo=()=>{onlineRef.current=null;setRole(null);setRoom("");setLobby(false);setWaiting(false);setG(fresh())};
 
@@ -88,14 +93,15 @@ export default function Home() {
   return <main>
     <header><div className="brand"><span className="logoBomb">●</span><div><b>BUBBLE <i>BOOM!</i></b><small>터뜨리고, 피하고, 끝까지 살아남아!</small></div></div><div className="topBtns"><button onClick={()=>setSound(!sound)} aria-label="소리 켜기 끄기">{sound?"♪ SOUND":"× MUTE"}</button><button onClick={()=>{onlineRef.current=null;setLobby(true);setRoom("");setG(fresh())}}>대전 메뉴</button></div></header>
     <section className="gameShell">
-      {room&&<div className="roomBar"><span>ONLINE MATCH</span><b>방 코드 {room}</b><small>{waiting?"친구가 들어오길 기다리는 중…":"상대와 연결됨 ●"}</small></div>}
+      {room&&<div className="roomBar"><span>{endless?"ENDLESS RANDOM":"FRIEND MATCH"}</span>{!endless&&<b>방 코드 {room}</b>}<small>{waiting?(endless?"상대를 찾는 중…":"친구가 들어오길 기다리는 중…"):"상대와 연결됨 ●"}</small></div>}
       <div className="hud"><div><span>SCORE</span><strong>{String(g.score).padStart(6,"0")}</strong></div><div className="round">ROUND <b>01</b></div><div><span>RIVAL</span><strong className="hearts">{g.status==="win"?"♡":"♥"}</strong></div></div>
       <div className="board" style={{gridTemplateColumns:`repeat(${W},1fr)`}}>
         {g.tiles.flatMap((row,y)=>row.map((t,x)=>{
           const p=g.player.x===x&&g.player.y===y,b=g.bot.x===x&&g.bot.y===y,bombHere=g.bombs.find(q=>q.x===x&&q.y===y),fire=g.flames.some(f=>f.x===x&&f.y===y);
           return <div className={`tile ${t}`} key={key(x,y)}>{t==="crate"&&<span className="box">×</span>}{t==="power"&&<span className="item">B+</span>}{t==="range"&&<span className="item rangeIcon">↔</span>}{bombHere&&<span className={`bomb ${bombHere.owner}`}>●<i>✦</i></span>}{p&&<span className="hero"><i>◉</i></span>}{b&&<span className="bot"><i>▼</i></span>}{fire&&<span className="flame">✦</span>}</div>
         }))}
-        {lobby&&<div className="overlay lobby"><div><small>ONLINE BATTLE</small><h2>친구와 바로 대전!</h2><p>방을 만들고 4자리 코드를 친구에게 알려주세요.</p><button onClick={createRoom}>새 대전방 만들기</button><div className="join"><input value={joinCode} maxLength={4} onChange={e=>setJoinCode(e.target.value.toUpperCase())} placeholder="방 코드" aria-label="방 코드"/><button onClick={joinRoom}>입장</button></div><button className="solo" onClick={solo}>혼자 연습하기</button></div></div>}
+        {lobby&&<div className="overlay lobby"><div><small>ENDLESS ONLINE BATTLE</small><h2>{friendMode?"친구와 대전":"바로 랜덤 대전!"}</h2>{!friendMode?<><p>상대를 자동으로 찾아 끝없이 펼쳐지는 맵에 입장합니다.</p><button className="randomBtn" onClick={randomMatch}>⚡ 랜덤 대전 시작</button><button className="friendBtn" onClick={()=>setFriendMode(true)}>친구와 대전</button></>:<><p>한 명은 방을 만들고, 다른 한 명은 같은 코드를 입력하세요.</p><button onClick={createRoom}>새 친구방 만들기</button><div className="join"><input value={joinCode} maxLength={4} onChange={e=>setJoinCode(e.target.value.toUpperCase())} placeholder="방 코드" aria-label="방 코드"/><button onClick={joinRoom}>입장</button></div><button className="friendBtn" onClick={()=>setFriendMode(false)}>← 랜덤 대전으로</button></>}<button className="solo" onClick={solo}>혼자 연습하기</button></div></div>}
+        {!lobby&&matching&&waiting&&<div className="matching"><span className="spinner">●</span><b>상대를 찾고 있어요</b><small>매칭되면 자동으로 시작합니다</small></div>}
         {!lobby&&g.status!=="playing"&&<div className="overlay"><div><small>{g.status==="win"?"CLEAR!":"OH NO!"}</small><h2>{g.status==="win"?"폭발의 승자!":"물방울에 갇혔어요"}</h2><p>{room?"대전 종료":`점수 ${g.score.toLocaleString()}점`}</p><button onClick={()=>{onlineRef.current=null;setLobby(true);setRoom("");setG(fresh())}}>대전 메뉴</button></div></div>}
       </div>
       <div className="mobileControls"><div className="dpad"><button onPointerDown={()=>move(0,-1)}>▲</button><button onPointerDown={()=>move(-1,0)}>◀</button><button onPointerDown={()=>move(0,1)}>▼</button><button onPointerDown={()=>move(1,0)}>▶</button></div><button className="boomBtn" onPointerDown={bomb}>BOMB!<small>폭탄 놓기</small></button></div>
