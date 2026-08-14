@@ -15,22 +15,26 @@ test("server-renders the BOOMnBOOM tick game shell", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /<title>BOOMnBOOM — 1초 틱 폭탄 대전<\/title>/);
+  assert.match(html, /<title>BOOMnBOOM — 끝없는 공유 월드 폭탄 대전<\/title>/);
   assert.match(html, /Oracle 게임 서버에 접속하는 중/);
   assert.match(html, /다음 턴까지 1초 게이지/);
   assert.match(html, /2초 뒤 재생성/);
-  assert.match(html, /og-tick\.png/);
+  assert.match(html, /og-world\.png/);
 });
 
 test("client connects to the authoritative WebSocket server", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /wss:\/\/insight\.magamiscom\.ing\/boom-ws/);
-  assert.match(page, /type:\s*"action"/);
-  assert.match(page, /requestAnimationFrame/);
-  assert.match(page, /cancelAnimationFrame/);
-  assert.match(page, /paintCamera/);
-  assert.match(page, /다음 턴까지 1초 게이지/);
-  assert.match(page, /actionCue cue-/);
-  assert.doesNotMatch(page, /className="queue"/);
-  assert.doesNotMatch(page, /setBeatStep|new AudioContext|beatBounce/);
+  const socket = await readFile(new URL("../app/game/game-socket.ts", import.meta.url), "utf8");
+  const viewport = await readFile(new URL("../app/game/WorldViewport.tsx", import.meta.url), "utf8");
+  const terrain = await readFile(new URL("../app/game/TerrainLayer.tsx", import.meta.url), "utf8");
+  assert.match(socket, /wss:\/\/insight\.magamiscom\.ing\/boom-ws/);
+  assert.match(socket, /protocol:\s*2/);
+  assert.match(socket, /type:\s*"input"/);
+  assert.match(socket, /knownChunkRevisions/);
+  assert.match(viewport, /requestAnimationFrame/);
+  assert.match(viewport, /cancelAnimationFrame/);
+  assert.match(viewport, /transformAt/);
+  assert.match(terrain, /data-revision/);
+  assert.match(page, /GameHud|WorldViewport|GameControls/);
+  assert.doesNotMatch(page, /WebSocket|requestAnimationFrame|Audio\(/);
 });

@@ -1,106 +1,67 @@
-# BOOM n BOOM
+# BOOMnBOOM
 
-120 BPM 음악의 스네어마다 모든 플레이어가 동시에 행동하는 실시간 웹 폭탄 게임입니다.
+BOOMnBOOM은 링크로 바로 참가하는 실시간 공유 월드 폭탄 게임입니다.
 
-- [게임 바로 실행](https://bubble-boom-arcade.bacbaqui2.chatgpt.site/)
-- 실시간 월드와 턴 시간선은 Oracle WebSocket 서버가 관리합니다.
-- 웹 화면은 Sites에 배포되며 GitHub Pages 주소에서도 게임으로 연결됩니다.
+- [공개 게임](https://bubble-boom-arcade.bacbaqui2.chatgpt.site/)
+- 별도 매칭 없이 하나의 끝없는 월드에 합류합니다.
+- Oracle Node 서버가 월드, 충돌, AI, 폭탄과 청크 revision을 확정합니다.
+- Sites에 배포되는 V2 웹 클라이언트는 주변 25청크를 받아 15×11 화면만
+  부드럽게 보여줍니다.
+- 폭발과 상자 재생성은 영구 world clock/BGM 박자에 맞춰 처리됩니다.
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
-
-## Prerequisites
+## 요구 사항
 
 - Node.js `>=22.13.0`
 
-## Quick Start
+## 로컬 검증
 
 ```bash
 npm install
 npm run dev
-npm run build
+npm run lint
+npm test
 ```
 
-This starter does not use `wrangler.jsonc`.
+Oracle 게임 서버는 별도 터미널에서 실행합니다.
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+cd server
+npm install
+npm test
+PORT=3300 npm start
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+웹 클라이언트의 기본 WebSocket 주소는
+`wss://insight.magamiscom.ing/boom-ws?protocol=2`입니다. 로컬 통합 검증에서는
+필요한 범위에서 `GameSocket`의 URL과 socket factory를 주입합니다.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## 현재 구조
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+```text
+Sites V2 Client
+  → Game Socket / Client World Store
+  → Oracle nginx /boom-ws
+  → WebSocket Gateway
+  → Game Simulation
+  → World Owner
+```
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+- `app/game/`: V2 protocol, cache, input/camera/audio Runtime과 render layer
+- `server/src/world/`: 결정적 16×16 청크와 canonical entity owner
+- `server/src/simulation/`: 이동, 폭탄, 폭발, 피해, item과 respawn 규칙
+- `server/src/network/`: V2 snapshot/delta gateway와 첫 배포 rollback용 V1 adapter
+- `docs/`: 제품 불변식, Architecture, source map과 현재 Sprint
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+현재 실시간 월드는 Oracle 프로세스 메모리가 authority입니다. 서버 재시작 뒤 base
+terrain은 같은 seed/version으로 복원되지만 player, bomb, item과 진행 중인 respawn은
+초기화됩니다. D1은 현재 제품 경로에 사용하지 않습니다.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+## 배포 순서
 
-## Useful Commands
+1. V1/V2를 함께 받는 Oracle 서버를 먼저 배포하고 health/WebSocket을 확인합니다.
+2. Sites V2 웹 클라이언트를 배포합니다.
+3. 실제 두 브라우저에서 같은 월드, 이동, 폭탄과 청크 delta를 확인합니다.
+4. V1 traffic이 0임을 관찰한 뒤 별도 rollback 단위로 V1 adapter를 제거합니다.
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+서버와 웹을 동시에 강제 전환하지 않습니다. `.openai/hosting.json`의 Sites
+`project_id`는 기존 프로젝트를 가리키며 임의로 바꾸지 않습니다.
