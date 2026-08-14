@@ -28,10 +28,10 @@ const permanent=(x,y)=>x%2===0&&y%2===0;
 function hash(x,y){let n=Math.imul(x,374761393)+Math.imul(y,668265263)+0x9e3779b9;n=Math.imul(n^(n>>>13),1274126177);return(n^(n>>>16))>>>0}
 function chunkCrates(chunkX,chunkY){
   const chunkKey=key(chunkX,chunkY);if(chunkCache.has(chunkKey))return chunkCache.get(chunkKey);
-  const candidates=[],corridorX=chunkX%2===0?3:4,corridorY=chunkY%2===0?3:4;
+  const candidates=[];
   for(let localY=0;localY<9;localY++)for(let localX=0;localX<9;localX++){
     const x=chunkX*9+localX,y=chunkY*9+localY;
-    if(!permanent(x,y)&&localX!==corridorX&&localY!==corridorY)candidates.push({x,y,order:hash(x,y)});
+    if(!permanent(x,y))candidates.push({x,y,order:hash(x,y)});
   }
   candidates.sort((a,b)=>a.order-b.order);const crates=new Set();
   const occupied=(x,y)=>crates.has(key(x,y));
