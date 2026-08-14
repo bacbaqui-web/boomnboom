@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 type Tile = "floor" | "wall" | "crate" | "warning";
 type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; power:number; range:number; shield:number; moved:boolean; nickname:string; joined:boolean; alive:boolean };
@@ -32,6 +32,15 @@ export default function Home() {
   const nicknameRef = useRef("");
   const moveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastBgmTickRef = useRef(-1);
+  const worldLayerRef = useRef<HTMLDivElement | null>(null);
+  const cameraRef = useRef({ready:false,visualX:0,visualY:0,targetX:0,targetY:0,originX:0,originY:0,width:17,height:13});
+
+  const paintCamera=useCallback(()=>{
+    const layer=worldLayerRef.current,camera=cameraRef.current;if(!layer||!camera.ready)return;
+    const offsetX=camera.visualX-(camera.originX+Math.floor(camera.width/2));
+    const offsetY=camera.visualY-(camera.originY+Math.floor(camera.height/2));
+    layer.style.transform=`translate(${-offsetX*100/camera.width}%,${-offsetY*100/camera.height}%)`;
+  },[]);
 
   const syncBgm=useCallback((state:State,force=false)=>{
     const track=bgmRef.current;if(!track)return;
@@ -64,6 +73,9 @@ export default function Home() {
         const msg=JSON.parse(event.data);
         if(msg.type==="welcome") { myIdRef.current=msg.id; setMyId(msg.id); if(joinedRef.current)ws.send(JSON.stringify({type:"join",nickname:nicknameRef.current})); }
         if(msg.type==="state") {
+          const camera=cameraRef.current;
+          if(!camera.ready||Math.hypot(msg.worldX-camera.visualX,msg.worldY-camera.visualY)>2){camera.ready=true;camera.visualX=msg.worldX;camera.visualY=msg.worldY}
+          camera.targetX=msg.worldX;camera.targetY=msg.worldY;camera.originX=msg.originX;camera.originY=msg.originY;camera.width=msg.width;camera.height=msg.height;
           setGame(msg);
           if(msg.tick!==lastBgmTickRef.current){lastBgmTickRef.current=msg.tick;syncBgm(msg)}
           const me=msg.players.find((p:Player)=>p.id===myIdRef.current);
@@ -74,6 +86,23 @@ export default function Home() {
     };
     connect(); return()=>{stopped=true;clearTimeout(retry);wsRef.current?.close()};
   },[syncBgm]);
+
+  useEffect(()=>{
+    let animationFrame=0,last=performance.now();
+    const animate=(now:number)=>{
+      const camera=cameraRef.current,elapsed=Math.min(50,now-last);last=now;
+      if(camera.ready){
+        const smoothing=1-Math.exp(-elapsed/48);
+        camera.visualX+=(camera.targetX-camera.visualX)*smoothing;
+        camera.visualY+=(camera.targetY-camera.visualY)*smoothing;
+        if(Math.abs(camera.targetX-camera.visualX)<.0005)camera.visualX=camera.targetX;
+        if(Math.abs(camera.targetY-camera.visualY)<.0005)camera.visualY=camera.targetY;
+        paintCamera();
+      }
+      animationFrame=requestAnimationFrame(animate);
+    };
+    animationFrame=requestAnimationFrame(animate);return()=>cancelAnimationFrame(animationFrame);
+  },[paintCamera]);
 
   const send=useCallback((action:Action)=>{
     setQueued(action);
@@ -100,6 +129,7 @@ export default function Home() {
 
   const me=game?.players.find(p=>p.id===myId);
   const centerBomb=game?.bombs.find(b=>b.x===Math.floor(game.width/2)&&b.y===Math.floor(game.height/2));
+  useLayoutEffect(()=>{if(game){const camera=cameraRef.current;camera.originX=game.originX;camera.originY=game.originY;camera.width=game.width;camera.height=game.height;paintCamera()}},[game?.originX,game?.originY,game?.width,game?.height,paintCamera]);
   return <main>
     <header>
       <div className="brand"><span className="logoBomb">●</span><div><b>BOOM <i>n</i> BOOM</b><small>1초마다 모두가 동시에 움직이는 폭탄 수싸움</small></div></div>
@@ -111,7 +141,7 @@ export default function Home() {
         <div key={`meter-${game?.tick??0}`} className="tickMeter" aria-label="다음 턴까지 1초 게이지"/>
       </div>
       {game ? <div className="board" style={{aspectRatio:`${game.viewWidth}/${game.viewHeight}`}}>
-        <div key={`${game.originX},${game.originY}`} className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,width:`${game.width/game.viewWidth*100}%`,height:`${game.height/game.viewHeight*100}%`,left:`${-(game.width-game.viewWidth)/2/game.viewWidth*100}%`,top:`${-(game.height-game.viewHeight)/2/game.viewHeight*100}%`,right:"auto",bottom:"auto",transform:`translate(${-game.cameraOffsetX*100/game.width}%,${-game.cameraOffsetY*100/game.height}%)`,"--cols":game.width,"--rows":game.height} as React.CSSProperties}>
+        <div ref={worldLayerRef} className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,width:`${game.width/game.viewWidth*100}%`,height:`${game.height/game.viewHeight*100}%`,left:`${-(game.width-game.viewWidth)/2/game.viewWidth*100}%`,top:`${-(game.height-game.viewHeight)/2/game.viewHeight*100}%`,right:"auto",bottom:"auto","--cols":game.width,"--rows":game.height} as React.CSSProperties}>
         {game.tiles.flatMap((row,y)=>row.map((tile,x)=>{
           const people=game.players.filter(p=>p.x===x&&p.y===y);
           const bomb=game.bombs.find(b=>b.x===x&&b.y===y);

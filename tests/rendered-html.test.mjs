@@ -26,7 +26,9 @@ test("client connects to the authoritative WebSocket server", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /wss:\/\/insight\.magamiscom\.ing\/boom-ws/);
   assert.match(page, /type:\s*"action"/);
-  assert.doesNotMatch(page, /requestAnimationFrame/);
+  assert.match(page, /requestAnimationFrame/);
+  assert.match(page, /cancelAnimationFrame/);
+  assert.match(page, /paintCamera/);
   assert.match(page, /다음 턴까지 1초 게이지/);
   assert.match(page, /actionCue cue-/);
   assert.doesNotMatch(page, /className="queue"/);
