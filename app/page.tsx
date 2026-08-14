@@ -5,13 +5,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type Tile = "floor" | "wall" | "crate" | "warning";
 type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; nickname:string; joined:boolean; alive:boolean };
 type Bomb = { id:number; x:number; y:number; fuse:number };
-type State = { tick:number; nextTickAt:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; tiles:Tile[][]; players:Player[]; bombs:Bomb[]; flames:{x:number;y:number}[] };
+type State = { tick:number; nextTickAt:number; serverNow:number; nextTickInMs:number; worldEpochMs:number; bgmDurationMs:number; bgmSnareOffsetMs:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; tiles:Tile[][]; players:Player[]; bombs:Bomb[]; flames:{x:number;y:number}[] };
 type Action = "up" | "down" | "left" | "right" | "bomb" | "wait";
 
 const WS_URL = "wss://insight.magamiscom.ing/boom-ws";
 const BGM_URL = "/midnight-tile-loop.mp3";
-const BGM_DURATION = 209.9955;
-const SNARE_OFFSET = .255;
 const actionLabel:Record<Action,string> = { up:"위로", down:"아래로", left:"왼쪽", right:"오른쪽", bomb:"폭탄 설치", wait:"대기" };
 
 export default function Home() {
@@ -42,12 +40,15 @@ export default function Home() {
   },[]);
   const syncBgm=useCallback((state:State,force=false)=>{
     const track=bgmRef.current;if(!track)return;
-    const untilNext=(state.nextTickAt-Date.now())/1000;
-    const nextSnare=((state.tick+1)%210)+SNARE_OFFSET;
-    const expected=((nextSnare-untilNext)%BGM_DURATION+BGM_DURATION)%BGM_DURATION;
+    const duration=(state.bgmDurationMs||209995.5)/1000;
+    const serverNow=state.serverNow||Date.now();
+    const epoch=state.worldEpochMs||serverNow-state.tick*1000;
+    const snareOffset=(state.bgmSnareOffsetMs??255)/1000;
+    const expected=((((serverNow-epoch)/1000+snareOffset)%duration)+duration)%duration;
     const apply=()=>{
-      const raw=Math.abs(track.currentTime-expected),drift=Math.min(raw,BGM_DURATION-raw);
-      if(force||drift>.065)track.currentTime=expected;
+      const delta=((track.currentTime-expected+duration*1.5)%duration)-duration/2,drift=Math.abs(delta);
+      if(force||drift>.35)track.currentTime=expected;
+      else track.playbackRate=drift>.04?(delta>0?0.985:1.015):1;
       if(soundRef.current&&track.paused)track.play().catch(()=>{});
     };
     if(track.readyState>=1)apply();else track.addEventListener("loadedmetadata",apply,{once:true});
@@ -80,7 +81,7 @@ export default function Home() {
 
   useEffect(()=>{
     if(!game)return;setBeatStep(-1);const timers:ReturnType<typeof setTimeout>[]=[];
-    [750,500,250,15].forEach((before,index)=>{const delay=game.nextTickAt-before-Date.now();timers.push(setTimeout(()=>{setBeatStep(index);if(index<3)beatSound(false);else if(bgmRef.current?.paused)beatSound(true)},Math.max(0,delay)))});
+    [750,500,250,15].forEach((before,index)=>{const delay=(game.nextTickInMs??game.nextTickAt-Date.now())-before;timers.push(setTimeout(()=>{setBeatStep(index);if(index<3)beatSound(false);else if(bgmRef.current?.paused)beatSound(true)},Math.max(0,delay)))});
     return()=>timers.forEach(clearTimeout);
   },[game?.tick,game?.nextTickAt,beatSound]);
 
