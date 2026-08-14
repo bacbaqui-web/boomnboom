@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 import { WebSocket } from "ws";
-import { createV1StateSerializer } from "../src/network/protocol-v1.mjs";
 import { createWebSocketGateway } from "../src/network/websocket-gateway.mjs";
 import { createGameSimulation } from "../src/simulation/game-simulation.mjs";
 import { createWorldOwner } from "../src/world/world-owner.mjs";
@@ -19,18 +18,11 @@ function createHarness({ crates = [] } = {}) {
     },
   });
   const simulation = createGameSimulation({ world, moveIntervalMs: 0 });
-  const v1Serializer = createV1StateSerializer({
-    world,
-    worldEpochMs: 0,
-    bgmDurationMs: 1000,
-    bgmSnareOffsetMs: 0,
-  });
   const server = http.createServer();
   const gateway = createWebSocketGateway({
     server,
     world,
     simulation,
-    v1Serializer,
     getClock: () => ({ tick: simulation.tick, nextTickAt: 1000 }),
     tickMs: 1000,
     worldEpochMs: 0,
@@ -95,6 +87,28 @@ async function openSocket(url, protocols) {
     socket.once("error", reject);
   });
   return { socket, collector };
+}
+
+async function rejectedUpgradeStatus(url, protocols) {
+  const socket = new WebSocket(url, protocols);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out waiting for upgrade rejection")), 1500);
+    socket.once("open", () => {
+      clearTimeout(timer);
+      socket.terminate();
+      reject(new Error("Unsupported upgrade unexpectedly opened"));
+    });
+    socket.once("unexpected-response", (_request, response) => {
+      clearTimeout(timer);
+      const statusCode = response.statusCode;
+      response.resume();
+      resolve(statusCode);
+    });
+    socket.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
 }
 
 async function joinV2(harness, url, nickname = "테스터") {
@@ -265,7 +279,7 @@ test("interest changes preload new chunks before entity publication", async (t) 
   assert.ok(entityDelta > lastPreload);
 });
 
-test("V2 reports malformed/version errors while the default endpoint remains V1", async (t) => {
+test("V2 reports schema errors and rejects unversioned or protocol-1 upgrades", async (t) => {
   const harness = createHarness();
   t.after(() => closeHarness(harness));
   const url = await listen(harness);
@@ -281,13 +295,21 @@ test("V2 reports malformed/version errors while the default endpoint remains V1"
     false,
   );
 
-  const { socket: v1, collector: v1Collector } = await openSocket(url);
-  t.after(() => v1.terminate());
-  await v1Collector.waitFor((message) => message.type === "state");
-  assert.deepEqual(v1Collector.messages.slice(0, 2).map((message) => message.type), ["welcome", "state"]);
-  v1.send(JSON.stringify({ type: "join", nickname: "V1 유지" }));
-  const joined = await v1Collector.waitFor(
-    (message) => message.type === "state" && message.players.some((player) => player.nickname === "V1 유지"),
+  const beforeRejects = harness.gateway.readMetrics();
+  assert.equal(await rejectedUpgradeStatus(url), 426);
+  assert.equal(await rejectedUpgradeStatus(`${url}?protocol=1`), 426);
+  const afterRejects = harness.gateway.readMetrics();
+  assert.equal(afterRejects.connections, beforeRejects.connections);
+  assert.equal(
+    afterRejects.unsupportedProtocolRejects,
+    beforeRejects.unsupportedProtocolRejects + 2,
   );
-  assert.equal(joined.tiles.length, 19);
+
+  const { socket: subprotocol, collector: subprotocolCollector } = await openSocket(
+    url,
+    "boom-v2",
+  );
+  t.after(() => subprotocol.terminate());
+  const hello = await subprotocolCollector.waitFor((message) => message.type === "hello");
+  assert.deepEqual(hello.supportedProtocols, [2]);
 });

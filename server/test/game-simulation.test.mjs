@@ -51,7 +51,7 @@ function addPlayer(world, {
   });
 }
 
-test("movement uses the V1 140ms cadence and one canonical tile per accepted input", () => {
+test("movement uses the authoritative 140ms cadence and one canonical tile per accepted input", () => {
   const world = createTestWorld({ walls: [[3, 1]] });
   addPlayer(world, { id: "P1", x: 0, y: 1 });
   const simulation = createGameSimulation({ world, moveIntervalMs: 140 });

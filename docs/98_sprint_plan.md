@@ -9,7 +9,7 @@
 - 4단계 PASS — Protocol V2와 관심 영역 delta publication
 - 5단계 PASS — Client World Store와 layer/camera 전환
 - 6A PASS — caller 0 레거시 D1/starter 정리와 배포 readiness
-- 6B 진행 중 — Oracle dual V1/V2 배포와 로컬 실제 QA PASS, Sites/V1 cleanup 대기
+- 6B 진행 중 — production soak와 V1 source 제거 PASS, V2-only Oracle 배포 대기
 
 ## 기준
 
@@ -477,6 +477,22 @@ socket/timer에서 게임 규칙 mutation을 분리하고 현재 gameplay와 수
 
 6A는 로컬 cleanup/readiness까지만 완료했다. Oracle 또는 Sites 배포, 공개 브라우저
 QA와 V1 제거는 6B에 남긴다.
+
+### 6B production soak와 V1 제거 결과
+
+- Sites v40과 dual-protocol Oracle server에서 10분 production soak PASS
+- RSS `85.6 → 87.3MB`, materialized chunk `59 → 62`, 종료 event-loop lag 4ms
+- 전 구간 `protocolV1=0`, backpressure disconnect 0을 확인
+- `protocol-v1.mjs`와 serializer test, Gateway의 V1 message/publication/session 분기 제거
+- 명시적 `?protocol=2` 또는 `boom-v2`만 수용하고 unversioned/Protocol 1은 player를
+  만들기 전에 426으로 거절
+- `hello.supportedProtocols=[2]`, health supported `[2]`와 unsupported reject metric 구현
+- health의 `protocolV1:0`, `protocols.v1:0`은 모니터링 전환용 tombstone으로 유지
+- 로컬 server regression 26건 기준으로 V2 init/delta/sequence와 무누수 거절 검증
+
+V2-only source는 아직 Oracle/Git/Sites에 배포하지 않았다. 직전 dual-protocol
+Oracle artifact를 rollback 단위로 유지한 채 server-only 배포와 공개 V2 smoke가
+남아 있다.
 
 ## Sprint 전체 완료 기준
 

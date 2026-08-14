@@ -1,6 +1,5 @@
 import http from "node:http";
 import { createBotController } from "./src/ai/bot-controller.mjs";
-import { createV1StateSerializer } from "./src/network/protocol-v1.mjs";
 import { createWebSocketGateway } from "./src/network/websocket-gateway.mjs";
 import { createGameSimulation } from "./src/simulation/game-simulation.mjs";
 import { createWorldOwner } from "./src/world/world-owner.mjs";
@@ -37,17 +36,6 @@ const simulation = createGameSimulation({
   bombFuseTicks: 3,
 });
 const botController = createBotController({ world });
-const v1 = createV1StateSerializer({
-  world,
-  width: 23,
-  height: 19,
-  viewWidth: 15,
-  viewHeight: 11,
-  recenterThreshold: 3,
-  worldEpochMs: WORLD_EPOCH_MS,
-  bgmDurationMs: BGM_DURATION_MS,
-  bgmSnareOffsetMs: BGM_SNARE_OFFSET_MS,
-});
 
 for (let index = 0; index < BOT_COUNT; index += 1) simulation.addPlayer({ isAI: true });
 
@@ -55,7 +43,7 @@ let gateway;
 const server = http.createServer((request, response) => {
   if (request.url === "/health") {
     const metrics = world.readMetrics();
-    const network = gateway?.readMetrics() ?? { connections: 0, v1: 0, v2: 0 };
+    const network = gateway?.readMetrics() ?? { connections: 0, v2: 0 };
     const memory = process.memoryUsage();
     const healthyTick = Date.now() - lastCompletedTickAt <= TICK_MS * 3;
     response.writeHead(200, { "content-type": "application/json" });
@@ -69,10 +57,10 @@ const server = http.createServer((request, response) => {
         bombs: metrics.bombs,
         items: metrics.items,
         connections: network.connections,
-        protocolV1: network.v1,
+        protocolV1: 0,
         protocolV2: network.v2,
         uptime: Math.round(process.uptime()),
-        protocols: { supported: [1, 2], v1: network.v1, v2: network.v2 },
+        protocols: { supported: [2], v1: 0, v2: network.v2 },
         world: {
           chunks: metrics.chunks,
           activeChunks: metrics.activeChunks,
@@ -97,6 +85,7 @@ const server = http.createServer((request, response) => {
           outboundMessages: network.outboundMessages ?? 0,
           outboundBytes: network.outboundBytes ?? 0,
           backpressureDisconnects: network.backpressureDisconnects ?? 0,
+          unsupportedProtocolRejects: network.unsupportedProtocolRejects ?? 0,
         },
         memory: {
           rssBytes: memory.rss,
@@ -120,7 +109,6 @@ gateway = createWebSocketGateway({
   server,
   world,
   simulation,
-  v1Serializer: v1,
   getClock: () => ({
     tick: simulation.tick,
     nextTickAt,

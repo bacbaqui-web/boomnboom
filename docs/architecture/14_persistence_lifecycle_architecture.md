@@ -101,13 +101,11 @@ Oracle disk/database persistence는 이번 Sprint의 필수 조건이 아니다.
 
 ## 9. 배포와 protocol compatibility
 
-- server 내부 refactor는 기존 V1 client가 동작하는 상태로 먼저 배포할 수 있어야
-  한다.
-- V2 server가 준비된 뒤 V2 client를 배포한다.
-- V1 client 사용이 없음을 확인한 뒤 V1 serializer를 제거한다.
+- V2 server/client 전환과 10분 V1 traffic 0 관찰을 마쳐 source는 V2-only다.
+- 명시적 V2가 아닌 upgrade는 player/session 생성 전에 거절한다.
 - server unit/service 파일은 새 entry path와 환경 변수를 정확히 반영한다.
 - 배포 전 기존 service file과 nginx config를 백업/rollback 단위로 둔다.
-- 공개 client rollback 시 V2 server가 호환되는지 확인한다.
+- V2-only server 배포 실패 시 직전 dual-protocol server artifact로 rollback한다.
 
 ## 10. Health와 readiness
 
@@ -139,6 +137,6 @@ Architecture로 합의한 뒤 새 Sprint에서 구현한다.
 - base-only chunk eviction 뒤 동일 terrain 복원
 - pinned mutation 미손실
 - restart 뒤 명시된 유지/초기화 정책
-- V1/V2 server-first 및 client rollback compatibility
+- V2 query/subprotocol upgrade와 unsupported protocol 무누수 거절
 - service/nginx syntax와 실제 WebSocket upgrade
 - health metrics 상한 관찰

@@ -154,7 +154,6 @@ export function createWebSocketGateway({
   server,
   world,
   simulation,
-  v1Serializer,
   getClock,
   tickMs,
   worldEpochMs,
@@ -167,7 +166,6 @@ export function createWebSocketGateway({
   const wss = new WebSocketServer({ noServer: true });
   const sessions = new Map();
   const chunkSize = world.metadata.chunkSize;
-  let frame = 0;
   let entityRevision = 1;
   let publishedEntities = readEntityMap(world, chunkSize);
   let closed = false;
@@ -175,6 +173,7 @@ export function createWebSocketGateway({
     outboundMessages: 0,
     outboundBytes: 0,
     backpressureDisconnects: 0,
+    unsupportedProtocolRejects: 0,
   };
 
   function clock() {
@@ -291,14 +290,14 @@ export function createWebSocketGateway({
   function publishChunkDeltas() {
     const subscribedKeys = new Set();
     for (const session of sessions.values()) {
-      if (session.mode !== 2 || !session.ready) continue;
+      if (!session.ready) continue;
       for (const key of session.interest) subscribedKeys.add(key);
     }
     for (const key of subscribedKeys) {
       const current = readChunk(key);
       const messagesByRevision = new Map();
       for (const session of sessions.values()) {
-        if (session.mode !== 2 || !session.ready || !session.interest.has(key)) continue;
+        if (!session.ready || !session.interest.has(key)) continue;
         const previous = session.knownChunkSnapshots.get(key);
         if (!previous || session.knownChunkRevisions.get(key) !== previous.revision) {
           sendChunkSnapshot(session, key, "server_resync");
@@ -329,7 +328,7 @@ export function createWebSocketGateway({
 
   function publishEntityDeltas() {
     for (const session of sessions.values()) {
-      if (session.mode !== 2 || !session.ready) continue;
+      if (!session.ready) continue;
       const entities = readEntityMap(world, chunkSize, session.interest, session.playerId);
       const diff = diffEntityMaps(session.previousEntities, entities);
       if (hasEntityChanges(diff)) {
@@ -345,31 +344,16 @@ export function createWebSocketGateway({
 
   function publish({ refreshEntities = true, heartbeat = false } = {}) {
     if (closed) return;
-    frame += 1;
     if (refreshEntities) refreshEntityRevision();
 
     for (const session of sessions.values()) {
-      if (session.mode === 1 && session.socket.readyState === WebSocket.OPEN) {
-        const current = getClock();
-        sendWithBackpressure(
-          session.socket,
-          v1Serializer.stateFor(session.playerId, {
-            tick: current.tick,
-            frame,
-            nextTickAt: current.nextTickAt,
-          }),
-          { maxBufferedAmount, metrics: networkMetrics },
-        );
-      }
-    }
-    for (const session of sessions.values()) {
-      if (session.mode === 2 && session.ready) syncInterest(session);
+      if (session.ready) syncInterest(session);
     }
     publishChunkDeltas();
     publishEntityDeltas();
     if (heartbeat) {
       for (const session of sessions.values()) {
-        if (session.mode === 2 && session.ready) {
+        if (session.ready) {
           sendV2(session, "world_heartbeat", { nextTickAt: clock().nextTickAt, entityRevision });
         }
       }
@@ -467,45 +451,31 @@ export function createWebSocketGateway({
     }
   }
 
-  function handleV1Message(session, raw) {
-    try {
-      const message = JSON.parse(raw.toString());
-      let result = { publish: false };
-      if (message.type === "join") {
-        result = simulation.joinPlayer(session.playerId, message.nickname);
-      } else if (message.type === "respawn") {
-        result = simulation.respawnPlayer(session.playerId);
-      } else if (message.type === "action") {
-        result = simulation.applyAction(session.playerId, message.action);
-      }
-      if (result.publish) publish();
-    } catch {
-      // V1 malformed input remains non-fatal for compatibility.
-    }
-  }
-
   server.on("upgrade", (request, socket, head) => {
     const url = new URL(request.url ?? "/", "http://localhost");
     if (url.pathname !== "/boom-ws" && url.pathname !== "/") return socket.destroy();
     const requestedProtocols = String(request.headers["sec-websocket-protocol"] ?? "")
       .split(",")
       .map((value) => value.trim());
-    request.boomProtocol =
-      url.searchParams.get("protocol") === "2" || requestedProtocols.includes("boom-v2")
-        ? 2
-        : 1;
+    const queryProtocol = url.searchParams.get("protocol");
+    const requestsV2 =
+      queryProtocol === "2" ||
+      (queryProtocol === null && requestedProtocols.includes("boom-v2"));
+    if (!requestsV2) {
+      networkMetrics.unsupportedProtocolRejects += 1;
+      socket.end("HTTP/1.1 426 Upgrade Required\r\nConnection: close\r\n\r\n");
+      return;
+    }
     wss.handleUpgrade(request, socket, head, (webSocket) =>
       wss.emit("connection", webSocket, request),
     );
   });
 
-  wss.on("connection", (socket, request) => {
+  wss.on("connection", (socket) => {
     const player = simulation.addPlayer();
-    const mode = request.boomProtocol === 2 ? 2 : 1;
     const session = {
       socket,
       playerId: player.id,
-      mode,
       initialized: false,
       ready: false,
       interest: new Set(),
@@ -516,36 +486,15 @@ export function createWebSocketGateway({
       acks: new Map(),
     };
     sessions.set(player.id, session);
-    if (mode === 2) {
-      sendV2(session, "hello", {
-        sessionId: player.id,
-        supportedProtocols: [1, 2],
-        tickMs,
-      });
-    } else {
-      sendWithBackpressure(
-        socket,
-        { type: "welcome", id: player.id, tickMs },
-        { maxBufferedAmount, metrics: networkMetrics },
-      );
-      const current = getClock();
-      sendWithBackpressure(
-        socket,
-        v1Serializer.stateFor(player.id, {
-          tick: current.tick,
-          frame,
-          nextTickAt: current.nextTickAt,
-        }),
-        { maxBufferedAmount, metrics: networkMetrics },
-      );
-    }
+    sendV2(session, "hello", {
+      sessionId: player.id,
+      supportedProtocols: [2],
+      tickMs,
+    });
 
-    socket.on("message", (raw) =>
-      mode === 2 ? handleV2Message(session, raw) : handleV1Message(session, raw),
-    );
+    socket.on("message", (raw) => handleV2Message(session, raw));
     socket.on("close", () => {
       sessions.delete(player.id);
-      v1Serializer.forgetViewer(player.id);
       simulation.removePlayer(player.id);
       if (!closed) publish();
     });
@@ -561,11 +510,10 @@ export function createWebSocketGateway({
     readMetrics() {
       return {
         connections: sessions.size,
-        v1: [...sessions.values()].filter((session) => session.mode === 1).length,
-        v2: [...sessions.values()].filter((session) => session.mode === 2).length,
+        v2: sessions.size,
         entityRevision,
         chunkSubscriptions: [...sessions.values()]
-          .filter((session) => session.mode === 2 && session.ready)
+          .filter((session) => session.ready)
           .reduce((total, session) => total + session.interest.size, 0),
         ...networkMetrics,
       };

@@ -194,24 +194,18 @@ client 좌표는 요청 결과가 아니며 서버가 현재 canonical 위치에
   compact encoding을 추가한다.
 - gzip/binary protocol은 첫 구현의 필수 조건이 아니다.
 
-## 11. V1 호환과 전환
+## 11. V2-only 연결 계약
 
-현재 V1은 `welcome` 뒤 viewer별 `state` 전체를 전송한다. V2 전환 순서는 다음과
-같다.
+6B 전환에서 공개 V2 client 배포 뒤 production traffic을 10분 관찰해 V1 연결 0을
+확인하고 viewer별 `welcome/state` serializer를 제거했다.
 
-Server-first 기간에는 `/boom-ws?protocol=2` 또는 `boom-v2` WebSocket subprotocol로
-V2를 선택하고, version 선택이 없는 기존 공개 client는 V1로 유지한다.
-
-1. server 내부 World Owner를 만들고 V1 serializer가 새 read model을 사용
-2. V2 message와 protocol test 추가
-3. client에 V2 World Store와 render path 추가
-4. local/staging에서 V2 검증
-5. server가 V1/V2를 잠시 동시에 수용하거나 server-first 호환 배포
-6. 공개 client를 V2로 전환
-7. 연결 로그에서 V1 사용이 없음을 확인한 뒤 V1 serializer 삭제
-
-Oracle server와 공개 client가 다른 시점에 배포되어도 최소 하나의 호환 경로가
-있어야 한다.
+- `/boom-ws?protocol=2` 또는 `boom-v2` WebSocket subprotocol을 명시해야 한다.
+- unversioned, `?protocol=1`과 알 수 없는 version upgrade는 player/session을 만들기
+  전에 426으로 거절한다.
+- `hello.supportedProtocols`는 `[2]`다.
+- health의 `protocolV1: 0`, `protocols.v1: 0`은 모니터링 전환용 1회 호환
+  tombstone이며 실제 V1 실행 경로가 아니다.
+- 거절된 구형 연결 수는 `network.unsupportedProtocolRejects`로 관찰한다.
 
 ## 12. 금지 사항
 
@@ -233,5 +227,5 @@ Oracle server와 공개 client가 다른 시점에 배포되어도 최소 하나
 - stale entity delta 폐기
 - 관심 영역 진입 전 preload 완료
 - 느린 client backpressure 처리
-- V1/V2 compatibility 전환
+- 명시적 V2 query/subprotocol 수용과 구형 upgrade 무누수 거절
 - two-client가 같은 chunk revision과 폭발 결과 수신

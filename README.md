@@ -49,7 +49,7 @@ Sites V2 Client
 - `app/game/`: V2 protocol, cache, input/camera/audio Runtime과 render layer
 - `server/src/world/`: 결정적 16×16 청크와 canonical entity owner
 - `server/src/simulation/`: 이동, 폭탄, 폭발, 피해, item과 respawn 규칙
-- `server/src/network/`: V2 snapshot/delta gateway와 첫 배포 rollback용 V1 adapter
+- `server/src/network/`: 명시적 Protocol V2 snapshot/delta gateway
 - `docs/`: 제품 불변식, Architecture, source map과 현재 Sprint
 
 현재 실시간 월드는 Oracle 프로세스 메모리가 authority입니다. 서버 재시작 뒤 base
@@ -58,10 +58,10 @@ terrain은 같은 seed/version으로 복원되지만 player, bomb, item과 진�
 
 ## 배포 순서
 
-1. V1/V2를 함께 받는 Oracle 서버를 먼저 배포하고 health/WebSocket을 확인합니다.
+1. Oracle V2 서버를 배포하고 health와 명시적 Protocol V2 WebSocket을 확인합니다.
 2. Sites V2 웹 클라이언트를 배포합니다.
 3. 실제 두 브라우저에서 같은 월드, 이동, 폭탄과 청크 delta를 확인합니다.
-4. V1 traffic이 0임을 관찰한 뒤 별도 rollback 단위로 V1 adapter를 제거합니다.
+4. unversioned 또는 Protocol 1 연결이 426으로 거절되는지 확인합니다.
 
 서버와 웹을 동시에 강제 전환하지 않습니다. `.openai/hosting.json`의 Sites
 `project_id`는 기존 프로젝트를 가리키며 임의로 바꾸지 않습니다.
