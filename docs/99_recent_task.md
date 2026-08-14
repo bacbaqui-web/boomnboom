@@ -1,10 +1,10 @@
-# Protocol V1 제거 완료 보고
+# 6단계 Shared World Refactor 완료 보고
 
 ## 최근 Task
 
-공개 Sites v40과 dual-protocol Oracle server의 10분 production soak에서 V1 traffic
-0을 확인한 뒤, 로컬 source에서 Protocol V1 serializer와 Gateway 분기를 제거했다.
-Oracle, Sites와 Git에는 이번 V2-only 변경을 배포하지 않았다.
+공개 Sites와 Oracle의 10분 production soak에서 V1 traffic 0을 확인한 뒤 Protocol V1
+serializer와 Gateway 분기를 제거했다. V2-only source를 GitHub와 Oracle에 배포했고,
+공개 web client는 이동 보정을 포함한 Sites v41로 운영 중이다.
 
 ## Production 근거
 
@@ -29,16 +29,21 @@ Oracle, Sites와 Git에는 이번 V2-only 변경을 배포하지 않았다.
 - server V2/world/simulation regression 26건
 - V2 query/subprotocol 수용, protocol schema error와 구형 upgrade 무누수 거절
 - server syntax, dead V1 symbol audit와 `git diff --check`
+- Oracle 별도 staging directory에서 `npm ci --omit=dev`, server 26/26와 temp 3399 health
+- 공개 nginx 경로 V2 hello/init/25청크/input ack, unversioned HTTP 426
+- 공개 브라우저 재연결 뒤 25청크, nickname 유지와 입력 즉시 camera transform
 
-## 다음 Task
+## 배포와 Rollback
 
-1. 직전 dual-protocol Oracle artifact를 rollback 대상으로 확인
-2. V2-only Oracle server만 배포
-3. `/health` supported `[2]`, V2 join/input과 unsupported reject metric 확인
-4. 안정화 뒤 health V1 tombstone 제거 여부 결정
+- 공개 게임: `https://bubble-boom-arcade.bacbaqui2.chatgpt.site`
+- Sites version: 41
+- Oracle active: `/home/ubuntu/boomnboom-server`
+- Oracle dual rollback: `/home/ubuntu/boomnboom-server.backup-20260815-dual-v1-v2`
+- Oracle pre-V2 rollback: `/home/ubuntu/boomnboom-server.backup-20260815-pre-v2`
 
-## 남은 위험
+## 후속 운영
 
-- 현재 production Oracle은 아직 dual-protocol build다.
-- V2-only 배포 뒤 공개 Sites v40의 join/input/respawn을 다시 확인해야 한다.
-- 426 reject가 nginx를 통과하는지 공개 unversioned WebSocket smoke가 필요하다.
+- health의 `protocolV1:0`, `protocols.v1:0` tombstone은 모니터링 전환용으로 한 배포
+  유지한다. 다음 안정화 점검에서 소비자 caller를 확인한 뒤 제거할 수 있다.
+- 전투 runtime은 의도한 계약대로 Oracle process restart 때 초기화되고 base terrain만
+  같은 seed/version으로 복원된다.

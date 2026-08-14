@@ -260,7 +260,7 @@ serializer를 제거했다.
 - `server/test/websocket-gateway.test.mjs`: 25청크 init 순서, 이동 tiles 0,
   sequence idempotency, shared delta/resync, interest, V2 query/subprotocol과 구형
   upgrade 무누수 거절
-- browser 2-client shared-world 자동 검증 없음
+- browser 2-client shared-world, 모바일 viewport, prediction/terrain revision과 공개 재연결 QA PASS
 
 ## 9. Architecture와 현재 차이
 

@@ -2,14 +2,14 @@
 
 ## 상태
 
-- Sprint 진행 중
+- Sprint 완료
 - 1단계 PASS — 현재 흐름 audit, Constitution과 Architecture 계약 작성
 - 2단계 PASS — World Owner와 materialized chunk core, V1 호환 전환
 - 3단계 PASS — Simulation/AI 분리와 gameplay regression 17건
 - 4단계 PASS — Protocol V2와 관심 영역 delta publication
 - 5단계 PASS — Client World Store와 layer/camera 전환
 - 6A PASS — caller 0 레거시 D1/starter 정리와 배포 readiness
-- 6B 진행 중 — production soak와 V1 source 제거 PASS, V2-only Oracle 배포 대기
+- 6B PASS — production soak, V1 제거, Sites v41와 V2-only Oracle 공개 검증
 
 ## 기준
 
@@ -490,9 +490,10 @@ QA와 V1 제거는 6B에 남긴다.
 - health의 `protocolV1:0`, `protocols.v1:0`은 모니터링 전환용 tombstone으로 유지
 - 로컬 server regression 26건 기준으로 V2 init/delta/sequence와 무누수 거절 검증
 
-V2-only source는 아직 Oracle/Git/Sites에 배포하지 않았다. 직전 dual-protocol
-Oracle artifact를 rollback 단위로 유지한 채 server-only 배포와 공개 V2 smoke가
-남아 있다.
+V2-only source는 GitHub와 Oracle에 배포했다. Oracle의 직전 dual-protocol server는
+`/home/ubuntu/boomnboom-server.backup-20260815-dual-v1-v2`로 보존했다. 공개 nginx
+경로에서 V2 25청크/init/input ack, unversioned 426, reject metric과 브라우저
+재연결·즉시 이동을 다시 확인했다. 공개 web client는 Sites v41이다.
 
 ## Sprint 전체 완료 기준
 
