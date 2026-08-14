@@ -33,12 +33,12 @@ function freeSpawn(isAI=false){
 }
 function addPlayer({socket=null,isAI=false}={}){
   const id=isAI?"BOT-1":`P${nextPlayerNumber++}`,[x,y]=freeSpawn(isAI);
-  clearSpawn(x,y);const player={id,x,y,prevX:x,prevY:y,isAI,action:"wait",socket,score:0};players.set(id,player);return player;
+  clearSpawn(x,y);const player={id,x,y,prevX:x,prevY:y,isAI,action:"wait",socket,score:0,nickname:isAI?"BOOM AI":"",joined:isAI,alive:isAI};players.set(id,player);return player;
 }
 addPlayer({isAI:true});
 
 function chooseBotAction(bot){
-  const humans=[...players.values()].filter(p=>!p.isAI);if(!humans.length)return"wait";
+  const humans=[...players.values()].filter(p=>!p.isAI&&p.alive);if(!humans.length)return"wait";
   const target=humans.reduce((a,b)=>Math.abs(a.x-bot.x)+Math.abs(a.y-bot.y)<Math.abs(b.x-bot.x)+Math.abs(b.y-bot.y)?a:b);
   const distance=Math.abs(target.x-bot.x)+Math.abs(target.y-bot.y);
   if(distance<=2&&![...bombs.values()].some(b=>b.owner===bot.id))return"bomb";
@@ -57,25 +57,30 @@ function explodeBombs(){
   for(const bomb of exploding){bombs.delete(bomb.id);cells.push(...blastCells(bomb))}
   const unique=new Map(cells.map(c=>[key(c.x,c.y),c]));flames=[...unique.values()];
   for(const cell of flames)if(hasCrate(cell.x,cell.y))destroyed.set(key(cell.x,cell.y),tick+CRATE_RESPAWN_TICKS);
-  for(const player of players.values())if(unique.has(key(player.x,player.y))){const[x,y]=freeSpawn(player.isAI);clearSpawn(x,y);player.x=x;player.y=y;player.prevX=x;player.prevY=y;player.action="wait"}
+  for(const player of players.values())if(player.alive&&unique.has(key(player.x,player.y))){
+    player.action="wait";
+    if(!player.isAI){player.alive=false;continue}
+    const[x,y]=freeSpawn(true);clearSpawn(x,y);player.x=x;player.y=y;player.prevX=x;player.prevY=y;
+  }
 }
 function resolveActions(){
-  for(const player of players.values()){player.prevX=player.x;player.prevY=player.y;if(player.isAI)player.action=chooseBotAction(player)}
-  for(const player of players.values())if(player.action==="bomb"){
+  const active=[...players.values()].filter(p=>p.alive);
+  for(const player of active){player.prevX=player.x;player.prevY=player.y;if(player.isAI)player.action=chooseBotAction(player)}
+  for(const player of active)if(player.action==="bomb"){
     const occupied=[...bombs.values()].some(b=>b.x===player.x&&b.y===player.y),owns=[...bombs.values()].some(b=>b.owner===player.id);
     if(!occupied&&!owns)bombs.set(nextBombNumber,{id:nextBombNumber++,x:player.x,y:player.y,owner:player.id,fuse:BOMB_FUSE_TICKS});player.action="wait";
   }
   const intents=new Map();
-  for(const player of players.values()){const[dx,dy]=DIRS[player.action]||DIRS.wait,x=player.x+dx,y=player.y+dy;intents.set(player.id,blocked(x,y)?{x:player.x,y:player.y}:{x,y})}
+  for(const player of active){const[dx,dy]=DIRS[player.action]||DIRS.wait,x=player.x+dx,y=player.y+dy;intents.set(player.id,blocked(x,y)?{x:player.x,y:player.y}:{x,y})}
   const counts=new Map();for(const pos of intents.values())counts.set(key(pos.x,pos.y),(counts.get(key(pos.x,pos.y))||0)+1);
-  for(const player of players.values()){const pos=intents.get(player.id);if(counts.get(key(pos.x,pos.y))===1){player.x=pos.x;player.y=pos.y}}
+  for(const player of active){const pos=intents.get(player.id);if(counts.get(key(pos.x,pos.y))===1){player.x=pos.x;player.y=pos.y}}
 }
 function stateFor(viewer){
   const originX=viewer.x-Math.floor(WIDTH/2),originY=viewer.y-Math.floor(HEIGHT/2);
   const visible=(x,y)=>x>=originX&&x<originX+WIDTH&&y>=originY&&y<originY+HEIGHT;
   return{type:"state",tick,nextTickAt,width:WIDTH,height:HEIGHT,originX,originY,worldX:viewer.x,worldY:viewer.y,cameraDx:viewer.x-viewer.prevX,cameraDy:viewer.y-viewer.prevY,
     tiles:Array.from({length:HEIGHT},(_,sy)=>Array.from({length:WIDTH},(_,sx)=>{const x=originX+sx,y=originY+sy;return permanent(x,y)?"wall":hasCrate(x,y)?"crate":"floor"})),
-    players:[...players.values()].filter(p=>visible(p.x,p.y)).map(({id,x,y,isAI,action,score})=>({id,x:x-originX,y:y-originY,isAI,action,score})),
+    players:[...players.values()].filter(p=>p===viewer||(p.alive&&visible(p.x,p.y))).map(({id,x,y,isAI,action,score,nickname,joined,alive})=>({id,x:x-originX,y:y-originY,isAI,action,score,nickname,joined,alive})),
     bombs:[...bombs.values()].filter(b=>visible(b.x,b.y)).map(b=>({...b,x:b.x-originX,y:b.y-originY})),flames:flames.filter(f=>visible(f.x,f.y)).map(f=>({x:f.x-originX,y:f.y-originY}))};
 }
 function broadcast(){for(const player of players.values())if(player.socket?.readyState===WebSocket.OPEN)player.socket.send(JSON.stringify(stateFor(player)))}
@@ -84,6 +89,6 @@ function runTick(){tick++;for(const[k,respawnTick]of destroyed)if(respawnTick<=t
 const server=http.createServer((req,res)=>{if(req.url==="/health"){res.writeHead(200,{"content-type":"application/json"});return res.end(JSON.stringify({ok:true,tick,players:players.size,destroyed:destroyed.size,uptime:Math.round(process.uptime())}))}res.writeHead(404).end()});
 const wss=new WebSocketServer({noServer:true});
 server.on("upgrade",(req,socket,head)=>{if(req.url!=="/boom-ws"&&req.url!=="/")return socket.destroy();wss.handleUpgrade(req,socket,head,ws=>wss.emit("connection",ws))});
-wss.on("connection",ws=>{const player=addPlayer({socket:ws});ws.send(JSON.stringify({type:"welcome",id:player.id,tickMs:TICK_MS}));ws.send(JSON.stringify(stateFor(player)));ws.on("message",raw=>{try{const msg=JSON.parse(raw.toString());if(msg.type==="action"&&ACTIONS.has(msg.action))player.action=msg.action}catch{/* ignore malformed input */}});ws.on("close",()=>players.delete(player.id))});
+wss.on("connection",ws=>{const player=addPlayer({socket:ws});ws.send(JSON.stringify({type:"welcome",id:player.id,tickMs:TICK_MS}));ws.send(JSON.stringify(stateFor(player)));ws.on("message",raw=>{try{const msg=JSON.parse(raw.toString());if(msg.type==="join"&&!player.joined){player.nickname=String(msg.nickname||"").trim().slice(0,12)||`플레이어${player.id.slice(1)}`;player.joined=true;player.alive=true;player.action="wait";broadcast()}else if(msg.type==="respawn"&&player.joined&&!player.alive){const[x,y]=freeSpawn();clearSpawn(x,y);player.x=x;player.y=y;player.prevX=x;player.prevY=y;player.alive=true;player.action="wait";broadcast()}else if(msg.type==="action"&&player.alive&&ACTIONS.has(msg.action))player.action=msg.action}catch{/* ignore malformed input */}});ws.on("close",()=>players.delete(player.id))});
 const timer=setInterval(runTick,TICK_MS);timer.unref();server.listen(PORT,"127.0.0.1",()=>console.log(`BOOMnBOOM infinite tick server listening on 127.0.0.1:${PORT}`));
 for(const signal of["SIGINT","SIGTERM"])process.on(signal,()=>{for(const client of wss.clients)client.terminate();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),1000).unref()});

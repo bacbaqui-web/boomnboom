@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Tile = "floor" | "wall" | "crate";
-type Player = { id:string; x:number; y:number; isAI:boolean; action:Action };
+type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; nickname:string; joined:boolean; alive:boolean };
 type Bomb = { id:number; x:number; y:number; fuse:number };
 type State = { tick:number; nextTickAt:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; tiles:Tile[][]; players:Player[]; bombs:Bomb[]; flames:{x:number;y:number}[] };
 type Action = "up" | "down" | "left" | "right" | "bomb" | "wait";
@@ -18,11 +18,15 @@ export default function Home() {
   const [queued, setQueued] = useState<Action>("wait");
   const [sound, setSound] = useState(true);
   const [progress, setProgress] = useState(0);
+  const [nickname, setNickname] = useState("");
+  const [joined, setJoined] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const myIdRef = useRef("");
   const audioRef = useRef<AudioContext | null>(null);
   const soundRef = useRef(true);
   const lastTick = useRef(0);
+  const joinedRef = useRef(false);
+  const nicknameRef = useRef("");
 
   const tickSound = useCallback((tick:number) => {
     if (!soundRef.current || !audioRef.current) return;
@@ -40,7 +44,7 @@ export default function Home() {
       ws.onopen=()=>setStatus("online");
       ws.onmessage=(event)=>{
         const msg=JSON.parse(event.data);
-        if(msg.type==="welcome") { myIdRef.current=msg.id; setMyId(msg.id); }
+        if(msg.type==="welcome") { myIdRef.current=msg.id; setMyId(msg.id); if(joinedRef.current)ws.send(JSON.stringify({type:"join",nickname:nicknameRef.current})); }
         if(msg.type==="state") {
           setGame(msg);
           const me=msg.players.find((p:Player)=>p.id===myIdRef.current);
@@ -65,6 +69,13 @@ export default function Home() {
     audioRef.current.resume(); setQueued(action);
     if(wsRef.current?.readyState===WebSocket.OPEN) wsRef.current.send(JSON.stringify({type:"action",action}));
   },[]);
+
+  const enterWorld=(e:React.FormEvent)=>{
+    e.preventDefault();const clean=nickname.trim().slice(0,12);if(!clean)return;
+    nicknameRef.current=clean;joinedRef.current=true;setJoined(true);
+    wsRef.current?.send(JSON.stringify({type:"join",nickname:clean}));
+  };
+  const respawn=()=>wsRef.current?.send(JSON.stringify({type:"respawn"}));
 
   useEffect(()=>{
     const onKey=(e:KeyboardEvent)=>{
@@ -95,16 +106,18 @@ export default function Home() {
           return <div className={`tile ${tile}`} key={`${x},${y}`}>
             {tile==="crate"&&<span className="box"/>}
             {bomb&&<span className="bomb">●<i>{bomb.fuse}</i></span>}
-            {people.filter(p=>p.id!==myId).map(p=><span key={p.id} className={`fighter ${p.isAI?"ai":"rival"}`} title={p.id}>{p.isAI?"AI":"◉"}</span>)}
+            {people.filter(p=>p.id!==myId).map(p=><span key={p.id} className={`fighter ${p.isAI?"ai":"rival"}`} title={p.nickname}><em>{p.nickname}</em>{p.isAI?"AI":"◉"}</span>)}
             {flame&&<span className="flame">✦</span>}
           </div>
         }))}</div>
-        <span className="fighter me centerPlayer">◉</span>
+        {me?.alive&&<span className="fighter me centerPlayer"><em>{me.nickname}</em>◉</span>}
         <span className="coordinates">{game.worldX}, {game.worldY}</span>
+        {!joined&&<div className="gameOverlay"><form onSubmit={enterWorld}><small>ENTER THE WORLD</small><h2>닉네임을 정해주세요</h2><p>캐릭터 머리 위에 표시됩니다.</p><input autoFocus maxLength={12} value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="닉네임 (최대 12자)" aria-label="닉네임"/><button disabled={!nickname.trim()}>게임 시작</button></form></div>}
+        {joined&&me&&!me.alive&&<div className="gameOverlay death"><div><small>BOOM!</small><h2>폭탄에 맞았어요</h2><p>새로운 위치에서 다시 시작할 수 있어요.</p><button onClick={respawn}>다시 접속하기</button></div></div>}
       </div> : <div className="loading"><span>●</span><b>Oracle 게임 서버에 접속하는 중…</b></div>}
       <div className="controls">
         <div className="dpad"><button onClick={()=>send("up")}>▲</button><button onClick={()=>send("left")}>◀</button><button onClick={()=>send("down")}>▼</button><button onClick={()=>send("right")}>▶</button></div>
-        <div className="rules"><b>{me?`${me.id}로 참가 중`:"참가 준비 중"}</b><span>누른 행동이 다음 똑딱에 실행됩니다.</span><span>방향은 계속 유지되고 폭탄은 한 번만 설치됩니다.</span></div>
+        <div className="rules"><b>{me?.nickname?`${me.nickname}으로 참가 중`:"참가 준비 중"}</b><span>누른 행동이 다음 똑딱에 실행됩니다.</span><span>방향은 계속 유지되고 폭탄은 한 번만 설치됩니다.</span></div>
         <button className="boomBtn" onClick={()=>send("bomb")}>BOMB<small>한 틱 사용</small></button>
       </div>
       <div className="legend"><span><i className="gray"/>고정 벽</span><span><i className="yellow"/>파괴 후 8초 뒤 복구</span><span><i className="cyan"/>나</span><span><i className="coral"/>AI / 다른 플레이어</span><button onClick={()=>setSound(v=>{soundRef.current=!v;return !v})}>{sound?"♪ 똑딱 소리 켜짐":"× 소리 꺼짐"}</button></div>
