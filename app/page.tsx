@@ -17,7 +17,7 @@ export default function Home() {
   const [status, setStatus] = useState<"connecting"|"online"|"offline">("connecting");
   const [queued, setQueued] = useState<Action>("wait");
   const [sound, setSound] = useState(true);
-  const [progress, setProgress] = useState(0);
+  const [beatStep, setBeatStep] = useState(-1);
   const [nickname, setNickname] = useState("");
   const [joined, setJoined] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -58,14 +58,8 @@ export default function Home() {
   },[]);
 
   useEffect(()=>{
-    let frame=0;
-    const draw=()=>{if(game)setProgress(Math.max(0,Math.min(1,1-(game.nextTickAt-Date.now())/1000)));frame=requestAnimationFrame(draw)};
-    frame=requestAnimationFrame(draw);return()=>cancelAnimationFrame(frame);
-  },[game]);
-
-  useEffect(()=>{
-    if(!game)return;const timers:ReturnType<typeof setTimeout>[]=[];
-    [750,500,250,0].forEach((before,index)=>{const delay=game.nextTickAt-before-Date.now();timers.push(setTimeout(()=>beatSound(index===3),Math.max(0,delay)))});
+    if(!game)return;setBeatStep(-1);const timers:ReturnType<typeof setTimeout>[]=[];
+    [750,500,250,15].forEach((before,index)=>{const delay=game.nextTickAt-before-Date.now();timers.push(setTimeout(()=>{setBeatStep(index);beatSound(index===3)},Math.max(0,delay)))});
     return()=>timers.forEach(clearTimeout);
   },[game?.tick,game?.nextTickAt,beatSound]);
 
@@ -91,7 +85,7 @@ export default function Home() {
 
   const me=game?.players.find(p=>p.id===myId);
   const centerBomb=game?.bombs.find(b=>b.x===Math.floor(game.width/2)&&b.y===Math.floor(game.height/2));
-  const beatStep=Math.min(3,Math.floor(progress*4));
+  const bouncing=beatStep>=0&&beatStep<3;
   return <main>
     <header>
       <div className="brand"><span className="logoBomb">●</span><div><b>BOOM <i>n</i> BOOM</b><small>1초마다 모두가 동시에 움직이는 폭탄 수싸움</small></div></div>
@@ -100,7 +94,7 @@ export default function Home() {
     <section className="gameShell">
       <div className="tickHud">
         <div><small>LIVE WORLD</small><strong>접속 즉시 같은 맵에 스폰</strong></div>
-        <div className="tickMeter" style={{"--tick":progress} as React.CSSProperties}><span>{beatStep<3?"뿅":"딱!"}</span><div className="beatDots">{[0,1,2,3].map(i=><i key={i} className={i===beatStep?"on":""}/>)}</div></div>
+        <div key={`meter-${game?.tick??0}`} className="tickMeter"><span>{beatStep===3?"딱!":"뿅"}</span><div className="beatDots">{[0,1,2,3].map(i=><i key={i} className={i===beatStep?"on":""}/>)}</div></div>
         <div className="queue"><small>다음 행동</small><strong>{actionLabel[queued]}</strong></div>
       </div>
       {game ? <div className="board" style={{aspectRatio:`${game.width}/${game.height}`}}>
@@ -112,11 +106,11 @@ export default function Home() {
           return <div className={`tile ${tile}`} key={`${x},${y}`}>
             {tile==="crate"&&<span className="box"/>}
             {bomb&&<span className="bomb"><span>✦</span><i>{bomb.fuse}</i></span>}
-            {people.filter(p=>p.id!==myId).map(p=><span key={`${p.id}-${beatStep}`} className={`fighter ${p.isAI?"ai":"rival"} ${beatStep>0?"beatBounce":""}`} title={p.nickname}><em>{p.nickname}</em>{p.isAI?"AI":"◉"}</span>)}
+            {people.filter(p=>p.id!==myId).map(p=><span key={`${p.id}-${beatStep}`} className={`fighter ${p.isAI?"ai":"rival"} ${bouncing?"beatBounce":""}`} title={p.nickname}><em>{p.nickname}</em>{p.isAI?"AI":"◉"}</span>)}
             {flame&&<span className="flame">✦</span>}
           </div>
         }))}</div>
-        {me?.alive&&<span key={`me-${game.tick}-${beatStep}`} className={`fighter me centerPlayer ${beatStep>0?"beatBounce":""}`}><em>{me.nickname}</em>◉</span>}
+        {me?.alive&&<span key={`me-${game.tick}-${beatStep}`} className={`fighter me centerPlayer ${bouncing?"beatBounce":""}`}><em>{me.nickname}</em>◉</span>}
         {centerBomb&&<span className="bomb centerBomb"><span>✦</span><i>{centerBomb.fuse}</i></span>}
         <span className="coordinates">{game.worldX}, {game.worldY}</span>
         {!joined&&<div className="gameOverlay"><form onSubmit={enterWorld}><small>ENTER THE WORLD</small><h2>닉네임을 정해주세요</h2><p>캐릭터 머리 위에 표시됩니다.</p><input autoFocus maxLength={12} value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="닉네임 (최대 12자)" aria-label="닉네임"/><button disabled={!nickname.trim()}>게임 시작</button></form></div>}
