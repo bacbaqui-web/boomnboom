@@ -10,6 +10,7 @@ const BGM_DURATION_MS = 209995.5;
 const BGM_SNARE_OFFSET_MS = 255;
 const WIDTH = 15, HEIGHT = 11;
 const CRATE_RESPAWN_TICKS = 8, BOMB_FUSE_TICKS = 3;
+const ITEM_TYPES = ["bomb","shield","flame"];
 const ACTIONS = new Set(["up", "down", "left", "right", "bomb", "wait"]);
 const DIRS = { up:[0,-1], down:[0,1], left:[-1,0], right:[1,0], wait:[0,0] };
 
@@ -19,7 +20,7 @@ const timelineAt=(now=Date.now())=>{
 };
 let {tick,nextTickAt}=timelineAt(), nextPlayerNumber=1, nextBombNumber=1;
 let flames=[];
-const players=new Map(), bombs=new Map(), destroyed=new Map(), cleared=new Set(), respawnHeld=new Set();
+const players=new Map(), bombs=new Map(), items=new Map(), destroyed=new Map(), cleared=new Set(), respawnHeld=new Set();
 const chunkCache=new Map();
 const key=(x,y)=>`${x},${y}`;
 const permanent=(x,y)=>x%2===0&&y%2===0;
@@ -67,7 +68,7 @@ function freeSpawn(isAI=false){
 }
 function addPlayer({socket=null,isAI=false}={}){
   const id=isAI?"BOT-1":`P${nextPlayerNumber++}`,[x,y]=freeSpawn(isAI);
-  clearSpawn(x,y);const player={id,x,y,prevX:x,prevY:y,isAI,action:"wait",socket,score:0,nickname:isAI?"BOOM AI":"",joined:isAI,alive:isAI};players.set(id,player);return player;
+  clearSpawn(x,y);const player={id,x,y,prevX:x,prevY:y,isAI,action:"wait",socket,score:0,power:1,range:2,shield:0,nickname:isAI?"BOOM AI":"",joined:isAI,alive:isAI};players.set(id,player);return player;
 }
 addPlayer({isAI:true});
 
@@ -81,7 +82,7 @@ function chooseBotAction(bot){
 }
 function blastCells(bomb){
   const cells=[{x:bomb.x,y:bomb.y}];
-  for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]])for(let n=1;n<=2;n++){
+  for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]])for(let n=1;n<=bomb.range;n++){
     const x=bomb.x+dx*n,y=bomb.y+dy*n;if(permanent(x,y))break;cells.push({x,y});if(hasCrate(x,y))break;
   }
   return cells;
@@ -98,21 +99,34 @@ function explodeBombs(){
   for(const cell of flames)if(hasCrate(cell.x,cell.y)){const cellKey=key(cell.x,cell.y);respawnHeld.delete(cellKey);destroyed.set(cellKey,tick+CRATE_RESPAWN_TICKS)}
   for(const player of players.values())if(player.alive&&unique.has(key(player.x,player.y))){
     player.action="wait";
+    if(player.shield>0){player.shield--;continue}
     if(!player.isAI){player.alive=false;continue}
+    const dropKey=key(player.x,player.y),type=ITEM_TYPES[hash(player.x+tick,player.y-tick)%ITEM_TYPES.length];
+    items.set(dropKey,{x:player.x,y:player.y,type});
     const[x,y]=freeSpawn(true);clearSpawn(x,y);player.x=x;player.y=y;player.prevX=x;player.prevY=y;
+  }
+}
+function collectItems(){
+  for(const player of players.values())if(player.alive){
+    const itemKey=key(player.x,player.y),item=items.get(itemKey);if(!item)continue;
+    if(item.type==="bomb")player.power++;
+    else if(item.type==="shield")player.shield++;
+    else if(item.type==="flame")player.range++;
+    items.delete(itemKey);
   }
 }
 function resolveActions(){
   const active=[...players.values()].filter(p=>p.alive);
   for(const player of active){player.prevX=player.x;player.prevY=player.y;if(player.isAI)player.action=chooseBotAction(player)}
   for(const player of active)if(player.action==="bomb"){
-    const occupied=[...bombs.values()].some(b=>b.x===player.x&&b.y===player.y),owns=[...bombs.values()].some(b=>b.owner===player.id);
-    if(!occupied&&!owns)bombs.set(nextBombNumber,{id:nextBombNumber++,x:player.x,y:player.y,owner:player.id,fuse:BOMB_FUSE_TICKS,bornTick:tick});player.action="wait";
+    const occupied=[...bombs.values()].some(b=>b.x===player.x&&b.y===player.y),owned=[...bombs.values()].filter(b=>b.owner===player.id).length;
+    if(!occupied&&owned<player.power)bombs.set(nextBombNumber,{id:nextBombNumber++,x:player.x,y:player.y,owner:player.id,fuse:BOMB_FUSE_TICKS,bornTick:tick,range:player.range});player.action="wait";
   }
   const intents=new Map();
   for(const player of active){const[dx,dy]=DIRS[player.action]||DIRS.wait,x=player.x+dx,y=player.y+dy;intents.set(player.id,blocked(x,y)?{x:player.x,y:player.y}:{x,y})}
   const counts=new Map();for(const pos of intents.values())counts.set(key(pos.x,pos.y),(counts.get(key(pos.x,pos.y))||0)+1);
   for(const player of active){const pos=intents.get(player.id);if(counts.get(key(pos.x,pos.y))===1){player.x=pos.x;player.y=pos.y}}
+  collectItems();
 }
 function stateFor(viewer){
   const serverNow=Date.now();
@@ -120,8 +134,8 @@ function stateFor(viewer){
   const visible=(x,y)=>x>=originX&&x<originX+WIDTH&&y>=originY&&y<originY+HEIGHT;
   return{type:"state",tick,nextTickAt,serverNow,nextTickInMs:Math.max(0,nextTickAt-serverNow),worldEpochMs:WORLD_EPOCH_MS,bgmDurationMs:BGM_DURATION_MS,bgmSnareOffsetMs:BGM_SNARE_OFFSET_MS,width:WIDTH,height:HEIGHT,originX,originY,worldX:viewer.x,worldY:viewer.y,cameraDx:viewer.x-viewer.prevX,cameraDy:viewer.y-viewer.prevY,
     tiles:Array.from({length:HEIGHT},(_,sy)=>Array.from({length:WIDTH},(_,sx)=>tileState(originX+sx,originY+sy))),
-    players:[...players.values()].filter(p=>p===viewer||(p.alive&&visible(p.x,p.y))).map(({id,x,y,isAI,action,score,nickname,joined,alive})=>({id,x:x-originX,y:y-originY,isAI,action,score,nickname,joined,alive})),
-    bombs:[...bombs.values()].filter(b=>visible(b.x,b.y)).map(b=>({...b,x:b.x-originX,y:b.y-originY})),flames:flames.filter(f=>visible(f.x,f.y)).map(f=>({x:f.x-originX,y:f.y-originY}))};
+    players:[...players.values()].filter(p=>p===viewer||(p.alive&&visible(p.x,p.y))).map(({id,x,y,isAI,action,score,power,range,shield,nickname,joined,alive})=>({id,x:x-originX,y:y-originY,isAI,action,score,power,range,shield,nickname,joined,alive})),
+    bombs:[...bombs.values()].filter(b=>visible(b.x,b.y)).map(b=>({...b,x:b.x-originX,y:b.y-originY})),items:[...items.values()].filter(i=>visible(i.x,i.y)).map(i=>({...i,x:i.x-originX,y:i.y-originY})),flames:flames.filter(f=>visible(f.x,f.y)).map(f=>({x:f.x-originX,y:f.y-originY}))};
 }
 function broadcast(){for(const player of players.values())if(player.socket?.readyState===WebSocket.OPEN)player.socket.send(JSON.stringify(stateFor(player)))}
 function runTick(){

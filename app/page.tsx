@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Tile = "floor" | "wall" | "crate" | "warning";
-type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; nickname:string; joined:boolean; alive:boolean };
+type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; power:number; range:number; shield:number; nickname:string; joined:boolean; alive:boolean };
 type Bomb = { id:number; x:number; y:number; fuse:number };
-type State = { tick:number; nextTickAt:number; serverNow:number; nextTickInMs:number; worldEpochMs:number; bgmDurationMs:number; bgmSnareOffsetMs:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; tiles:Tile[][]; players:Player[]; bombs:Bomb[]; flames:{x:number;y:number}[] };
+type Item = { x:number; y:number; type:"bomb"|"shield"|"flame" };
+type State = { tick:number; nextTickAt:number; serverNow:number; nextTickInMs:number; worldEpochMs:number; bgmDurationMs:number; bgmSnareOffsetMs:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; tiles:Tile[][]; players:Player[]; bombs:Bomb[]; items:Item[]; flames:{x:number;y:number}[] };
 type Action = "up" | "down" | "left" | "right" | "bomb" | "wait";
 
 const WS_URL = "wss://insight.magamiscom.ing/boom-ws";
@@ -124,15 +125,17 @@ export default function Home() {
         {game.tiles.flatMap((row,y)=>row.map((tile,x)=>{
           const people=game.players.filter(p=>p.x===x&&p.y===y);
           const bomb=game.bombs.find(b=>b.x===x&&b.y===y);
+          const item=game.items?.find(i=>i.x===x&&i.y===y);
           const flame=game.flames.some(f=>f.x===x&&f.y===y);
           return <div className={`tile ${tile}`} key={`${x},${y}`}>
             {tile==="crate"&&<span className="box"/>}
             {bomb&&<span className="bomb"><span>✦</span><i>{bomb.fuse}</i></span>}
-            {people.filter(p=>p.id!==myId).map(p=><span key={`${p.id}-${beatStep}`} className={`fighter ${p.isAI?"ai":"rival"} ${bouncing?"beatBounce":""}`} title={p.nickname}><em>{p.nickname}</em>{p.isAI?"AI":"◉"}</span>)}
+            {item&&<span className={`item item-${item.type}`} title={item.type==="bomb"?"폭탄 수 증가":item.type==="shield"?"폭발 1회 방어":"폭탄 화력 증가"}>{item.type==="bomb"?"●":item.type==="shield"?"◆":"🔥"}</span>}
+            {people.filter(p=>p.id!==myId).map(p=><span key={`${p.id}-${beatStep}`} className={`fighter ${p.isAI?"ai":"rival"} ${p.shield>0?"shielded":""} ${bouncing?"beatBounce":""}`} title={p.nickname}><em>{p.nickname}</em>{p.isAI?"AI":"◉"}</span>)}
             {flame&&<span className="flame">✦</span>}
           </div>
         }))}</div>
-        {me?.alive&&<span key={`me-${game.tick}-${beatStep}`} className={`fighter me centerPlayer ${bouncing?"beatBounce":""}`}><em>{me.nickname}</em>◉</span>}
+        {me?.alive&&<span key={`me-${game.tick}-${beatStep}`} className={`fighter me centerPlayer ${me.shield>0?"shielded":""} ${bouncing?"beatBounce":""}`}><em>{me.nickname}</em>◉</span>}
         {centerBomb&&<span className="bomb centerBomb"><span>✦</span><i>{centerBomb.fuse}</i></span>}
         <span className="coordinates">{game.worldX}, {game.worldY}</span>
         {!joined&&<div className="gameOverlay"><form onSubmit={enterWorld}><small>ENTER THE WORLD</small><h2>닉네임을 정해주세요</h2><p>캐릭터 머리 위에 표시됩니다.</p><input autoFocus maxLength={12} value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="닉네임 (최대 12자)" aria-label="닉네임"/><button disabled={!nickname.trim()}>게임 시작</button></form></div>}
@@ -140,10 +143,10 @@ export default function Home() {
       </div> : <div className="loading"><span>●</span><b>Oracle 게임 서버에 접속하는 중…</b></div>}
       <div className="controls">
         <div className="dpad"><button onClick={()=>send("up")}>▲</button><button onClick={()=>send("left")}>◀</button><button onClick={()=>send("down")}>▼</button><button onClick={()=>send("right")}>▶</button></div>
-        <div className="rules"><b>{me?.nickname?`${me.nickname}으로 참가 중`:"참가 준비 중"}</b><span>뿅 · 뿅 · 뿅 · 딱! 마지막 박자에 움직입니다.</span><span>방향은 계속 유지되고 폭탄은 한 번만 설치됩니다.</span></div>
+        <div className="rules"><b>{me?.nickname?`${me.nickname}으로 참가 중`:"참가 준비 중"}</b><span>뿅 · 뿅 · 뿅 · 딱! 마지막 박자에 움직입니다.</span><span>{me?`폭탄 ${me.power}개 · 화력 ${me.range}칸 · 방어막 ${me.shield}회`:"AI를 쓰러뜨리고 아이템을 획득하세요."}</span></div>
         <button className="boomBtn" onClick={()=>send("bomb")}>BOMB<small>한 틱 사용</small></button>
       </div>
-      <div className="legend"><span><i className="gray"/>고정 벽</span><span><i className="yellow"/>노란 상자</span><span><i className="warning"/>2초 뒤 재생성</span><span><i className="cyan"/>나</span><span className="bgmTitle">♫ Midnight Tile Loop</span><button onClick={()=>setSound(v=>{const next=!v;soundRef.current=next;if(next){unlockAudio();startBgm(game)}else bgmRef.current?.pause();return next})}>{sound?"♪ BGM 켜짐":"× 소리 꺼짐"}</button></div>
+      <div className="legend"><span><i className="warning"/>2초 뒤 재생성</span><span><i className="itemIcon bombUp">●</i>폭탄 수</span><span><i className="itemIcon shieldUp">◆</i>방어막</span><span><i className="itemIcon flameUp">🔥</i>화력</span><span className="bgmTitle">♫ Midnight Tile Loop</span><button onClick={()=>setSound(v=>{const next=!v;soundRef.current=next;if(next){unlockAudio();startBgm(game)}else bgmRef.current?.pause();return next})}>{sound?"♪ BGM 켜짐":"× 소리 꺼짐"}</button></div>
     </section>
   </main>;
 }
