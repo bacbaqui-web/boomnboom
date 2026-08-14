@@ -6,7 +6,8 @@ type Tile = "floor" | "wall" | "crate" | "warning";
 type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; power:number; range:number; shield:number; nickname:string; joined:boolean; alive:boolean };
 type Bomb = { id:number; x:number; y:number; fuse:number };
 type Item = { x:number; y:number; type:"bomb"|"shield"|"flame" };
-type State = { tick:number; nextTickAt:number; serverNow:number; nextTickInMs:number; worldEpochMs:number; bgmDurationMs:number; bgmSnareOffsetMs:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; tiles:Tile[][]; players:Player[]; bombs:Bomb[]; items:Item[]; flames:{x:number;y:number}[] };
+type EnemyDirection = { id:string; dx:number; dy:number; distance:number; nickname:string; isAI:boolean };
+type State = { tick:number; nextTickAt:number; serverNow:number; nextTickInMs:number; worldEpochMs:number; bgmDurationMs:number; bgmSnareOffsetMs:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; tiles:Tile[][]; players:Player[]; enemyDirections:EnemyDirection[]; bombs:Bomb[]; items:Item[]; flames:{x:number;y:number}[] };
 type Action = "up" | "down" | "left" | "right" | "bomb" | "wait";
 
 const WS_URL = "wss://insight.magamiscom.ing/boom-ws";
@@ -119,6 +120,7 @@ export default function Home() {
         }))}</div>
         {me?.alive&&<span className={`fighter me centerPlayer ${me.shield>0?"shielded":""}`}><em>{me.nickname}</em>◉</span>}
         {centerBomb&&<span className="bomb centerBomb"><span>✦</span><i>{centerBomb.fuse}</i></span>}
+        {game.enemyDirections?.map(enemy=>{const maxX=game.width/2-.8,maxY=game.height/2-.8,scale=Math.min(maxX/Math.max(Math.abs(enemy.dx),.001),maxY/Math.max(Math.abs(enemy.dy),.001)),left=50+enemy.dx*scale/game.width*100,top=50+enemy.dy*scale/game.height*100,angle=Math.atan2(enemy.dy,enemy.dx)*180/Math.PI+90;return <span key={enemy.id} className={`enemyPointer ${enemy.isAI?"ai":"rival"}`} style={{left:`${left}%`,top:`${top}%`}} title={`${enemy.nickname} · 약 ${enemy.distance}칸`}><i style={{transform:`rotate(${angle}deg)`}}>▲</i><small>{enemy.distance}</small></span>})}
         <span className="coordinates">{game.worldX}, {game.worldY}</span>
         {!joined&&<div className="gameOverlay"><form onSubmit={enterWorld}><small>ENTER THE WORLD</small><h2>닉네임을 정해주세요</h2><p>캐릭터 머리 위에 표시됩니다.</p><input autoFocus maxLength={12} value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="닉네임 (최대 12자)" aria-label="닉네임"/><button disabled={!nickname.trim()}>게임 시작</button></form></div>}
         {joined&&me&&!me.alive&&<div className="gameOverlay death"><div><small>BOOM!</small><h2>폭탄에 맞았어요</h2><p>새로운 위치에서 다시 시작할 수 있어요.</p><button onClick={respawn}>다시 접속하기</button></div></div>}
