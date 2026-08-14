@@ -83,7 +83,7 @@ export default function Home() {
     <section className="gameShell">
       <div className="tickHud">
         <div><small>LIVE WORLD</small><strong>접속 즉시 같은 맵에 스폰</strong></div>
-        <div className="tickMeter" style={{"--tick":progress} as React.CSSProperties}><b>{game?.tick??"–"}</b><span>{(game?.tick??0)%2?"똑":"딱"}</span></div>
+        <div className="tickMeter" style={{"--tick":progress} as React.CSSProperties}><span>{(game?.tick??0)%2?"똑":"딱"}</span></div>
         <div className="queue"><small>다음 행동</small><strong>{actionLabel[queued]}</strong></div>
       </div>
       {game ? <div className="board" style={{aspectRatio:`${game.width}/${game.height}`}}>
