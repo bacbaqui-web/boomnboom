@@ -41,7 +41,7 @@ function tileState(x,y){
   return respawnTick!==undefined&&respawnTick-tick<=2?"warning":"floor";
 }
 function blocked(x,y){return permanent(x,y)||hasCrate(x,y)||[...bombs.values()].some(b=>b.x===x&&b.y===y)}
-function clearSpawn(x,y){for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)cleared.add(key(x+dx,y+dy))}
+function clearSpawn(x,y){for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)if(Math.abs(dx)+Math.abs(dy)<=1)cleared.add(key(x+dx,y+dy))}
 
 function freeSpawn(isAI=false){
   if(isAI&&!players.size)return[1,1];
