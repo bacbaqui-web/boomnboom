@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 type Tile = "floor" | "wall" | "crate" | "warning";
 type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; power:number; range:number; shield:number; moved:boolean; nickname:string; joined:boolean; alive:boolean };
@@ -14,6 +14,13 @@ const WS_URL = "wss://insight.magamiscom.ing/boom-ws";
 const BGM_URL = "/midnight-tile-loop.mp3";
 const VOLUME_LEVELS = [0,.3,.58,.9];
 const actionIcon:Record<Action,string> = { up:"↑", down:"↓", left:"←", right:"→", bomb:"●", wait:"Ⅱ" };
+
+const StaticTiles=memo(function StaticTiles({tiles,originX,originY,width}:{tiles:Tile[][];originX:number;originY:number;width:number;revision:number}){
+  return <>{tiles.flatMap((row,y)=>row.map((tile,x)=>{
+    const floorAlt=((originX+x+originY+y)&1)!==0;
+    return <div className={`tile ${tile} ${floorAlt?"floorAlt":""}`} key={`${x},${y}`} style={{"--depth-x":`${Math.sign(x-Math.floor(width/2))*4}px`,"--depth-y":`${Math.sign(y-Math.floor(tiles.length/2))*4}px`} as React.CSSProperties}>{tile==="crate"&&<span className="box"/>}{tile==="warning"&&null}</div>;
+  }))}</>;
+},(before,after)=>before.originX===after.originX&&before.originY===after.originY&&before.revision===after.revision);
 
 export default function Home() {
   const [game, setGame] = useState<State | null>(null);
@@ -33,7 +40,7 @@ export default function Home() {
   const moveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastBgmTickRef = useRef(-1);
   const worldLayerRef = useRef<HTMLDivElement | null>(null);
-  const cameraRef = useRef({ready:false,visualX:0,visualY:0,startX:0,startY:0,targetX:0,targetY:0,startAt:0,duration:150,originX:0,originY:0,width:23,height:19});
+  const cameraRef = useRef({ready:false,visualX:0,visualY:0,startX:0,startY:0,targetX:0,targetY:0,startAt:0,duration:220,originX:0,originY:0,width:23,height:19});
 
   const paintCamera=useCallback(()=>{
     const layer=worldLayerRef.current,camera=cameraRef.current;if(!layer||!camera.ready)return;
@@ -127,7 +134,7 @@ export default function Home() {
   },[send,startMoving,stopMoving]);
 
   const me=game?.players.find(p=>p.id===myId);
-  const centerBomb=game?.bombs.find(b=>b.x===Math.floor(game.width/2)&&b.y===Math.floor(game.height/2));
+  const centerBomb=game?.bombs.find(b=>me&&b.x===me.x&&b.y===me.y);
   useLayoutEffect(()=>{if(game){const camera=cameraRef.current;camera.originX=game.originX;camera.originY=game.originY;camera.width=game.width;camera.height=game.height;paintCamera()}},[game?.originX,game?.originY,game?.width,game?.height,paintCamera]);
   return <main>
     <header>
@@ -141,20 +148,12 @@ export default function Home() {
       </div>
       {game ? <div className="board" style={{aspectRatio:`${game.viewWidth}/${game.viewHeight}`}}>
         <div ref={worldLayerRef} className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,width:`${game.width/game.viewWidth*100}%`,height:`${game.height/game.viewHeight*100}%`,left:`${-(game.width-game.viewWidth)/2/game.viewWidth*100}%`,top:`${-(game.height-game.viewHeight)/2/game.viewHeight*100}%`,right:"auto",bottom:"auto","--cols":game.width,"--rows":game.height} as React.CSSProperties}>
-        {game.tiles.flatMap((row,y)=>row.map((tile,x)=>{
-          const people=game.players.filter(p=>p.x===x&&p.y===y);
-          const bomb=game.bombs.find(b=>b.x===x&&b.y===y);
-          const item=game.items?.find(i=>i.x===x&&i.y===y);
-          const flame=game.flames.some(f=>f.x===x&&f.y===y);
-          const floorAlt=((game.originX+x+game.originY+y)&1)!==0;
-          return <div className={`tile ${tile} ${floorAlt?"floorAlt":""}`} key={`${x},${y}`} style={{"--depth-x":`${Math.sign(x-Math.floor(game.width/2))*4}px`,"--depth-y":`${Math.sign(y-Math.floor(game.height/2))*4}px`} as React.CSSProperties}>
-            {tile==="crate"&&<span className="box"/>}
-            {bomb&&<span className="bomb"><span>✦</span><i>{bomb.fuse}</i></span>}
-            {item&&<span className={`item item-${item.type}`} title={item.type==="bomb"?"폭탄 수 증가":item.type==="shield"?"폭발 1회 방어":"폭탄 화력 증가"}>{item.type==="bomb"?"●":item.type==="shield"?"◆":"🔥"}</span>}
-            {people.filter(p=>p.id!==myId).map(p=><span key={p.id} className={`fighter ${p.isAI?"ai":"rival"} ${p.shield>0?"shielded":""} ${p.moved?"moving":""}`} title={p.nickname}><em>{p.nickname}</em>{p.isAI?"AI":"◉"}</span>)}
-            {flame&&<span className="flame">✦</span>}
-          </div>
-        }))}</div>
+        <StaticTiles tiles={game.tiles} originX={game.originX} originY={game.originY} width={game.width} revision={game.tick}/>
+        {game.bombs.map(b=><span key={b.id} className="bomb worldEntity" style={{left:`${(b.x+.175)*100/game.width}%`,top:`${(b.y+.175)*100/game.height}%`,width:`${.65*100/game.width}%`,height:`${.65*100/game.height}%`}}><span>✦</span><i>{b.fuse}</i></span>)}
+        {game.items?.map(item=><span key={`${item.x},${item.y}`} className={`item item-${item.type} worldEntity`} style={{left:`${(item.x+.21)*100/game.width}%`,top:`${(item.y+.21)*100/game.height}%`,width:`${.58*100/game.width}%`,height:`${.58*100/game.height}%`}} title={item.type==="bomb"?"폭탄 수 증가":item.type==="shield"?"폭발 1회 방어":"폭탄 화력 증가"}>{item.type==="bomb"?"●":item.type==="shield"?"◆":"🔥"}</span>)}
+        {game.players.filter(p=>p.id!==myId).map(p=><span key={p.id} className={`fighter worldEntity ${p.isAI?"ai":"rival"} ${p.shield>0?"shielded":""}`} style={{left:`${(p.x+.14)*100/game.width}%`,top:`${(p.y+.14)*100/game.height}%`,width:`${.72*100/game.width}%`,height:`${.72*100/game.height}%`}} title={p.nickname}><em>{p.nickname}</em>{p.isAI?"AI":"◉"}</span>)}
+        {game.flames.map(f=><span key={`${f.x},${f.y}`} className="flame worldEntity" style={{left:`${(f.x+.5)*100/game.width}%`,top:`${(f.y+.5)*100/game.height}%`,transform:"translate(-50%,-50%)"}}>✦</span>)}
+        </div>
         {me?.alive&&<span className={`fighter me centerPlayer ${me.shield>0?"shielded":""}`}><em>{me.nickname}</em>◉<i className={`actionCue cue-${queued}`} title="내 현재 행동">{actionIcon[queued]}</i></span>}
         {centerBomb&&<span className="bomb centerBomb"><span>✦</span><i>{centerBomb.fuse}</i></span>}
         {game.enemyDirections?.map(enemy=>{const maxX=game.width/2-.8,maxY=game.height/2-.8,scale=Math.min(maxX/Math.max(Math.abs(enemy.dx),.001),maxY/Math.max(Math.abs(enemy.dy),.001)),left=50+enemy.dx*scale/game.width*100,top=50+enemy.dy*scale/game.height*100,angle=Math.atan2(enemy.dy,enemy.dx)*180/Math.PI+90;return <span key={enemy.id} className={`enemyPointer ${enemy.isAI?"ai":"rival"}`} style={{left:`${left}%`,top:`${top}%`}} title={`${enemy.nickname} · 약 ${enemy.distance}칸`}><i style={{transform:`rotate(${angle}deg)`}}>▲</i><small>{enemy.distance}</small></span>})}
