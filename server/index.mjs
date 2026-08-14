@@ -136,7 +136,7 @@ function stateFor(viewer){
   const visible=(x,y)=>x>=originX&&x<originX+WIDTH&&y>=originY&&y<originY+HEIGHT;
   return{type:"state",tick,nextTickAt,serverNow,nextTickInMs:Math.max(0,nextTickAt-serverNow),worldEpochMs:WORLD_EPOCH_MS,bgmDurationMs:BGM_DURATION_MS,bgmSnareOffsetMs:BGM_SNARE_OFFSET_MS,width:WIDTH,height:HEIGHT,originX,originY,worldX:viewer.x,worldY:viewer.y,cameraDx:viewer.x-viewer.prevX,cameraDy:viewer.y-viewer.prevY,
     tiles:Array.from({length:HEIGHT},(_,sy)=>Array.from({length:WIDTH},(_,sx)=>tileState(originX+sx,originY+sy))),
-    players:[...players.values()].filter(p=>p===viewer||(p.alive&&visible(p.x,p.y))).map(({id,x,y,isAI,action,score,power,range,shield,nickname,joined,alive})=>({id,x:x-originX,y:y-originY,isAI,action,score,power,range,shield,nickname,joined,alive})),
+    players:[...players.values()].filter(p=>p===viewer||(p.alive&&visible(p.x,p.y))).map(({id,x,y,prevX,prevY,isAI,action,score,power,range,shield,nickname,joined,alive})=>({id,x:x-originX,y:y-originY,isAI,action,score,power,range,shield,nickname,joined,alive,moved:x!==prevX||y!==prevY})),
     enemyDirections:[...players.values()].filter(p=>p!==viewer&&p.alive&&!visible(p.x,p.y)).map(p=>({id:p.id,dx:p.x-viewer.x,dy:p.y-viewer.y,distance:Math.abs(p.x-viewer.x)+Math.abs(p.y-viewer.y),nickname:p.nickname,isAI:p.isAI})),
     bombs:[...bombs.values()].filter(b=>visible(b.x,b.y)).map(b=>({...b,x:b.x-originX,y:b.y-originY})),items:[...items.values()].filter(i=>visible(i.x,i.y)).map(i=>({...i,x:i.x-originX,y:i.y-originY})),flames:flames.filter(f=>visible(f.x,f.y)).map(f=>({x:f.x-originX,y:f.y-originY}))};
 }

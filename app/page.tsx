@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Tile = "floor" | "wall" | "crate" | "warning";
-type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; power:number; range:number; shield:number; nickname:string; joined:boolean; alive:boolean };
+type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; power:number; range:number; shield:number; moved:boolean; nickname:string; joined:boolean; alive:boolean };
 type Bomb = { id:number; x:number; y:number; fuse:number };
 type Item = { x:number; y:number; type:"bomb"|"shield"|"flame" };
 type EnemyDirection = { id:string; dx:number; dy:number; distance:number; nickname:string; isAI:boolean };
@@ -114,11 +114,11 @@ export default function Home() {
             {tile==="crate"&&<span className="box"/>}
             {bomb&&<span className="bomb"><span>✦</span><i>{bomb.fuse}</i></span>}
             {item&&<span className={`item item-${item.type}`} title={item.type==="bomb"?"폭탄 수 증가":item.type==="shield"?"폭발 1회 방어":"폭탄 화력 증가"}>{item.type==="bomb"?"●":item.type==="shield"?"◆":"🔥"}</span>}
-            {people.filter(p=>p.id!==myId).map(p=><span key={p.id} className={`fighter ${p.isAI?"ai":"rival"} ${p.shield>0?"shielded":""}`} title={p.nickname}><em>{p.nickname}</em>{p.isAI?"AI":"◉"}</span>)}
+            {people.filter(p=>p.id!==myId).map(p=><span key={p.id} className={`fighter ${p.isAI?"ai":"rival"} ${p.shield>0?"shielded":""} ${p.moved?"moving":""}`} title={p.nickname}><em>{p.nickname}</em>{p.isAI?"AI":"◉"}</span>)}
             {flame&&<span className="flame">✦</span>}
           </div>
         }))}</div>
-        {me?.alive&&<span className={`fighter me centerPlayer ${me.shield>0?"shielded":""}`}><em>{me.nickname}</em>◉</span>}
+        {me?.alive&&<span key={`me-${game.tick}`} className={`fighter me centerPlayer ${me.shield>0?"shielded":""} ${me.moved?"moving":""}`}><em>{me.nickname}</em>◉</span>}
         {centerBomb&&<span className="bomb centerBomb"><span>✦</span><i>{centerBomb.fuse}</i></span>}
         {game.enemyDirections?.map(enemy=>{const maxX=game.width/2-.8,maxY=game.height/2-.8,scale=Math.min(maxX/Math.max(Math.abs(enemy.dx),.001),maxY/Math.max(Math.abs(enemy.dy),.001)),left=50+enemy.dx*scale/game.width*100,top=50+enemy.dy*scale/game.height*100,angle=Math.atan2(enemy.dy,enemy.dx)*180/Math.PI+90;return <span key={enemy.id} className={`enemyPointer ${enemy.isAI?"ai":"rival"}`} style={{left:`${left}%`,top:`${top}%`}} title={`${enemy.nickname} · 약 ${enemy.distance}칸`}><i style={{transform:`rotate(${angle}deg)`}}>▲</i><small>{enemy.distance}</small></span>})}
         <span className="coordinates">{game.worldX}, {game.worldY}</span>
