@@ -7,7 +7,7 @@ type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; powe
 type Bomb = { id:number; x:number; y:number; fuse:number };
 type Item = { x:number; y:number; type:"bomb"|"shield"|"flame" };
 type EnemyDirection = { id:string; dx:number; dy:number; distance:number; nickname:string; isAI:boolean };
-type State = { tick:number; nextTickAt:number; serverNow:number; nextTickInMs:number; worldEpochMs:number; bgmDurationMs:number; bgmSnareOffsetMs:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; tiles:Tile[][]; players:Player[]; enemyDirections:EnemyDirection[]; bombs:Bomb[]; items:Item[]; flames:{x:number;y:number}[] };
+type State = { tick:number; frame:number; nextTickAt:number; serverNow:number; nextTickInMs:number; worldEpochMs:number; bgmDurationMs:number; bgmSnareOffsetMs:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; tiles:Tile[][]; players:Player[]; enemyDirections:EnemyDirection[]; bombs:Bomb[]; items:Item[]; flames:{x:number;y:number}[] };
 type Action = "up" | "down" | "left" | "right" | "bomb" | "wait";
 
 const WS_URL = "wss://insight.magamiscom.ing/boom-ws";
@@ -30,6 +30,7 @@ export default function Home() {
   const soundRef = useRef(true);
   const joinedRef = useRef(false);
   const nicknameRef = useRef("");
+  const moveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const syncBgm=useCallback((state:State,force=false)=>{
     const track=bgmRef.current;if(!track)return;
@@ -77,6 +78,8 @@ export default function Home() {
     setQueued(action);
     if(wsRef.current?.readyState===WebSocket.OPEN) wsRef.current.send(JSON.stringify({type:"action",action}));
   },[]);
+  const stopMoving=useCallback(()=>{if(!moveTimerRef.current)return;clearInterval(moveTimerRef.current);moveTimerRef.current=null;send("wait")},[send]);
+  const startMoving=useCallback((action:Extract<Action,"up"|"down"|"left"|"right">)=>{if(moveTimerRef.current)clearInterval(moveTimerRef.current);send(action);moveTimerRef.current=setInterval(()=>send(action),100)},[send]);
 
   const enterWorld=(e:React.FormEvent)=>{
     e.preventDefault();const clean=nickname.trim().slice(0,12);if(!clean)return;startBgm(game);
@@ -87,11 +90,12 @@ export default function Home() {
 
   useEffect(()=>{
     const onKey=(e:KeyboardEvent)=>{
-      const map:Record<string,Action>={arrowup:"up",w:"up",arrowdown:"down",s:"down",arrowleft:"left",a:"left",arrowright:"right",d:"right"," ":"bomb"};
-      const action=map[e.key.toLowerCase()];if(action){e.preventDefault();send(action)}
+      const map:Record<string,Extract<Action,"up"|"down"|"left"|"right">>={arrowup:"up",w:"up",arrowdown:"down",s:"down",arrowleft:"left",a:"left",arrowright:"right",d:"right"};
+      const action=map[e.key.toLowerCase()];if(action){e.preventDefault();if(!e.repeat)startMoving(action)}else if(e.key===" "){e.preventDefault();if(!e.repeat)send("bomb")}
     };
-    addEventListener("keydown",onKey);return()=>removeEventListener("keydown",onKey);
-  },[send]);
+    const onKeyUp=(e:KeyboardEvent)=>{if(["arrowup","w","arrowdown","s","arrowleft","a","arrowright","d"].includes(e.key.toLowerCase()))stopMoving()};
+    const stop=()=>stopMoving();addEventListener("keydown",onKey);addEventListener("keyup",onKeyUp);addEventListener("pointerup",stop);addEventListener("blur",stop);return()=>{removeEventListener("keydown",onKey);removeEventListener("keyup",onKeyUp);removeEventListener("pointerup",stop);removeEventListener("blur",stop);if(moveTimerRef.current)clearInterval(moveTimerRef.current)};
+  },[send,startMoving,stopMoving]);
 
   const me=game?.players.find(p=>p.id===myId);
   const centerBomb=game?.bombs.find(b=>b.x===Math.floor(game.width/2)&&b.y===Math.floor(game.height/2));
@@ -106,7 +110,7 @@ export default function Home() {
         <div key={`meter-${game?.tick??0}`} className="tickMeter" aria-label="다음 턴까지 1초 게이지"/>
       </div>
       {game ? <div className="board" style={{aspectRatio:`${game.width}/${game.height}`}}>
-        <div key={game.tick} className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,"--camera-dx":game.cameraDx,"--camera-dy":game.cameraDy,"--cols":game.width,"--rows":game.height} as React.CSSProperties}>
+        <div key={game.frame} className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,"--camera-dx":game.cameraDx,"--camera-dy":game.cameraDy,"--cols":game.width,"--rows":game.height} as React.CSSProperties}>
         {game.tiles.flatMap((row,y)=>row.map((tile,x)=>{
           const people=game.players.filter(p=>p.x===x&&p.y===y);
           const bomb=game.bombs.find(b=>b.x===x&&b.y===y);
@@ -120,7 +124,7 @@ export default function Home() {
             {flame&&<span className="flame">✦</span>}
           </div>
         }))}</div>
-        {me?.alive&&<span key={`me-${game.tick}`} className={`fighter me centerPlayer ${me.shield>0?"shielded":""} ${me.moved?"moving":""}`}><em>{me.nickname}</em>◉<i className={`actionCue cue-${queued}`} title="내 다음 행동">{actionIcon[queued]}</i></span>}
+        {me?.alive&&<span key={`me-${game.frame}`} className={`fighter me centerPlayer ${me.shield>0?"shielded":""} ${me.moved?"moving":""}`}><em>{me.nickname}</em>◉<i className={`actionCue cue-${queued}`} title="내 현재 행동">{actionIcon[queued]}</i></span>}
         {centerBomb&&<span className="bomb centerBomb"><span>✦</span><i>{centerBomb.fuse}</i></span>}
         {game.enemyDirections?.map(enemy=>{const maxX=game.width/2-.8,maxY=game.height/2-.8,scale=Math.min(maxX/Math.max(Math.abs(enemy.dx),.001),maxY/Math.max(Math.abs(enemy.dy),.001)),left=50+enemy.dx*scale/game.width*100,top=50+enemy.dy*scale/game.height*100,angle=Math.atan2(enemy.dy,enemy.dx)*180/Math.PI+90;return <span key={enemy.id} className={`enemyPointer ${enemy.isAI?"ai":"rival"}`} style={{left:`${left}%`,top:`${top}%`}} title={`${enemy.nickname} · 약 ${enemy.distance}칸`}><i style={{transform:`rotate(${angle}deg)`}}>▲</i><small>{enemy.distance}</small></span>})}
         <span className="coordinates">{game.worldX}, {game.worldY}</span>
@@ -128,9 +132,9 @@ export default function Home() {
         {joined&&me&&!me.alive&&<div className="gameOverlay death"><div><small>BOOM!</small><h2>폭탄에 맞았어요</h2><p>새로운 위치에서 다시 시작할 수 있어요.</p><button onClick={respawn}>다시 접속하기</button></div></div>}
       </div> : <div className="loading"><span>●</span><b>Oracle 게임 서버에 접속하는 중…</b></div>}
       <div className="controls">
-        <div className="dpad"><button onClick={()=>send("up")}>▲</button><button onClick={()=>send("left")}>◀</button><button onClick={()=>send("down")}>▼</button><button onClick={()=>send("right")}>▶</button></div>
-        <div className="rules"><b>{me?.nickname?`${me.nickname}으로 참가 중`:"참가 준비 중"}</b><span>1초 게이지가 차면 선택한 행동이 실행됩니다.</span><span>{me?`폭탄 ${me.power}개 · 화력 ${me.range}칸 · 방어막 ${me.shield}회`:"AI를 쓰러뜨리고 아이템을 획득하세요."}</span></div>
-        <button className="boomBtn" onClick={()=>send("bomb")}>BOMB<small>한 틱 사용</small></button>
+        <div className="dpad"><button onPointerDown={e=>{e.preventDefault();startMoving("up")}}>▲</button><button onPointerDown={e=>{e.preventDefault();startMoving("left")}}>◀</button><button onPointerDown={e=>{e.preventDefault();startMoving("down")}}>▼</button><button onPointerDown={e=>{e.preventDefault();startMoving("right")}}>▶</button></div>
+        <div className="rules"><b>{me?.nickname?`${me.nickname}으로 참가 중`:"참가 준비 중"}</b><span>이동과 폭탄 설치는 즉시, 폭발과 상자 재생성은 음악 박자에 실행됩니다.</span><span>{me?`폭탄 ${me.power}개 · 화력 ${me.range}칸 · 방어막 ${me.shield}회`:"AI를 쓰러뜨리고 아이템을 획득하세요."}</span></div>
+        <button className="boomBtn" onClick={()=>send("bomb")}>BOMB<small>즉시 설치</small></button>
       </div>
       <div className="legend"><span><i className="warning"/>2초 뒤 재생성</span><span><i className="itemIcon bombUp">●</i>폭탄 수</span><span><i className="itemIcon shieldUp">◆</i>방어막</span><span><i className="itemIcon flameUp">🔥</i>화력</span><span className="bgmTitle">♫ Midnight Tile Loop</span><button className={`volumeButton level-${volumeLevel}`} onClick={cycleVolume} aria-label={volumeLevel===0?"BGM 음소거됨, 눌러서 작게 재생":`BGM 음량 ${volumeLevel}단계, 눌러서 변경`} title="BGM 음량"><span className="speakerBody"/><span className="volumeWaves">{[1,2,3].map(level=><i key={level} className={level<=volumeLevel?"on":""}/>)}</span>{volumeLevel===0&&<b>×</b>}</button></div>
     </section>

@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 
 const PORT = Number(process.env.PORT || 3300);
 const TICK_MS = Number(process.env.TICK_MS || 1000);
+const MOVE_INTERVAL_MS = 90, AI_INTERVAL_MS = 250;
 // One permanent world clock. It keeps advancing across restarts and even while
 // nobody is connected. At every whole second the track is on a snare.
 const WORLD_EPOCH_MS = Number(process.env.WORLD_EPOCH_MS || Date.UTC(2026, 7, 14, 0, 0, 0));
@@ -19,7 +20,7 @@ const timelineAt=(now=Date.now())=>{
   const elapsed=Math.max(0,now-WORLD_EPOCH_MS),tick=Math.floor(elapsed/TICK_MS);
   return{tick,nextTickAt:WORLD_EPOCH_MS+(tick+1)*TICK_MS};
 };
-let {tick,nextTickAt}=timelineAt(), nextPlayerNumber=1, nextBotNumber=1, nextBombNumber=1;
+let {tick,nextTickAt}=timelineAt(), frame=0, nextPlayerNumber=1, nextBotNumber=1, nextBombNumber=1;
 let flames=[];
 const players=new Map(), bombs=new Map(), items=new Map(), destroyed=new Map(), cleared=new Set(), respawnCommitted=new Set();
 const chunkCache=new Map();
@@ -70,7 +71,7 @@ function freeSpawn(isAI=false){
 }
 function addPlayer({socket=null,isAI=false}={}){
   const botNumber=isAI?nextBotNumber:null,id=isAI?`BOT-${nextBotNumber++}`:`P${nextPlayerNumber++}`,[x,y]=freeSpawn(isAI);
-  clearSpawn(x,y);const player={id,x,y,prevX:x,prevY:y,isAI,action:"wait",socket,score:0,power:1,range:2,shield:0,nickname:isAI?`BOOM AI ${botNumber}`:"",joined:isAI,alive:isAI};players.set(id,player);return player;
+  clearSpawn(x,y);const player={id,x,y,prevX:x,prevY:y,isAI,action:"wait",socket,score:0,power:1,range:2,shield:0,lastMoveAt:0,nickname:isAI?`BOOM AI ${botNumber}`:"",joined:isAI,alive:isAI};players.set(id,player);return player;
 }
 for(let i=0;i<BOT_COUNT;i++)addPlayer({isAI:true});
 
@@ -108,39 +109,36 @@ function explodeBombs(){
     const[x,y]=freeSpawn(true);clearSpawn(x,y);player.x=x;player.y=y;player.prevX=x;player.prevY=y;
   }
 }
-function collectItems(){
-  for(const player of players.values())if(player.alive){
-    const itemKey=key(player.x,player.y),item=items.get(itemKey);if(!item)continue;
-    if(item.type==="bomb")player.power++;
-    else if(item.type==="shield")player.shield++;
-    else if(item.type==="flame")player.range++;
-    items.delete(itemKey);
-  }
+function collectItem(player){
+  const itemKey=key(player.x,player.y),item=items.get(itemKey);if(!item)return;
+  if(item.type==="bomb")player.power++;
+  else if(item.type==="shield")player.shield++;
+  else if(item.type==="flame")player.range++;
+  items.delete(itemKey);
 }
-function resolveActions(){
-  const active=[...players.values()].filter(p=>p.alive);
-  for(const player of active){player.prevX=player.x;player.prevY=player.y;if(player.isAI)player.action=chooseBotAction(player)}
-  for(const player of active)if(player.action==="bomb"){
-    const occupied=[...bombs.values()].some(b=>b.x===player.x&&b.y===player.y),owned=[...bombs.values()].filter(b=>b.owner===player.id).length;
-    if(!occupied&&owned<player.power)bombs.set(nextBombNumber,{id:nextBombNumber++,x:player.x,y:player.y,owner:player.id,fuse:BOMB_FUSE_TICKS,bornTick:tick,range:player.range});player.action="wait";
-  }
-  const intents=new Map();
-  for(const player of active){const[dx,dy]=DIRS[player.action]||DIRS.wait,x=player.x+dx,y=player.y+dy;intents.set(player.id,blocked(x,y)?{x:player.x,y:player.y}:{x,y})}
-  const counts=new Map();for(const pos of intents.values())counts.set(key(pos.x,pos.y),(counts.get(key(pos.x,pos.y))||0)+1);
-  for(const player of active){const pos=intents.get(player.id);if(counts.get(key(pos.x,pos.y))===1){player.x=pos.x;player.y=pos.y}}
-  collectItems();
+function movePlayer(player,action){
+  const[dx,dy]=DIRS[action]||DIRS.wait,x=player.x+dx,y=player.y+dy;
+  player.prevX=player.x;player.prevY=player.y;player.action=action;
+  if((dx===0&&dy===0)||blocked(x,y)||[...players.values()].some(p=>p!==player&&p.alive&&p.x===x&&p.y===y))return false;
+  player.x=x;player.y=y;collectItem(player);return true;
+}
+function placeBomb(player){
+  const occupied=[...bombs.values()].some(b=>b.x===player.x&&b.y===player.y),owned=[...bombs.values()].filter(b=>b.owner===player.id).length;
+  player.action="bomb";
+  if(occupied||owned>=player.power)return false;
+  bombs.set(nextBombNumber,{id:nextBombNumber++,x:player.x,y:player.y,owner:player.id,fuse:BOMB_FUSE_TICKS,bornTick:tick,range:player.range});return true;
 }
 function stateFor(viewer){
   const serverNow=Date.now();
   const originX=viewer.x-Math.floor(WIDTH/2),originY=viewer.y-Math.floor(HEIGHT/2);
   const visible=(x,y)=>x>=originX&&x<originX+WIDTH&&y>=originY&&y<originY+HEIGHT;
-  return{type:"state",tick,nextTickAt,serverNow,nextTickInMs:Math.max(0,nextTickAt-serverNow),worldEpochMs:WORLD_EPOCH_MS,bgmDurationMs:BGM_DURATION_MS,bgmSnareOffsetMs:BGM_SNARE_OFFSET_MS,width:WIDTH,height:HEIGHT,originX,originY,worldX:viewer.x,worldY:viewer.y,cameraDx:viewer.x-viewer.prevX,cameraDy:viewer.y-viewer.prevY,
+  return{type:"state",tick,frame,nextTickAt,serverNow,nextTickInMs:Math.max(0,nextTickAt-serverNow),worldEpochMs:WORLD_EPOCH_MS,bgmDurationMs:BGM_DURATION_MS,bgmSnareOffsetMs:BGM_SNARE_OFFSET_MS,width:WIDTH,height:HEIGHT,originX,originY,worldX:viewer.x,worldY:viewer.y,cameraDx:viewer.x-viewer.prevX,cameraDy:viewer.y-viewer.prevY,
     tiles:Array.from({length:HEIGHT},(_,sy)=>Array.from({length:WIDTH},(_,sx)=>tileState(originX+sx,originY+sy))),
     players:[...players.values()].filter(p=>p===viewer||(p.alive&&visible(p.x,p.y))).map(({id,x,y,prevX,prevY,isAI,action,score,power,range,shield,nickname,joined,alive})=>({id,x:x-originX,y:y-originY,isAI,action,score,power,range,shield,nickname,joined,alive,moved:x!==prevX||y!==prevY})),
     enemyDirections:[...players.values()].filter(p=>p!==viewer&&p.alive&&!visible(p.x,p.y)).map(p=>({id:p.id,dx:p.x-viewer.x,dy:p.y-viewer.y,distance:Math.abs(p.x-viewer.x)+Math.abs(p.y-viewer.y),nickname:p.nickname,isAI:p.isAI})),
     bombs:[...bombs.values()].filter(b=>visible(b.x,b.y)).map(b=>({...b,x:b.x-originX,y:b.y-originY})),items:[...items.values()].filter(i=>visible(i.x,i.y)).map(i=>({...i,x:i.x-originX,y:i.y-originY})),flames:flames.filter(f=>visible(f.x,f.y)).map(f=>({x:f.x-originX,y:f.y-originY}))};
 }
-function broadcast(){for(const player of players.values())if(player.socket?.readyState===WebSocket.OPEN)player.socket.send(JSON.stringify(stateFor(player)))}
+function broadcast(){frame++;for(const player of players.values())if(player.socket?.readyState===WebSocket.OPEN)player.socket.send(JSON.stringify(stateFor(player)));for(const player of players.values()){player.prevX=player.x;player.prevY=player.y}}
 function runTick(){
   const timeline=timelineAt();
   if(timeline.tick<=tick){nextTickAt=timeline.nextTickAt;return}
@@ -158,14 +156,15 @@ function runTick(){
       else{destroyed.delete(k);respawnCommitted.delete(k)}
     }
   }
-  resolveActions();explodeBombs();nextTickAt=timeline.nextTickAt;broadcast();
+  explodeBombs();nextTickAt=timeline.nextTickAt;broadcast();
 }
 
 const server=http.createServer((req,res)=>{if(req.url==="/health"){res.writeHead(200,{"content-type":"application/json"});return res.end(JSON.stringify({ok:true,tick,players:players.size,destroyed:destroyed.size,uptime:Math.round(process.uptime())}))}res.writeHead(404).end()});
 const wss=new WebSocketServer({noServer:true});
 server.on("upgrade",(req,socket,head)=>{if(req.url!=="/boom-ws"&&req.url!=="/")return socket.destroy();wss.handleUpgrade(req,socket,head,ws=>wss.emit("connection",ws))});
-wss.on("connection",ws=>{const player=addPlayer({socket:ws});ws.send(JSON.stringify({type:"welcome",id:player.id,tickMs:TICK_MS}));ws.send(JSON.stringify(stateFor(player)));ws.on("message",raw=>{try{const msg=JSON.parse(raw.toString());if(msg.type==="join"&&!player.joined){player.nickname=String(msg.nickname||"").trim().slice(0,12)||`플레이어${player.id.slice(1)}`;player.joined=true;player.alive=true;player.action="wait";broadcast()}else if(msg.type==="respawn"&&player.joined&&!player.alive){const[x,y]=freeSpawn();clearSpawn(x,y);player.x=x;player.y=y;player.prevX=x;player.prevY=y;player.alive=true;player.action="wait";broadcast()}else if(msg.type==="action"&&player.alive&&ACTIONS.has(msg.action))player.action=msg.action}catch{/* ignore malformed input */}});ws.on("close",()=>players.delete(player.id))});
+wss.on("connection",ws=>{const player=addPlayer({socket:ws});ws.send(JSON.stringify({type:"welcome",id:player.id,tickMs:TICK_MS}));ws.send(JSON.stringify(stateFor(player)));ws.on("message",raw=>{try{const msg=JSON.parse(raw.toString());if(msg.type==="join"&&!player.joined){player.nickname=String(msg.nickname||"").trim().slice(0,12)||`플레이어${player.id.slice(1)}`;player.joined=true;player.alive=true;player.action="wait";broadcast()}else if(msg.type==="respawn"&&player.joined&&!player.alive){const[x,y]=freeSpawn();clearSpawn(x,y);player.x=x;player.y=y;player.prevX=x;player.prevY=y;player.alive=true;player.action="wait";broadcast()}else if(msg.type==="action"&&player.alive&&ACTIONS.has(msg.action)){if(msg.action==="bomb"){placeBomb(player);broadcast()}else if(msg.action==="wait"){player.action="wait";broadcast()}else if(Date.now()-player.lastMoveAt>=MOVE_INTERVAL_MS){player.lastMoveAt=Date.now();movePlayer(player,msg.action);broadcast()}}}catch{/* ignore malformed input */}});ws.on("close",()=>players.delete(player.id))});
 let timer;
 function scheduleTick(){timer=setTimeout(()=>{runTick();scheduleTick()},Math.max(1,nextTickAt-Date.now()));timer.unref()}
-scheduleTick();server.listen(PORT,"127.0.0.1",()=>console.log(`BOOMnBOOM infinite tick server listening on 127.0.0.1:${PORT}`));
-for(const signal of["SIGINT","SIGTERM"])process.on(signal,()=>{for(const client of wss.clients)client.terminate();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),1000).unref()});
+const aiTimer=setInterval(()=>{let changed=false;for(const bot of players.values())if(bot.isAI&&bot.alive){const action=chooseBotAction(bot);changed=action==="bomb"?placeBomb(bot)||changed:movePlayer(bot,action)||changed}if(changed)broadcast()},AI_INTERVAL_MS);aiTimer.unref();
+scheduleTick();server.listen(PORT,"127.0.0.1",()=>console.log(`BOOMnBOOM real-time movement server listening on 127.0.0.1:${PORT}`));
+for(const signal of["SIGINT","SIGTERM"])process.on(signal,()=>{clearInterval(aiTimer);for(const client of wss.clients)client.terminate();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),1000).unref()});
