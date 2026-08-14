@@ -3,10 +3,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://bubble-boom-arcade.bacbaqui2.chatgpt.site"),
-  title: "Bubble Boom! — 설치 없이 바로 즐기는 폭탄 미로 게임",
-  description: "폭탄을 놓고 블록을 터뜨리며 라이벌을 이겨보세요. PC와 모바일에서 바로 플레이!",
-  openGraph: { title: "BUBBLE BOOM!", description: "누구나 바로 스폰되는 끝없는 하나의 월드", images: ["/og-world.png"] },
-  twitter: { card: "summary_large_image", title: "BUBBLE BOOM!", description: "누구나 바로 스폰되는 끝없는 하나의 월드", images: ["/og-world.png"] },
+  title: "BOOMnBOOM — 1초 틱 폭탄 대전",
+  description: "매초 모든 플레이어와 AI가 동시에 움직이는 실시간 폭탄 수싸움",
+  openGraph: { title: "BOOMnBOOM", description: "똑, 딱. 다음 한 수를 먼저 정하세요.", images: ["/og-tick.png"] },
+  twitter: { card: "summary_large_image", title: "BOOMnBOOM", description: "똑, 딱. 다음 한 수를 먼저 정하세요.", images: ["/og-tick.png"] },
 };
 
 export default function RootLayout({

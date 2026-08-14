@@ -1,0 +1,18 @@
+[Unit]
+Description=BOOMnBOOM 1-second tick WebSocket server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/boomnboom-server
+Environment=NODE_ENV=production
+Environment=PORT=3300
+ExecStart=/usr/bin/node /home/ubuntu/boomnboom-server/index.mjs
+Restart=on-failure
+RestartSec=3
+MemoryMax=128M
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
