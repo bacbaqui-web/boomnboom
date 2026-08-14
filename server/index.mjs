@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 
 const PORT = Number(process.env.PORT || 3300);
 const TICK_MS = Number(process.env.TICK_MS || 1000);
-const MOVE_INTERVAL_MS = 90, AI_INTERVAL_MS = 500;
+const MOVE_INTERVAL_MS = 90, MOVE_STEP = .18, AI_INTERVAL_MS = 500;
 // One permanent world clock. It keeps advancing across restarts and even while
 // nobody is connected. At every whole second the track is on a snare.
 const WORLD_EPOCH_MS = Number(process.env.WORLD_EPOCH_MS || Date.UTC(2026, 7, 14, 0, 0, 0));
@@ -100,7 +100,7 @@ function explodeBombs(){
   for(const bomb of exploding){bombs.delete(bomb.id);cells.push(...blastCells(bomb))}
   const unique=new Map(cells.map(c=>[key(c.x,c.y),c]));flames=[...unique.values()];
   for(const cell of flames)if(hasCrate(cell.x,cell.y)){const cellKey=key(cell.x,cell.y);respawnCommitted.delete(cellKey);destroyed.set(cellKey,tick+CRATE_RESPAWN_TICKS)}
-  for(const player of players.values())if(player.alive&&unique.has(key(player.x,player.y))){
+  for(const player of players.values())if(player.alive&&unique.has(key(Math.round(player.x),Math.round(player.y)))){
     player.action="wait";
     if(player.shield>0){player.shield--;continue}
     if(!player.isAI){player.alive=false;continue}
@@ -110,31 +110,32 @@ function explodeBombs(){
   }
 }
 function collectItem(player){
-  const itemKey=key(player.x,player.y),item=items.get(itemKey);if(!item)return;
+  const cellX=Math.round(player.x),cellY=Math.round(player.y),itemKey=key(cellX,cellY),item=items.get(itemKey);if(!item)return;
   if(item.type==="bomb")player.power++;
   else if(item.type==="shield")player.shield++;
   else if(item.type==="flame")player.range++;
   items.delete(itemKey);
 }
 function movePlayer(player,action){
-  const[dx,dy]=DIRS[action]||DIRS.wait,x=player.x+dx,y=player.y+dy;
+  const[dx,dy]=DIRS[action]||DIRS.wait,step=player.isAI?1:MOVE_STEP,x=player.x+dx*step,y=player.y+dy*step;
   player.prevX=player.x;player.prevY=player.y;player.action=action;
-  if((dx===0&&dy===0)||blocked(x,y)||[...players.values()].some(p=>p!==player&&p.alive&&p.x===x&&p.y===y))return false;
+  const fromX=Math.round(player.x),fromY=Math.round(player.y),toX=Math.round(x),toY=Math.round(y);
+  if((dx===0&&dy===0)||((fromX!==toX||fromY!==toY)&&blocked(toX,toY))||[...players.values()].some(p=>p!==player&&p.alive&&Math.hypot(p.x-x,p.y-y)<.58))return false;
   player.x=x;player.y=y;collectItem(player);return true;
 }
 function placeBomb(player){
-  const occupied=[...bombs.values()].some(b=>b.x===player.x&&b.y===player.y),owned=[...bombs.values()].filter(b=>b.owner===player.id).length;
+  const x=Math.round(player.x),y=Math.round(player.y),occupied=[...bombs.values()].some(b=>b.x===x&&b.y===y),owned=[...bombs.values()].filter(b=>b.owner===player.id).length;
   player.action="bomb";
   if(occupied||owned>=player.power)return false;
-  bombs.set(nextBombNumber,{id:nextBombNumber++,x:player.x,y:player.y,owner:player.id,fuse:BOMB_FUSE_TICKS,bornTick:tick,range:player.range});return true;
+  bombs.set(nextBombNumber,{id:nextBombNumber++,x,y,owner:player.id,fuse:BOMB_FUSE_TICKS,bornTick:tick,range:player.range});return true;
 }
 function stateFor(viewer){
   const serverNow=Date.now();
-  const originX=viewer.x-Math.floor(WIDTH/2),originY=viewer.y-Math.floor(HEIGHT/2);
+  const centerX=Math.round(viewer.x),centerY=Math.round(viewer.y),originX=centerX-Math.floor(WIDTH/2),originY=centerY-Math.floor(HEIGHT/2);
   const visible=(x,y)=>x>=originX&&x<originX+WIDTH&&y>=originY&&y<originY+HEIGHT;
-  return{type:"state",tick,frame,nextTickAt,serverNow,nextTickInMs:Math.max(0,nextTickAt-serverNow),worldEpochMs:WORLD_EPOCH_MS,bgmDurationMs:BGM_DURATION_MS,bgmSnareOffsetMs:BGM_SNARE_OFFSET_MS,width:WIDTH,height:HEIGHT,originX,originY,worldX:viewer.x,worldY:viewer.y,cameraDx:viewer.x-viewer.prevX,cameraDy:viewer.y-viewer.prevY,
+  return{type:"state",tick,frame,nextTickAt,serverNow,nextTickInMs:Math.max(0,nextTickAt-serverNow),worldEpochMs:WORLD_EPOCH_MS,bgmDurationMs:BGM_DURATION_MS,bgmSnareOffsetMs:BGM_SNARE_OFFSET_MS,width:WIDTH,height:HEIGHT,originX,originY,worldX:viewer.x,worldY:viewer.y,cameraDx:viewer.x-viewer.prevX,cameraDy:viewer.y-viewer.prevY,cameraOffsetX:viewer.x-centerX,cameraOffsetY:viewer.y-centerY,
     tiles:Array.from({length:HEIGHT},(_,sy)=>Array.from({length:WIDTH},(_,sx)=>tileState(originX+sx,originY+sy))),
-    players:[...players.values()].filter(p=>p===viewer||(p.alive&&visible(p.x,p.y))).map(({id,x,y,prevX,prevY,isAI,action,score,power,range,shield,nickname,joined,alive})=>({id,x:x-originX,y:y-originY,isAI,action,score,power,range,shield,nickname,joined,alive,moved:x!==prevX||y!==prevY})),
+    players:[...players.values()].filter(p=>p===viewer||(p.alive&&visible(p.x,p.y))).map(({id,x,y,prevX,prevY,isAI,action,score,power,range,shield,nickname,joined,alive})=>({id,x:Math.round(x)-originX,y:Math.round(y)-originY,isAI,action,score,power,range,shield,nickname,joined,alive,moved:x!==prevX||y!==prevY})),
     enemyDirections:[...players.values()].filter(p=>p!==viewer&&p.alive&&!visible(p.x,p.y)).map(p=>({id:p.id,dx:p.x-viewer.x,dy:p.y-viewer.y,distance:Math.abs(p.x-viewer.x)+Math.abs(p.y-viewer.y),nickname:p.nickname,isAI:p.isAI})),
     bombs:[...bombs.values()].filter(b=>visible(b.x,b.y)).map(b=>({...b,x:b.x-originX,y:b.y-originY})),items:[...items.values()].filter(i=>visible(i.x,i.y)).map(i=>({...i,x:i.x-originX,y:i.y-originY})),flames:flames.filter(f=>visible(f.x,f.y)).map(f=>({x:f.x-originX,y:f.y-originY}))};
 }

@@ -9,6 +9,6 @@
 .fighter.moving:not(.centerPlayer){animation:moveHopRealtime .18s ease-out both}.centerPlayer.moving{animation:centerMoveHopRealtime .18s ease-out both}@keyframes moveHopRealtime{0%{transform:translateY(15%) scale(.95,1.04)}45%{transform:translateY(-30%) scale(1.04)}100%{transform:translateY(0) scale(1)}}@keyframes centerMoveHopRealtime{0%{transform:translate(-50%,-35%) scale(.95,1.04)}45%{transform:translate(-50%,-78%) scale(1.04)}100%{transform:translate(-50%,-50%) scale(1)}}
 
 /* The local fighter stays fixed while the camera glides across the world. */
-.worldLayer{animation:none;will-change:transform}
+.worldLayer{animation:none;will-change:transform;transition:transform .1s linear}
 .fighter,.fighter.moving,.fighter.beatBounce,.centerPlayer,.centerPlayer.moving,.centerPlayer.beatBounce{animation:none!important}
 .centerPlayer{transform:translate(-50%,-50%)}

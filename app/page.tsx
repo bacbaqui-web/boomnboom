@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Tile = "floor" | "wall" | "crate" | "warning";
 type Player = { id:string; x:number; y:number; isAI:boolean; action:Action; power:number; range:number; shield:number; moved:boolean; nickname:string; joined:boolean; alive:boolean };
 type Bomb = { id:number; x:number; y:number; fuse:number };
 type Item = { x:number; y:number; type:"bomb"|"shield"|"flame" };
 type EnemyDirection = { id:string; dx:number; dy:number; distance:number; nickname:string; isAI:boolean };
-type State = { tick:number; frame:number; nextTickAt:number; serverNow:number; nextTickInMs:number; worldEpochMs:number; bgmDurationMs:number; bgmSnareOffsetMs:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; tiles:Tile[][]; players:Player[]; enemyDirections:EnemyDirection[]; bombs:Bomb[]; items:Item[]; flames:{x:number;y:number}[] };
+type State = { tick:number; frame:number; nextTickAt:number; serverNow:number; nextTickInMs:number; worldEpochMs:number; bgmDurationMs:number; bgmSnareOffsetMs:number; width:number; height:number; originX:number; originY:number; worldX:number; worldY:number; cameraDx:number; cameraDy:number; cameraOffsetX:number; cameraOffsetY:number; tiles:Tile[][]; players:Player[]; enemyDirections:EnemyDirection[]; bombs:Bomb[]; items:Item[]; flames:{x:number;y:number}[] };
 type Action = "up" | "down" | "left" | "right" | "bomb" | "wait";
 
 const WS_URL = "wss://insight.magamiscom.ing/boom-ws";
@@ -32,7 +32,6 @@ export default function Home() {
   const nicknameRef = useRef("");
   const moveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastBgmTickRef = useRef(-1);
-  const worldLayerRef = useRef<HTMLDivElement | null>(null);
 
   const syncBgm=useCallback((state:State,force=false)=>{
     const track=bgmRef.current;if(!track)return;
@@ -101,15 +100,6 @@ export default function Home() {
 
   const me=game?.players.find(p=>p.id===myId);
   const centerBomb=game?.bombs.find(b=>b.x===Math.floor(game.width/2)&&b.y===Math.floor(game.height/2));
-  useLayoutEffect(()=>{
-    const layer=worldLayerRef.current;
-    if(!layer||!game||(game.cameraDx===0&&game.cameraDy===0))return;
-    layer.getAnimations().forEach(animation=>animation.cancel());
-    layer.animate([
-      {transform:`translate(${game.cameraDx*100/game.width}%,${game.cameraDy*100/game.height}%)`},
-      {transform:"translate(0,0)"}
-    ],{duration:115,easing:"cubic-bezier(.2,.75,.3,1)",fill:"both"});
-  },[game?.worldX,game?.worldY,game?.cameraDx,game?.cameraDy,game?.width,game?.height]);
   return <main>
     <header>
       <div className="brand"><span className="logoBomb">●</span><div><b>BOOM <i>n</i> BOOM</b><small>1초마다 모두가 동시에 움직이는 폭탄 수싸움</small></div></div>
@@ -121,7 +111,7 @@ export default function Home() {
         <div key={`meter-${game?.tick??0}`} className="tickMeter" aria-label="다음 턴까지 1초 게이지"/>
       </div>
       {game ? <div className="board" style={{aspectRatio:`${game.width}/${game.height}`}}>
-        <div ref={worldLayerRef} className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,"--cols":game.width,"--rows":game.height} as React.CSSProperties}>
+        <div key={`${game.originX},${game.originY}`} className="worldLayer" style={{gridTemplateColumns:`repeat(${game.width},1fr)`,transform:`translate(${-game.cameraOffsetX*100/game.width}%,${-game.cameraOffsetY*100/game.height}%)`,"--cols":game.width,"--rows":game.height} as React.CSSProperties}>
         {game.tiles.flatMap((row,y)=>row.map((tile,x)=>{
           const people=game.players.filter(p=>p.x===x&&p.y===y);
           const bomb=game.bombs.find(b=>b.x===x&&b.y===y);
@@ -138,7 +128,7 @@ export default function Home() {
         {me?.alive&&<span className={`fighter me centerPlayer ${me.shield>0?"shielded":""}`}><em>{me.nickname}</em>◉<i className={`actionCue cue-${queued}`} title="내 현재 행동">{actionIcon[queued]}</i></span>}
         {centerBomb&&<span className="bomb centerBomb"><span>✦</span><i>{centerBomb.fuse}</i></span>}
         {game.enemyDirections?.map(enemy=>{const maxX=game.width/2-.8,maxY=game.height/2-.8,scale=Math.min(maxX/Math.max(Math.abs(enemy.dx),.001),maxY/Math.max(Math.abs(enemy.dy),.001)),left=50+enemy.dx*scale/game.width*100,top=50+enemy.dy*scale/game.height*100,angle=Math.atan2(enemy.dy,enemy.dx)*180/Math.PI+90;return <span key={enemy.id} className={`enemyPointer ${enemy.isAI?"ai":"rival"}`} style={{left:`${left}%`,top:`${top}%`}} title={`${enemy.nickname} · 약 ${enemy.distance}칸`}><i style={{transform:`rotate(${angle}deg)`}}>▲</i><small>{enemy.distance}</small></span>})}
-        <span className="coordinates">{game.worldX}, {game.worldY}</span>
+        <span className="coordinates">{game.worldX.toFixed(1)}, {game.worldY.toFixed(1)}</span>
         {!joined&&<div className="gameOverlay"><form onSubmit={enterWorld}><small>ENTER THE WORLD</small><h2>닉네임을 정해주세요</h2><p>캐릭터 머리 위에 표시됩니다.</p><input autoFocus maxLength={12} value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="닉네임 (최대 12자)" aria-label="닉네임"/><button disabled={!nickname.trim()}>게임 시작</button></form></div>}
         {joined&&me&&!me.alive&&<div className="gameOverlay death"><div><small>BOOM!</small><h2>폭탄에 맞았어요</h2><p>새로운 위치에서 다시 시작할 수 있어요.</p><button onClick={respawn}>다시 접속하기</button></div></div>}
       </div> : <div className="loading"><span>●</span><b>Oracle 게임 서버에 접속하는 중…</b></div>}
