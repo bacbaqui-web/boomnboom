@@ -432,3 +432,39 @@ high-cardinality player ID와 secret token은 public health에 넣지 않는다.
 - reconnect/late join이 full authoritative state로 회복
 - V2 rollback 가능한 server-first/client-second 배포
 - root lint/tsc/build/client tests, server tests, diff-check와 actual browser QA PASS
+
+## 후속 Task — 목표 칸 기반 중심선 이동
+
+상태: **PASS**
+
+Preserve:
+
+- Protocol V3 server authority, prediction/replay와 V2 rollback
+- 30Hz fixed simulation, 15Hz snapshot, 폭탄·폭발 authoritative tick
+- 연속 입력의 가속과 rAF camera 표시
+
+변경 계약:
+
+- 방향 입력이 통과 가능한 인접 칸 하나를 목표로 확정한다.
+- 이동은 두 칸의 중심을 잇는 수평·수직 중심선만 따른다.
+- keyup 뒤에는 현재 목표 칸 중심까지 완료하고, 도중의 방향 변경은 도착 뒤 적용한다.
+- 같은 방향 hold는 정지 없이 다음 칸 목표를 이어서 확정한다.
+- bomb action은 현재 겹침/반올림 칸 대신 확정 목표 칸을 우선 사용한다.
+- player 두 명은 같은 목표 칸을 동시에 예약하지 못한다.
+
+검증 기준:
+
+- shared client/server golden state 일치
+- keyup 완주, hold 연속, queued turn, 음수 좌표와 blocked target PASS
+- 이동 중 client pending bomb와 server authoritative bomb cell 일치
+- root build/test/lint/tsc, server test와 diff-check PASS
+
+결과:
+
+- shared Movement Core, server World Owner/Movement/Bomb와 client Predictor를 같은
+  `targetCellX/Y` 계약으로 연결
+- V3 bomb을 local player 중앙에 고정하지 않고 목표 월드 칸에 렌더링
+- root production build와 client 68건, server 66건, lint, tsc, syntax와
+  diff-check PASS
+- 모든 source/test 파일 500줄 미만 유지
+- commit, push, Oracle/Sites 배포와 실제 브라우저 QA는 이 Task에서 실행하지 않음

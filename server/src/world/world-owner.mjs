@@ -169,6 +169,13 @@ export class WorldOwner {
     for (const key of ["px", "py", "vx", "vy", "queuedTurnUntilTick"]) {
       if (!Number.isSafeInteger(movement[key])) return false;
     }
+    if (
+      (movement.targetCellX !== null && !Number.isSafeInteger(movement.targetCellX)) ||
+      (movement.targetCellY !== null && !Number.isSafeInteger(movement.targetCellY)) ||
+      (movement.targetCellX === null) !== (movement.targetCellY === null)
+    ) {
+      return false;
+    }
     const x = Math.floor(movement.px / unitsPerTile);
     const y = Math.floor(movement.py / unitsPerTile);
     Object.assign(player, {
@@ -183,6 +190,8 @@ export class WorldOwner {
       desiredDirection: movement.desiredDirection,
       queuedTurn: movement.queuedTurn,
       queuedTurnUntilTick: movement.queuedTurnUntilTick,
+      targetCellX: movement.targetCellX,
+      targetCellY: movement.targetCellY,
       action,
       lifeId,
     });

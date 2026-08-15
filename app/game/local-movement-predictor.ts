@@ -13,6 +13,8 @@ export type LocalMovementState = {
   desiredDirection: V3Direction;
   queuedTurn: Exclude<V3Direction, "neutral"> | null;
   queuedTurnUntilTick: number;
+  targetCellX: number | null;
+  targetCellY: number | null;
 };
 
 type CollisionReader = { isBlockedCell(cellX: number, cellY: number): boolean };
@@ -26,6 +28,12 @@ function stateFromOwner(snapshot: V3OwnerSnapshot): LocalMovementState {
     desiredDirection: snapshot.player.direction,
     queuedTurn: null,
     queuedTurnUntilTick: snapshot.serverTick,
+    targetCellX: Number.isSafeInteger(snapshot.player.targetCellX)
+      ? snapshot.player.targetCellX
+      : null,
+    targetCellY: Number.isSafeInteger(snapshot.player.targetCellY)
+      ? snapshot.player.targetCellY
+      : null,
   };
 }
 
@@ -126,6 +134,17 @@ export class LocalMovementPredictor {
 
   get predictedTick() {
     return this.#predictedTick;
+  }
+
+  get bombCell() {
+    if (!this.#state) return null;
+    if (this.#state.targetCellX !== null && this.#state.targetCellY !== null) {
+      return { x: this.#state.targetCellX, y: this.#state.targetCellY };
+    }
+    return {
+      x: Math.floor(this.#state.px / DEFAULT_MOVEMENT_CONFIG.unitsPerTile),
+      y: Math.floor(this.#state.py / DEFAULT_MOVEMENT_CONFIG.unitsPerTile),
+    };
   }
 
   get lastReplayTicks() {

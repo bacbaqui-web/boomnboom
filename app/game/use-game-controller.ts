@@ -277,12 +277,9 @@ export function useGameController() {
       collisionReaderRef.current,
     );
     if (action === "bomb") {
-      const position = predictor.position;
-      if (position) {
-        pendingBombPresenterRef.current.begin(command.commandSeq, {
-          x: Math.floor(position.x + 0.5),
-          y: Math.floor(position.y + 0.5),
-        });
+      const bombCell = predictor.bombCell;
+      if (bombCell) {
+        pendingBombPresenterRef.current.begin(command.commandSeq, bombCell);
         refreshPendingBombs();
       }
     }

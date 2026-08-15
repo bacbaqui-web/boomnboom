@@ -28,6 +28,15 @@ function validateState(state) {
       throw new TypeError("queued turn must be a cardinal direction or null");
     }
   }
+  const targetCellX = state.targetCellX ?? null;
+  const targetCellY = state.targetCellY ?? null;
+  if (
+    (targetCellX !== null && !Number.isSafeInteger(targetCellX)) ||
+    (targetCellY !== null && !Number.isSafeInteger(targetCellY)) ||
+    (targetCellX === null) !== (targetCellY === null)
+  ) {
+    throw new TypeError("movement target cells must both be safe integers or null");
+  }
 }
 
 function validateConfig(config) {
@@ -74,16 +83,14 @@ function cellCenter(position, unitsPerTile) {
   return floorDiv(position, unitsPerTile) * unitsPerTile + unitsPerTile / 2;
 }
 
+function cellCenterFromIndex(cell, unitsPerTile) {
+  return cell * unitsPerTile + unitsPerTile / 2;
+}
+
 function directionAxis(direction) {
   if (direction === "left" || direction === "right") return "x";
   if (direction === "up" || direction === "down") return "y";
   return null;
-}
-
-function movementAxis(state) {
-  if (state.vx !== 0 && state.vy === 0) return "x";
-  if (state.vy !== 0 && state.vx === 0) return "y";
-  return directionAxis(state.desiredDirection);
 }
 
 function moveTowards(value, target, amount) {
@@ -170,80 +177,119 @@ function sweepY(px, py, dy, collisionReader, config) {
   return { position: target, contacts: [] };
 }
 
-function canTurn(state, direction, collisionReader, config) {
-  const currentAxis = movementAxis(state);
-  const nextAxis = directionAxis(direction);
-  if (currentAxis === null || currentAxis === nextAxis) {
-    return { accepted: true, px: state.px, py: state.py };
-  }
-
-  const alignmentAxis = currentAxis === "x" ? "px" : "py";
-  const center = cellCenter(state[alignmentAxis], config.unitsPerTile);
-  if (Math.abs(state[alignmentAxis] - center) > config.turnCenterTolerance) {
-    return { accepted: false, px: state.px, py: state.py };
-  }
-
-  const aligned = { px: state.px, py: state.py, [alignmentAxis]: center };
-  const vector = DIRECTION_VECTOR[direction];
-  const cellX = floorDiv(aligned.px, config.unitsPerTile) + vector.x;
-  const cellY = floorDiv(aligned.py, config.unitsPerTile) + vector.y;
-  if (collisionReader.isBlockedCell(cellX, cellY)) {
-    return { accepted: false, px: state.px, py: state.py };
-  }
-  return { accepted: true, px: aligned.px, py: aligned.py };
-}
-
-function applyTurn(state, direction, alignedPosition, config) {
-  const nextAxis = directionAxis(direction);
-  const speed = Math.min(Math.max(Math.abs(state.vx), Math.abs(state.vy)), config.maxSpeedPerTick);
-  const vector = DIRECTION_VECTOR[direction];
+function normalizedState(state) {
   return {
     ...state,
-    px: alignedPosition.px,
-    py: alignedPosition.py,
-    vx: nextAxis === "x" ? vector.x * speed : 0,
-    vy: nextAxis === "y" ? vector.y * speed : 0,
-    desiredDirection: direction,
+    targetCellX: state.targetCellX ?? null,
+    targetCellY: state.targetCellY ?? null,
+  };
+}
+
+function targetForState(state, config) {
+  if (state.targetCellX === null || state.targetCellY === null) return null;
+  return {
+    cellX: state.targetCellX,
+    cellY: state.targetCellY,
+    px: cellCenterFromIndex(state.targetCellX, config.unitsPerTile),
+    py: cellCenterFromIndex(state.targetCellY, config.unitsPerTile),
+  };
+}
+
+function directionToTarget(state, target) {
+  if (target.px > state.px) return "right";
+  if (target.px < state.px) return "left";
+  if (target.py > state.py) return "down";
+  if (target.py < state.py) return "up";
+  return "neutral";
+}
+
+function commitAdjacentTarget(state, direction, collisionReader, config, { preserveVelocity = false } = {}) {
+  const vector = DIRECTION_VECTOR[direction];
+  const cellX = floorDiv(state.px, config.unitsPerTile);
+  const cellY = floorDiv(state.py, config.unitsPerTile);
+  const targetCellX = cellX + vector.x;
+  const targetCellY = cellY + vector.y;
+  if (collisionReader.isBlockedCell(targetCellX, targetCellY)) {
+    return {
+      ...state,
+      vx: 0,
+      vy: 0,
+      targetCellX: null,
+      targetCellY: null,
+      queuedTurn: null,
+    };
+  }
+  const axis = directionAxis(direction);
+  const currentCenterX = cellCenter(state.px, config.unitsPerTile);
+  const currentCenterY = cellCenter(state.py, config.unitsPerTile);
+  const velocityMatches =
+    preserveVelocity &&
+    ((axis === "x" && Math.sign(state.vx) === vector.x) ||
+      (axis === "y" && Math.sign(state.vy) === vector.y));
+  return {
+    ...state,
+    px: axis === "y" ? currentCenterX : state.px,
+    py: axis === "x" ? currentCenterY : state.py,
+    vx: velocityMatches && axis === "x" ? state.vx : 0,
+    vy: velocityMatches && axis === "y" ? state.vy : 0,
+    targetCellX,
+    targetCellY,
     queuedTurn: null,
   };
 }
 
-function resolveDirection(state, input, collisionReader, config) {
+function resolveIntent(state, input, collisionReader, config) {
   const tick = input.tick;
-  let next = { ...state };
+  let next = normalizedState(state);
   if (next.queuedTurn !== null && isNetTickAfter(tick, next.queuedTurnUntilTick)) {
     next.queuedTurn = null;
   }
-
-  if (input.direction === "neutral") {
-    return { ...next, desiredDirection: "neutral", queuedTurn: null };
-  }
-
-  const inputMatchesQueue = input.direction === next.queuedTurn;
-  const inputKeepsCurrentDirection = input.direction === next.desiredDirection;
-  const candidate = inputKeepsCurrentDirection && next.queuedTurn !== null
-    ? next.queuedTurn
-    : input.direction;
-  const turn = canTurn(next, candidate, collisionReader, config);
-
-  if (turn.accepted) {
-    const currentAxis = movementAxis(next);
-    const nextAxis = directionAxis(candidate);
-    if (currentAxis !== null && currentAxis !== nextAxis) {
-      return applyTurn(next, candidate, turn, config);
+  next.desiredDirection = input.direction;
+  const target = targetForState(next, config);
+  if (target) {
+    const committedDirection = directionToTarget(next, target);
+    if (
+      input.direction !== "neutral" &&
+      input.direction !== committedDirection
+    ) {
+      next.queuedTurn = input.direction;
+      next.queuedTurnUntilTick = addNetTicks(tick, config.turnGraceTicks);
     }
-    return {
-      ...next,
-      desiredDirection: candidate,
-      queuedTurn: null,
-    };
+    return next;
   }
+  const candidate = input.direction !== "neutral" ? input.direction : next.queuedTurn;
+  if (candidate && candidate !== "neutral") {
+    return commitAdjacentTarget(next, candidate, collisionReader, config);
+  }
+  return {
+    ...next,
+    vx: 0,
+    vy: 0,
+    targetCellX: null,
+    targetCellY: null,
+  };
+}
 
-  if (!inputKeepsCurrentDirection || inputMatchesQueue) {
-    next.queuedTurn = candidate;
-    next.queuedTurnUntilTick = addNetTicks(tick, config.turnGraceTicks);
+function continueAfterArrival(state, input, travelDirection, collisionReader, config) {
+  const queuedIsLive =
+    state.queuedTurn !== null &&
+    !isNetTickAfter(input.tick, state.queuedTurnUntilTick);
+  const candidate = input.direction !== "neutral"
+    ? input.direction
+    : queuedIsLive
+      ? state.queuedTurn
+      : null;
+  const arrived = {
+    ...state,
+    targetCellX: null,
+    targetCellY: null,
+  };
+  if (!candidate) {
+    return { ...arrived, vx: 0, vy: 0, queuedTurn: null };
   }
-  return next;
+  return commitAdjacentTarget(arrived, candidate, collisionReader, config, {
+    preserveVelocity: candidate === travelDirection,
+  });
 }
 
 export function stepMovement(
@@ -260,25 +306,47 @@ export function stepMovement(
   validateCollisionReader(collisionReader);
   validateConfig(config);
 
-  const directed = resolveDirection(state, input, collisionReader, config);
-  const vector = DIRECTION_VECTOR[directed.desiredDirection];
+  const directed = resolveIntent(state, input, collisionReader, config);
+  const target = targetForState(directed, config);
+  if (!target) {
+    return { state: directed, contacts: [] };
+  }
+  const travelDirection = directionToTarget(directed, target);
+  const vector = DIRECTION_VECTOR[travelDirection];
   const targetVx = vector.x * config.maxSpeedPerTick;
   const targetVy = vector.y * config.maxSpeedPerTick;
-  let vx = nextAxisVelocity(directed.vx, targetVx, config);
-  let vy = nextAxisVelocity(directed.vy, targetVy, config);
-  const xSweep = sweepX(directed.px, directed.py, vx, collisionReader, config);
+  const acceleratedVx = nextAxisVelocity(directed.vx, targetVx, config);
+  const acceleratedVy = nextAxisVelocity(directed.vy, targetVy, config);
+  const remainingX = target.px - directed.px;
+  const remainingY = target.py - directed.py;
+  let vx = Math.sign(acceleratedVx) * Math.min(Math.abs(acceleratedVx), Math.abs(remainingX));
+  let vy = Math.sign(acceleratedVy) * Math.min(Math.abs(acceleratedVy), Math.abs(remainingY));
+  const lineLocked = {
+    ...directed,
+    px: vector.y === 0 ? directed.px : target.px,
+    py: vector.x === 0 ? directed.py : target.py,
+  };
+  const xSweep = sweepX(lineLocked.px, lineLocked.py, vx, collisionReader, config);
   if (xSweep.contacts.length > 0) vx = 0;
-  const ySweep = sweepY(xSweep.position, directed.py, vy, collisionReader, config);
+  const ySweep = sweepY(xSweep.position, lineLocked.py, vy, collisionReader, config);
   if (ySweep.contacts.length > 0) vy = 0;
 
+  const moved = {
+    ...lineLocked,
+    px: xSweep.position,
+    py: ySweep.position,
+    vx,
+    vy,
+  };
+  const arrived = moved.px === target.px && moved.py === target.py;
+
+  const arrivalState = arrived
+    ? { ...moved, vx: acceleratedVx, vy: acceleratedVy }
+    : moved;
   return {
-    state: {
-      ...directed,
-      px: xSweep.position,
-      py: ySweep.position,
-      vx,
-      vy,
-    },
+    state: arrived
+      ? continueAfterArrival(arrivalState, input, travelDirection, collisionReader, config)
+      : moved,
     contacts: [...xSweep.contacts, ...ySweep.contacts],
   };
 }

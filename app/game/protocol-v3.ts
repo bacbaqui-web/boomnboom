@@ -33,6 +33,8 @@ export type V3PlayerSample = {
   vx: number;
   vy: number;
   direction: V3Direction;
+  targetCellX: number | null;
+  targetCellY: number | null;
   x: number;
   y: number;
   alive: boolean;
@@ -127,7 +129,9 @@ export function isV3OwnerSnapshot(message: V3ServerMessage): message is V3OwnerS
     Number.isSafeInteger(player.px) &&
     Number.isSafeInteger(player.py) &&
     Number.isSafeInteger(player.vx) &&
-    Number.isSafeInteger(player.vy)
+    Number.isSafeInteger(player.vy) &&
+    (player.targetCellX == null || Number.isSafeInteger(player.targetCellX)) &&
+    (player.targetCellY == null || Number.isSafeInteger(player.targetCellY))
   );
 }
 
@@ -140,6 +144,8 @@ function isV3PlayerSample(value: unknown): value is V3PlayerSample {
     Number.isSafeInteger(player.py) &&
     Number.isSafeInteger(player.vx) &&
     Number.isSafeInteger(player.vy) &&
+    (player.targetCellX == null || Number.isSafeInteger(player.targetCellX)) &&
+    (player.targetCellY == null || Number.isSafeInteger(player.targetCellY)) &&
     Number.isInteger(player.lifeId) &&
     typeof player.teleport === "boolean"
   );

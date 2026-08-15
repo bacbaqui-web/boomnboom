@@ -84,6 +84,7 @@ export const EntityLayer = memo(function EntityLayer({
   store,
   tileSize,
   localPlayer,
+  centerLocalBomb,
   remotePositionSource,
   pendingBombs,
   explosionFlames,
@@ -91,6 +92,7 @@ export const EntityLayer = memo(function EntityLayer({
   store: ClientWorldStore;
   tileSize: number;
   localPlayer: PlayerEntity | undefined;
+  centerLocalBomb: boolean;
   remotePositionSource: RemotePositionSource | null;
   pendingBombs: readonly PendingBombVisual[];
   explosionFlames: readonly ExplosionFlameVisual[];
@@ -137,7 +139,11 @@ export const EntityLayer = memo(function EntityLayer({
           );
         }
         if (entity.kind === "bomb") {
-          if (entity.x === localPlayer?.x && entity.y === localPlayer.y) return null;
+          if (
+            centerLocalBomb &&
+            entity.x === localPlayer?.x &&
+            entity.y === localPlayer.y
+          ) return null;
           return (
             <span
               key={`bomb:${entity.id}`}

@@ -15,6 +15,7 @@ function owner({ tick = 0, seq = 0, px = 512, vx = 0, lifeId = 1, ack = null } =
     lastProcessedCommandSeq: ack,
     player: {
       id: "P1", px, py: 512, vx, vy: 0, direction: vx ? "right" : "neutral",
+      targetCellX: null, targetCellY: null,
       x: Math.floor(px / 1024), y: 0, alive: true, joined: true, isAI: false,
       nickname: "P1", power: 1, range: 2, shield: 0, lifeId, teleport: false,
     },
@@ -70,6 +71,22 @@ test("prediction uses the shared collision reader and never crosses a blocked ce
   const result = predictor.advanceTo(12, timeline.pending, {
     isBlockedCell: (x, y) => x === 1 && y === 0,
   });
-  assert.equal(result.collisionCrossing, true);
-  assert.ok(result.position.x < 0.5);
+  assert.equal(result.collisionCrossing, false);
+  assert.deepEqual(result.position, { x: 0, y: 0 });
+});
+
+test("prediction exposes the committed destination for bomb placement and finishes after keyup", () => {
+  const predictor = new LocalMovementPredictor();
+  const timeline = new CommandTimeline();
+  predictor.reset(owner());
+  const right = timeline.prepareDirection("right", 1);
+  timeline.commit(right);
+  predictor.advanceTo(2, timeline.pending, openWorld);
+  assert.deepEqual(predictor.bombCell, { x: 1, y: 0 });
+
+  const neutral = timeline.prepareDirection("neutral", 3);
+  timeline.commit(neutral);
+  predictor.advanceTo(7, timeline.pending, openWorld);
+  assert.deepEqual(predictor.position, { x: 1, y: 0 });
+  assert.deepEqual(predictor.bombCell, { x: 1, y: 0 });
 });

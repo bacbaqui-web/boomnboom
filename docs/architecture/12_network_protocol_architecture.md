@@ -128,12 +128,15 @@ owner_snapshot
   snapshotSeq
   serverTick
   lastProcessedCommandSeq
-  player { px, py, vx, vy, direction, alive, lifeId, teleport }
+  player { px, py, vx, vy, direction, targetCellX, targetCellY, alive, lifeId, teleport }
   clock { rttEcho?, nextBeatTick }
 ```
 
 ACK는 별도 input packet마다 보내지 않고 기본 15Hz snapshot에 piggyback한다. local
 client는 ACK 이하 pending command를 제거하고 나머지를 replay한다.
+`targetCellX/Y`는 keyup 뒤 남은 이동과 이동 중 폭탄의 설치 칸을 client prediction이
+server와 동일하게 replay하기 위한 authoritative movement state다. 두 값은 함께
+정수이거나 함께 `null`이어야 한다.
 
 ## 7. Remote Entity Snapshot
 

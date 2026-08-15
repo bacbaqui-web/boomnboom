@@ -50,6 +50,8 @@ export function createExplosionSystem({
           vx: 0,
           vy: 0,
           desiredDirection: "neutral",
+          targetCellX: null,
+          targetCellY: null,
         });
         if (player.isAI) {
           const x = Number.isSafeInteger(player.px)

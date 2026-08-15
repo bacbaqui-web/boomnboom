@@ -21,6 +21,8 @@ function movementState(player, config) {
     queuedTurnUntilTick: Number.isSafeInteger(player.queuedTurnUntilTick)
       ? player.queuedTurnUntilTick
       : 0,
+    targetCellX: Number.isSafeInteger(player.targetCellX) ? player.targetCellX : null,
+    targetCellY: Number.isSafeInteger(player.targetCellY) ? player.targetCellY : null,
   };
 }
 
@@ -36,7 +38,9 @@ function movementStatesDiffer(left, right) {
     left.vy !== right.vy ||
     left.desiredDirection !== right.desiredDirection ||
     left.queuedTurn !== right.queuedTurn ||
-    left.queuedTurnUntilTick !== right.queuedTurnUntilTick
+    left.queuedTurnUntilTick !== right.queuedTurnUntilTick ||
+    left.targetCellX !== right.targetCellX ||
+    left.targetCellY !== right.targetCellY
   );
 }
 
@@ -56,6 +60,8 @@ export function createPlayerMovementSystem({
           desiredDirection: "neutral",
           queuedTurn: null,
           queuedTurnUntilTick: 0,
+          targetCellX: null,
+          targetCellY: null,
         }
       : movementState(player, movementConfig);
     return world.commitPlayerMovement(playerId, state, {
@@ -83,6 +89,18 @@ export function createPlayerMovementSystem({
       bombs.push(bomb);
       bombsByCell.set(key, bombs);
     }
+    const reservedTargets = new Map();
+    for (const player of players) {
+      if (
+        !player.alive ||
+        !Number.isSafeInteger(player.targetCellX) ||
+        !Number.isSafeInteger(player.targetCellY)
+      ) continue;
+      const key = cellKey(player.targetCellX, player.targetCellY);
+      const ids = reservedTargets.get(key) ?? new Set();
+      ids.add(player.id);
+      reservedTargets.set(key, ids);
+    }
     const contactsByPlayer = new Map();
     let movementChanged = false;
     let cellChanged = false;
@@ -103,13 +121,19 @@ export function createPlayerMovementSystem({
               !(
                 bomb.owner === playerId &&
                 bomb.ownerPassThrough === true &&
-                playerOverlapsCell(player, bomb.x, bomb.y, movementConfig)
+                (
+                  playerOverlapsCell(player, bomb.x, bomb.y, movementConfig) ||
+                  (player.targetCellX === bomb.x && player.targetCellY === bomb.y)
+                )
               ),
           );
+          const reservedByOther = [...(reservedTargets.get(cellKey(cellX, cellY)) ?? [])]
+            .some((reservedPlayerId) => reservedPlayerId !== playerId);
           return (
             world.isPermanentWall(cellX, cellY) ||
             world.hasCrate(cellX, cellY) ||
             bombBlocked ||
+            reservedByOther ||
             (occupiedPlayers.get(cellKey(cellX, cellY))?.size ?? 0) > 0
           );
         },
@@ -128,11 +152,21 @@ export function createPlayerMovementSystem({
         lifeId: player.lifeId ?? 1,
       });
       const after = world.getPlayer(playerId);
+      if (Number.isSafeInteger(player.targetCellX) && Number.isSafeInteger(player.targetCellY)) {
+        reservedTargets.get(cellKey(player.targetCellX, player.targetCellY))?.delete(playerId);
+      }
+      if (Number.isSafeInteger(after.targetCellX) && Number.isSafeInteger(after.targetCellY)) {
+        const targetKey = cellKey(after.targetCellX, after.targetCellY);
+        const targetIds = reservedTargets.get(targetKey) ?? new Set();
+        targetIds.add(playerId);
+        reservedTargets.set(targetKey, targetIds);
+      }
       for (const bomb of world.readBombs()) {
         if (
           bomb.owner === playerId &&
           bomb.ownerPassThrough === true &&
-          !playerOverlapsCell(after, bomb.x, bomb.y, movementConfig)
+          !playerOverlapsCell(after, bomb.x, bomb.y, movementConfig) &&
+          !(after.targetCellX === bomb.x && after.targetCellY === bomb.y)
         ) {
           world.updateBomb(bomb.id, { ownerPassThrough: false });
         }

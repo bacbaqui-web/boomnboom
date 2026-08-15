@@ -26,6 +26,7 @@ test("entity snapshot includes exact fixed bomb, item, and flame state", () => {
   world.addPlayer({
     id: "P1", x: 0, y: 0, joined: true, alive: true, isAI: false,
     action: "wait", nickname: "P1", power: 1, range: 2, shield: 0,
+    targetCellX: 1, targetCellY: 0,
   });
   world.addBomb({
     id: "V3-B1", x: 0, y: 0, owner: "P1", range: 2, fuse: 3,
@@ -47,7 +48,16 @@ test("entity snapshot includes exact fixed bomb, item, and flame state", () => {
     send: (_session, type, payload) => sent.push({ type, ...payload }),
   });
   publisher.publish(40);
+  const owner = sent.find((message) => message.type === "owner_snapshot");
   const entities = sent.find((message) => message.type === "entity_snapshot");
+  assert.deepEqual(
+    [owner.player.targetCellX, owner.player.targetCellY],
+    [1, 0],
+  );
+  assert.deepEqual(
+    [entities.players[0].targetCellX, entities.players[0].targetCellY],
+    [1, 0],
+  );
   assert.equal(entities.bombs[0].fuse, 2);
   assert.equal(entities.bombs[0].explodeTick, 100);
   assert.equal(entities.items[0].id, "I1");

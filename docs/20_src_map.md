@@ -37,7 +37,8 @@ Browser
 
 - `shared/net-tick.mjs`: uint32 wrap-safe tick 비교와 target lead window 분류
 - `shared/movement-config.mjs`: fixed unit, 속도, 가속/감속, 충돌 반경과 turn grace
-- `shared/movement-step.mjs`: plain `isBlockedCell` reader를 받는 순수 1-tick 이동·충돌 계산
+- `shared/movement-step.mjs`: 인접 목표 칸 확정, 중심선 이동, 도착 후 연속 진행과
+  plain `isBlockedCell` reader를 받는 순수 1-tick 이동·충돌 계산
 - `tests/fixtures/movement-golden-fixture.mjs`: client/server 공용 결정적 tick fixture
 
 server fixed movement와 client local predictor가 이 코어를 함께 사용한다. canonical
@@ -88,11 +89,12 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 ### Render와 UI
 
 - `TerrainLayer.tsx`: 25청크 fixed DOM, chunk revision selector와 절대좌표 floor pattern
-- `EntityLayer.tsx`: remote player rAF 보간과 bomb/item/flame 렌더링
+- `EntityLayer.tsx`: remote player rAF 보간과 world 좌표의 bomb/item/flame 렌더링
 - V3 remote player는 snapshot buffer를, V2 remote player는 기존 latest-target 보간을 사용
 - `PlayerAvatar.tsx`: player body, nickname, shield와 local action cue 렌더링
 - `EnemyPointers.tsx`, `entity-selectors.ts`: 화면 밖 적 방향과 local bomb 조회
-- `WorldViewport.tsx`: 15×11 overflow crop, local player 중앙 anchor와 rAF `translate3d`
+- `WorldViewport.tsx`: 15×11 overflow crop, local player 중앙 anchor와 rAF `translate3d`;
+  V3 bomb은 player 중심에 고정하지 않고 월드 좌표에 남김
 - `GameHeader.tsx`, `WorldTickHud.tsx`, `GameLegend.tsx`: 연결·박자·범례 UI
 - `JoinOverlay.tsx`, `DeathOverlay.tsx`: 입장과 사망 후 재접속 UI
 - `GameControls.tsx`, `PlayerStatus.tsx`: 조작 입력과 플레이어 상태 UI
@@ -124,7 +126,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `src/main.mjs`: World Owner, Simulation, AI, Scheduler, Gateway와 HTTP lifecycle 조립
 - `src/simulation/fixed-step-loop.mjs`: 30Hz scheduling과 bounded catch-up metric
 - `src/simulation/player-command-buffer.mjs`: V3 sequence/target tick/queue 검증과 input state
-- `src/simulation/player-movement-system.mjs`: shared core 실행과 World Owner commit
+- `src/simulation/player-movement-system.mjs`: shared core 실행, 목표 칸 예약과 World Owner commit
 
 ### `server/src/simulation/game-simulation.mjs`
 
@@ -140,7 +142,8 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 
 ### V3 fixed gameplay system
 
-- `bomb-system.mjs`: fixed bomb placement, owner limit, 90-tick fuse와 action result
+- `bomb-system.mjs`: 확정된 이동 목표 칸 우선 fixed bomb placement, owner limit,
+  90-tick fuse와 action result
 - `explosion-system.mjs`: exact blast/crate/current-AABB damage, AI drop·respawn와 event
 - `player-respawn-system.mjs`: V3 lifeId/teleport, fixed motion과 pre-life queue reset
 - `fixed-aabb.mjs`: player와 bomb/flame/item cell overlap 순수 판정
@@ -311,7 +314,8 @@ serializer를 제거했다.
 - `tests/movement-prediction.test.mjs`: 즉시 target, ack, 연속 입력, reject와 session reset 5건
 - `tests/game-socket.test.mjs`: 닫힌 socket 전송 실패 sequence가 prediction에 안 들어가는지 검증
 - `tests/movement-step.test.mjs`, `server/test/movement-step.test.mjs`: shared fixed-point
-  movement의 client/server golden 결과, sweep, 음수 좌표와 tick wrap 계약
+  movement의 client/server golden 결과, 목표 칸 완주, 중심선, 동적 sweep, 음수 좌표와
+  tick wrap 계약
 - `tests/clock-sync`, `command-timeline`, `local-movement-predictor`,
   `correction-smoother`, `game-socket-v3`, `v3-network-harness`: V3 local prediction,
   replay/reset과 200/300ms RTT·jitter 계약

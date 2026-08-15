@@ -45,10 +45,11 @@ test("movement system commits fixed motion through World Owner and keeps V2 cell
   const player = world.getPlayer("P1");
   assert.deepEqual([player.px, player.py, player.vx, player.vy], [1152, 512, 256, 0]);
   assert.deepEqual([player.x, player.y], [1, 0]);
+  assert.deepEqual([player.targetCellX, player.targetCellY], [1, 0]);
   assert.equal(Number.isInteger(player.x), true);
 });
 
-test("movement system uses the shared sweep and cannot enter a blocking cell", () => {
+test("movement system never commits a blocking adjacent cell", () => {
   const world = createFlatWorld([[1, 0]]);
   addJoinedPlayer(world);
   const system = createPlayerMovementSystem({ world });
@@ -57,9 +58,44 @@ test("movement system uses the shared sweep and cannot enter a blocking cell", (
     system.step(tick, new Map([["P1", { direction: "right" }]]));
   }
   const player = world.getPlayer("P1");
-  assert.equal(player.px, 704);
+  assert.equal(player.px, 512);
   assert.equal(player.vx, 0);
+  assert.equal(player.targetCellX, null);
   assert.deepEqual([player.x, player.y], [0, 0]);
+});
+
+test("movement system completes the committed destination after keyup", () => {
+  const world = createFlatWorld();
+  addJoinedPlayer(world);
+  const system = createPlayerMovementSystem({ world });
+  system.initializePlayer("P1");
+  system.step(1, new Map([["P1", { direction: "right" }]]));
+  for (let tick = 2; tick <= 7; tick += 1) {
+    system.step(tick, new Map([["P1", { direction: "neutral" }]]));
+  }
+  const player = world.getPlayer("P1");
+  assert.deepEqual(
+    [player.px, player.py, player.vx, player.targetCellX, player.targetCellY],
+    [1536, 512, 0, null, null],
+  );
+});
+
+test("two players cannot commit the same destination cell", () => {
+  const world = createFlatWorld();
+  addJoinedPlayer(world, "P1");
+  addJoinedPlayer(world, "P2");
+  world.updatePlayer("P2", { x: 2, y: 0, prevX: 2, prevY: 0 });
+  const system = createPlayerMovementSystem({ world });
+  system.initializePlayer("P1", { resetToCell: true });
+  system.initializePlayer("P2", { resetToCell: true });
+  system.step(1, new Map([
+    ["P1", { direction: "right" }],
+    ["P2", { direction: "left" }],
+  ]));
+  assert.deepEqual(
+    [world.getPlayer("P1").targetCellX, world.getPlayer("P2").targetCellX],
+    [1, null],
+  );
 });
 
 test("owner exits its bomb AABB once, then the same cell blocks re-entry", () => {
@@ -75,11 +111,11 @@ test("owner exits its bomb AABB once, then the same cell blocks re-entry", () =>
     system.step(tick, new Map([["P1", { direction: "right", actions: [] }]]));
   }
   assert.equal(world.readBombs()[0].ownerPassThrough, false);
-  for (let tick = 7; tick <= 16; tick += 1) {
+  for (let tick = 7; tick <= 20; tick += 1) {
     system.step(tick, new Map([["P1", { direction: "left", actions: [] }]]));
   }
   const player = world.getPlayer("P1");
-  assert.equal(player.px, 1344);
+  assert.equal(player.px, 1536);
   assert.equal(player.vx, 0);
 });
 

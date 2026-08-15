@@ -18,6 +18,7 @@ function ownerSnapshot(state, tick, snapshotSeq, ack) {
     player: {
       id: "P1", px: state.px, py: state.py, vx: state.vx, vy: state.vy,
       direction: state.desiredDirection, x: Math.floor(state.px / 1024),
+      targetCellX: state.targetCellX, targetCellY: state.targetCellY,
       y: Math.floor(state.py / 1024), alive: true, joined: true, isAI: false,
       nickname: "P1", power: 1, range: 2, shield: 0, lifeId: 1, teleport: false,
     },
@@ -36,6 +37,7 @@ function runNetworkScenario(rttMs, { stallFrom = null, stallTo = null } = {}) {
   let serverState = {
     px: 512, py: 512, vx: 0, vy: 0, desiredDirection: "neutral",
     queuedTurn: null, queuedTurnUntilTick: 0,
+    targetCellX: null, targetCellY: null,
   };
   predictor.reset(ownerSnapshot(serverState, 0, 0, null));
   const command = timeline.prepareDirection("right", lead);

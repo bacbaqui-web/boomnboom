@@ -17,6 +17,8 @@ function absolutePlayerSample(player, config, { teleport = false, serverTick = 0
     vx: Number.isSafeInteger(player.vx) ? player.vx : 0,
     vy: Number.isSafeInteger(player.vy) ? player.vy : 0,
     direction: player.desiredDirection ?? (player.action === "wait" ? "neutral" : player.action),
+    targetCellX: Number.isSafeInteger(player.targetCellX) ? player.targetCellX : null,
+    targetCellY: Number.isSafeInteger(player.targetCellY) ? player.targetCellY : null,
     x: player.x,
     y: player.y,
     alive: player.alive,

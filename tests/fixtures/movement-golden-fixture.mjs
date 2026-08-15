@@ -9,6 +9,8 @@ export const GOLDEN_EXPECTED_JSON = JSON.stringify([
     desiredDirection: "right",
     queuedTurn: null,
     queuedTurnUntilTick: 0,
+    targetCellX: -1,
+    targetCellY: -1,
   },
   {
     px: -1344,
@@ -18,6 +20,8 @@ export const GOLDEN_EXPECTED_JSON = JSON.stringify([
     desiredDirection: "right",
     queuedTurn: null,
     queuedTurnUntilTick: 0,
+    targetCellX: -1,
+    targetCellY: -1,
   },
   {
     px: -1152,
@@ -27,6 +31,8 @@ export const GOLDEN_EXPECTED_JSON = JSON.stringify([
     desiredDirection: "right",
     queuedTurn: null,
     queuedTurnUntilTick: 0,
+    targetCellX: -1,
+    targetCellY: -1,
   },
   {
     px: -896,
@@ -36,33 +42,41 @@ export const GOLDEN_EXPECTED_JSON = JSON.stringify([
     desiredDirection: "right",
     queuedTurn: null,
     queuedTurnUntilTick: 0,
+    targetCellX: -1,
+    targetCellY: -1,
   },
   {
     px: -640,
     py: -512,
     vx: 256,
     vy: 0,
-    desiredDirection: "right",
+    desiredDirection: "up",
     queuedTurn: "up",
     queuedTurnUntilTick: 3,
+    targetCellX: -1,
+    targetCellY: -1,
   },
   {
     px: -512,
-    py: -768,
+    py: -512,
     vx: 0,
-    vy: -256,
+    vy: 0,
     desiredDirection: "up",
     queuedTurn: null,
-    queuedTurnUntilTick: 3,
+    queuedTurnUntilTick: 4,
+    targetCellX: -1,
+    targetCellY: -2,
   },
   {
     px: -512,
-    py: -928,
+    py: -576,
     vx: 0,
-    vy: -160,
+    vy: -64,
     desiredDirection: "neutral",
     queuedTurn: null,
-    queuedTurnUntilTick: 3,
+    queuedTurnUntilTick: 4,
+    targetCellX: -1,
+    targetCellY: -2,
   },
 ]);
 
@@ -74,7 +88,7 @@ export function runMovementGoldenFixture() {
     { tick: 0xffff_fffe, direction: "right" },
     { tick: 0xffff_ffff, direction: "right" },
     { tick: 0, direction: "up" },
-    { tick: 1, direction: "right" },
+    { tick: 1, direction: "up" },
     { tick: 2, direction: "neutral" },
   ];
   let state = {
@@ -85,6 +99,8 @@ export function runMovementGoldenFixture() {
     desiredDirection: "neutral",
     queuedTurn: null,
     queuedTurnUntilTick: 0,
+    targetCellX: null,
+    targetCellY: null,
   };
   const states = [];
   for (const input of inputs) {

@@ -24,6 +24,8 @@ function initialState(overrides = {}) {
     desiredDirection: "neutral",
     queuedTurn: null,
     queuedTurnUntilTick: 0,
+    targetCellX: null,
+    targetCellY: null,
     ...overrides,
   };
 }
@@ -32,7 +34,7 @@ test("client golden ticks match the fixed-point movement contract byte-for-byte"
   assert.equal(runMovementGoldenFixture(), GOLDEN_EXPECTED_JSON);
 });
 
-test("30Hz movement reaches top speed in four ticks and stops in three ticks", () => {
+test("a pressed direction commits the adjacent cell and keyup still completes it", () => {
   let state = initialState();
   const speeds = [];
   for (let tick = 1; tick <= 4; tick += 1) {
@@ -40,118 +42,103 @@ test("30Hz movement reaches top speed in four ticks and stops in three ticks", (
     speeds.push(state.vx);
   }
   assert.deepEqual(speeds, [64, 128, 192, 256]);
+  assert.deepEqual([state.targetCellX, state.targetCellY], [1, 0]);
 
-  const stoppingSpeeds = [];
-  for (let tick = 5; tick <= 7; tick += 1) {
+  const positions = [];
+  for (let tick = 5; tick <= 6; tick += 1) {
     state = stepMovement(state, { tick, direction: "neutral" }, openWorld).state;
-    stoppingSpeeds.push(state.vx);
+    positions.push(state.px);
   }
-  assert.deepEqual(stoppingSpeeds, [160, 64, 0]);
+  assert.deepEqual(positions, [1408, 1536]);
+  assert.deepEqual(state, initialState({ px: 1536, queuedTurnUntilTick: 0 }));
 });
 
-test("axis sweep stops at the first blocked cell even above one tile per tick", () => {
-  const visited = [];
+test("a blocked adjacent cell is never committed", () => {
   const collisionReader = {
-    isBlockedCell(cellX, cellY) {
-      visited.push(`${cellX},${cellY}`);
-      return cellX === 2 && cellY === 0;
-    },
-  };
-  const fastConfig = {
-    ...DEFAULT_MOVEMENT_CONFIG,
-    maxSpeedPerTick: 3072,
-    accelerationPerTick: 3072,
-    decelerationPerTick: 3072,
+    isBlockedCell: (cellX, cellY) => cellX === 1 && cellY === 0,
   };
   const result = stepMovement(
     initialState(),
     { tick: 1, direction: "right" },
     collisionReader,
-    fastConfig,
   );
 
-  assert.equal(result.state.px, 2 * 1024 - fastConfig.collisionHalfExtent);
+  assert.equal(result.state.px, 512);
   assert.equal(result.state.vx, 0);
-  assert.ok(visited.includes("1,0"));
-  assert.ok(visited.includes("2,0"));
-  assert.deepEqual(result.contacts, [
-    { axis: "x", direction: 1, cellX: 2, cellY: 0 },
-  ]);
+  assert.equal(result.state.targetCellX, null);
+  assert.deepEqual(result.contacts, []);
 });
 
-test("negative-coordinate sweep uses the same boundary rule", () => {
-  const collisionReader = {
-    isBlockedCell: (cellX, cellY) => cellX === -2 && cellY === 0,
-  };
-  const fastConfig = {
-    ...DEFAULT_MOVEMENT_CONFIG,
-    maxSpeedPerTick: 3072,
-    accelerationPerTick: 3072,
-    decelerationPerTick: 3072,
-  };
-  const result = stepMovement(
-    initialState(),
-    { tick: 1, direction: "left" },
-    collisionReader,
-    fastConfig,
-  );
-  assert.equal(result.state.px, -1024 + fastConfig.collisionHalfExtent);
-  assert.equal(result.state.vx, 0);
-});
-
-test("vertical sweep is resolved independently after the horizontal axis", () => {
-  const collisionReader = {
-    isBlockedCell: (cellX, cellY) => cellX === 0 && cellY === 2,
-  };
-  const fastConfig = {
-    ...DEFAULT_MOVEMENT_CONFIG,
-    maxSpeedPerTick: 3072,
-    accelerationPerTick: 3072,
-    decelerationPerTick: 3072,
-  };
-  const result = stepMovement(
-    initialState(),
-    { tick: 1, direction: "down" },
-    collisionReader,
-    fastConfig,
-  );
-  assert.equal(result.state.py, 2 * 1024 - fastConfig.collisionHalfExtent);
-  assert.equal(result.state.vy, 0);
-  assert.deepEqual(result.contacts, [
-    { axis: "y", direction: 1, cellX: 0, cellY: 2 },
-  ]);
-});
-
-test("reversal decelerates to zero before accelerating in the opposite direction", () => {
-  let state = initialState({
-    vx: DEFAULT_MOVEMENT_CONFIG.maxSpeedPerTick,
-    desiredDirection: "right",
-  });
-  const velocities = [];
-  for (let tick = 1; tick <= 5; tick += 1) {
-    state = stepMovement(state, { tick, direction: "left" }, openWorld).state;
-    velocities.push(state.vx);
+test("negative coordinates commit and finish on the same centerline", () => {
+  let state = initialState({ px: -512, py: -512 });
+  state = stepMovement(state, { tick: 1, direction: "left" }, openWorld).state;
+  assert.deepEqual([state.targetCellX, state.targetCellY], [-2, -1]);
+  for (let tick = 2; tick <= 7; tick += 1) {
+    state = stepMovement(state, { tick, direction: "neutral" }, openWorld).state;
   }
-  assert.deepEqual(velocities, [160, 64, 0, -64, -128]);
+  assert.deepEqual([state.px, state.py, state.vx], [-1536, -512, 0]);
 });
 
-test("queued turn expires correctly while uint32 ticks wrap", () => {
-  let state = initialState({
-    px: 0,
-    desiredDirection: "right",
-    queuedTurn: "up",
-    queuedTurnUntilTick: 0,
-  });
-  state = stepMovement(
-    state,
-    { tick: 0xffff_ffff, direction: "right" },
+test("movement locks to the centerline perpendicular to its committed direction", () => {
+  const horizontal = stepMovement(
+    initialState({ py: 640 }),
+    { tick: 1, direction: "right" },
     openWorld,
   ).state;
+  assert.equal(horizontal.py, 512);
+  const vertical = stepMovement(
+    initialState({ px: 640 }),
+    { tick: 1, direction: "down" },
+    openWorld,
+  ).state;
+  assert.equal(vertical.px, 512);
+});
+
+test("holding a direction chains the next cell without stopping at its center", () => {
+  let state = initialState();
+  for (let tick = 1; tick <= 6; tick += 1) {
+    state = stepMovement(state, { tick, direction: "right" }, openWorld).state;
+  }
+  assert.deepEqual([state.px, state.vx, state.targetCellX, state.targetCellY], [1536, 256, 2, 0]);
+  state = stepMovement(state, { tick: 7, direction: "right" }, openWorld).state;
+  assert.equal(state.px, 1792);
+});
+
+test("a perpendicular direction queues until the committed cell is reached across tick wrap", () => {
+  let state = stepMovement(
+    initialState(),
+    { tick: 0xffff_fffc, direction: "right" },
+    openWorld,
+  ).state;
+  state = stepMovement(state, { tick: 0xffff_fffd, direction: "up" }, openWorld).state;
   assert.equal(state.queuedTurn, "up");
-  state = stepMovement(state, { tick: 0, direction: "right" }, openWorld).state;
-  assert.equal(state.queuedTurn, "up");
-  state = stepMovement(state, { tick: 1, direction: "right" }, openWorld).state;
+  for (const tick of [0xffff_fffe, 0xffff_ffff, 0, 1]) {
+    state = stepMovement(state, { tick, direction: "up" }, openWorld).state;
+  }
+  assert.deepEqual([state.px, state.py, state.targetCellX, state.targetCellY], [1536, 512, 1, -1]);
   assert.equal(state.queuedTurn, null);
+});
+
+test("a held reverse direction runs only after the committed cell is reached", () => {
+  let state = stepMovement(initialState(), { tick: 1, direction: "right" }, openWorld).state;
+  state = stepMovement(state, { tick: 2, direction: "left" }, openWorld).state;
+  assert.deepEqual([state.targetCellX, state.px, state.queuedTurn], [1, 704, "left"]);
+  for (let tick = 3; tick <= 6; tick += 1) {
+    state = stepMovement(state, { tick, direction: "left" }, openWorld).state;
+  }
+  assert.deepEqual([state.px, state.targetCellX, state.targetCellY], [1536, 0, 0]);
+});
+
+test("a newly blocked committed target stops at its boundary without crossing", () => {
+  let state = stepMovement(initialState(), { tick: 1, direction: "right" }, openWorld).state;
+  const blockedWorld = {
+    isBlockedCell: (cellX, cellY) => cellX === 1 && cellY === 0,
+  };
+  state = stepMovement(state, { tick: 2, direction: "neutral" }, blockedWorld).state;
+  const result = stepMovement(state, { tick: 3, direction: "neutral" }, blockedWorld);
+  assert.equal(result.state.px, 704);
+  assert.equal(result.state.targetCellX, 1);
+  assert.deepEqual(result.contacts, [{ axis: "x", direction: 1, cellX: 1, cellY: 0 }]);
 });
 
 test("movement does not mutate its state, input, config, or collision reader", () => {

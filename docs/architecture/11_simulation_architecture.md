@@ -59,6 +59,7 @@ MovementState
   desiredDirection      latest input state
   queuedTurn            early corner-turn intent or null
   queuedTurnUntilTick   bounded grace expiry
+  targetCellX/Y         committed adjacent destination or null
   lifeId                join/respawn마다 증가
 ```
 
@@ -76,11 +77,14 @@ stepMovement(state, inputState, collisionReader, movementConfig)
 
 Movement Core가 하는 일:
 
-- desired velocity 계산
+- 입력 시 통과 가능한 인접 칸을 목표로 확정
+- 목표 칸 중심까지 직교축을 현재 칸 중심선에 고정
+- keyup 뒤에도 확정한 목표 칸 중심까지 이동
+- 같은 방향을 누르고 있으면 도착 속도를 보존해 다음 인접 칸을 연속 확정
 - fixed acceleration/deceleration 적용
 - old position에서 next position까지 axis-separated sweep collision
 - wall, crate, confirmed bomb와 player collision 처리
-- corridor center assist와 bounded queued turn 처리
+- 목표 칸 도착 시 bounded queued direction change 처리
 - canonical next movement state 반환
 
 Movement Core가 하지 않는 일:
@@ -93,9 +97,12 @@ Movement Core가 하지 않는 일:
 초기 tuning 기준:
 
 - 최고속도 도달: 약 120ms
-- 정지 감속: 약 80~100ms
 - queued turn grace: 2~3 simulation tick
-- corridor turn 허용 범위: 중심선에서 약 0.15 tile
+- 막힌 인접 칸은 목표로 확정하지 않음
+
+폭탄 설치는 현재 AABB가 가장 많이 겹친 칸이나 반올림한 칸이 아니라
+`targetCellX/Y`를 우선 사용한다. 따라서 이동을 시작한 직후 폭탄을 눌러도 플레이어가
+진행하기로 확정한 칸에 설치된다. 목표가 없을 때만 현재 위치가 속한 칸을 사용한다.
 
 player-player blocking은 현재 gameplay를 보존한다. 이 동적 충돌은 stale remote state
 때문에 local misprediction을 만들 수 있으므로 correction metric으로 따로 관찰한다.

@@ -113,7 +113,9 @@ export function WorldViewport({
     };
   }, [localPositionSource, tileSize]);
 
-  const localBomb = findLocalBomb(entitySnapshot.entities, localPlayer);
+  const localBomb = localPositionSource
+    ? undefined
+    : findLocalBomb(entitySnapshot.entities, localPlayer);
   return (
     <div
       ref={boardRef}
@@ -128,6 +130,7 @@ export function WorldViewport({
               store={store}
               tileSize={tileSize}
               localPlayer={localPlayer}
+              centerLocalBomb={!localPositionSource}
               remotePositionSource={remotePositionSource}
               pendingBombs={pendingBombs}
               explosionFlames={explosionFlames}
