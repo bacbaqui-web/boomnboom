@@ -27,4 +27,9 @@
 
 ### 배포 상태
 
-- 아직 commit, push와 배포를 진행하지 않았다.
+- 제품 변경을 `7d9d2e9`로 commit하고 GitHub에 push했다.
+- Oracle 기존 server를 별도 백업한 뒤 `boomnboom` 서비스만 재시작했다.
+- 공개 WebSocket에서 폭탄 사망→respawn→능력치 시작값→새 sequence 0 이동 입력을
+  실제로 검증했다.
+- client source 변경은 없어 Sites 페이지는 기존 공개 version 60을 유지한다.
+- 공개 URL: `https://bubble-boom-arcade.bacbaqui2.chatgpt.site/`
