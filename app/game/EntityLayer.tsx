@@ -190,9 +190,9 @@ export const EntityLayer = memo(function EntityLayer({
                 width: tileSize * 0.58,
                 height: tileSize * 0.58,
               }}
-              title={entity.type === "bomb" ? "폭탄 수 증가" : entity.type === "shield" ? "폭발 1회 방어" : "폭탄 화력 증가"}
+              title={entity.type === "bomb" ? "폭탄 수 증가" : entity.type === "shield" ? "폭발 1회 방어" : entity.type === "flame" ? "폭탄 화력 증가" : "이동속도 0.5칸/초 증가"}
             >
-              {entity.type === "bomb" ? "●" : entity.type === "shield" ? "◆" : "🔥"}
+              {entity.type === "bomb" ? "●" : entity.type === "shield" ? "◆" : entity.type === "flame" ? "🔥" : "➤"}
             </span>
           );
         }

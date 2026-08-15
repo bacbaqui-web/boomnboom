@@ -2,13 +2,14 @@ import { addNetTicks, isNetTickAtOrAfter } from "../../../shared/net-tick.mjs";
 import { DEFAULT_MOVEMENT_CONFIG } from "../../../shared/movement-config.mjs";
 import { uniqueBlastCells } from "./explosion.mjs";
 import { playerOverlapsCell } from "./fixed-aabb.mjs";
-
-const ITEM_TYPES = ["bomb", "shield", "flame"];
+import { AI_DROP_ITEM_TYPES } from "./item-rules.mjs";
 
 function dropType(player, tick) {
   let value = Math.imul(player.x + tick, 374761393) + Math.imul(player.y - tick, 668265263);
   value = Math.imul(value ^ (value >>> 13), 1274126177);
-  return ITEM_TYPES[((value ^ (value >>> 16)) >>> 0) % ITEM_TYPES.length];
+  return AI_DROP_ITEM_TYPES[
+    ((value ^ (value >>> 16)) >>> 0) % AI_DROP_ITEM_TYPES.length
+  ];
 }
 
 export function createExplosionSystem({

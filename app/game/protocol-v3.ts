@@ -44,6 +44,7 @@ export type V3PlayerSample = {
   power: number;
   range: number;
   shield: number;
+  speedLevel?: number;
   lifeId: number;
   teleport: boolean;
 };
@@ -130,6 +131,8 @@ export function isV3OwnerSnapshot(message: V3ServerMessage): message is V3OwnerS
     Number.isSafeInteger(player.py) &&
     Number.isSafeInteger(player.vx) &&
     Number.isSafeInteger(player.vy) &&
+    (player.speedLevel === undefined ||
+      (Number.isSafeInteger(player.speedLevel) && player.speedLevel >= 0)) &&
     (player.targetCellX == null || Number.isSafeInteger(player.targetCellX)) &&
     (player.targetCellY == null || Number.isSafeInteger(player.targetCellY))
   );
@@ -144,6 +147,8 @@ function isV3PlayerSample(value: unknown): value is V3PlayerSample {
     Number.isSafeInteger(player.py) &&
     Number.isSafeInteger(player.vx) &&
     Number.isSafeInteger(player.vy) &&
+    (player.speedLevel === undefined ||
+      (Number.isSafeInteger(player.speedLevel) && player.speedLevel >= 0)) &&
     (player.targetCellX == null || Number.isSafeInteger(player.targetCellX)) &&
     (player.targetCellY == null || Number.isSafeInteger(player.targetCellY)) &&
     Number.isInteger(player.lifeId) &&
@@ -199,6 +204,7 @@ export function v3SampleToPlayer(sample: V3PlayerSample): PlayerEntity {
     power: sample.power,
     range: sample.range,
     shield: sample.shield,
+    speedLevel: sample.speedLevel,
     nickname: sample.nickname,
     joined: sample.joined,
     alive: sample.alive,

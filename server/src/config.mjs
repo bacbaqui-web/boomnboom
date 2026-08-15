@@ -6,7 +6,7 @@ export function loadServerConfig(environment = process.env) {
   return {
     port: numericValue(environment.PORT, 3300),
     tickMs: numericValue(environment.TICK_MS, 1000),
-    moveIntervalMs: 140,
+    moveIntervalMs: 1000 / 3,
     aiIntervalMs: 500,
     simulationTickRate: 30,
     snapshotRate: 15,

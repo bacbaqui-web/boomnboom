@@ -1,5 +1,10 @@
 import { findSpawn } from "../world/spawn-finder.mjs";
 import { uniqueBlastCells } from "./explosion.mjs";
+import { AI_DROP_ITEM_TYPES, itemStatUpdate } from "./item-rules.mjs";
+import {
+  BASE_SPEED_TILES_PER_SECOND,
+  SPEED_ITEM_BONUS_TILES_PER_SECOND,
+} from "../../../shared/movement-config.mjs";
 
 const DIRECTIONS = {
   up: [0, -1],
@@ -9,7 +14,6 @@ const DIRECTIONS = {
   wait: [0, 0],
 };
 const ACTIONS = new Set(["up", "down", "left", "right", "bomb", "wait"]);
-const ITEM_TYPES = ["bomb", "shield", "flame"];
 
 function legacyHash(x, y) {
   let value = Math.imul(x, 374761393) + Math.imul(y, 668265263) + 0x9e3779b9;
@@ -68,6 +72,7 @@ export class GameSimulation {
       power: 1,
       range: 2,
       shield: 0,
+      speedLevel: 0,
       lastMoveAt: 0,
       nickname: isAI ? `BOOM AI ${entityNumber}` : "",
       joined: isAI,
@@ -130,12 +135,8 @@ export class GameSimulation {
     const y = Math.round(player.y);
     const item = this.#world.getItemAt(x, y);
     if (!item) return false;
-    if (item.type === "bomb") this.#world.updatePlayer(playerId, { power: player.power + 1 });
-    else if (item.type === "shield") {
-      this.#world.updatePlayer(playerId, { shield: player.shield + 1 });
-    } else if (item.type === "flame") {
-      this.#world.updatePlayer(playerId, { range: player.range + 1 });
-    }
+    const update = itemStatUpdate(player, item.type);
+    if (update) this.#world.updatePlayer(playerId, update);
     this.#world.removeItemAt(x, y);
     return true;
   }
@@ -151,7 +152,9 @@ export class GameSimulation {
       this.#world.updatePlayer(player.id, { action: "wait", alive: false });
       return true;
     }
-    const type = ITEM_TYPES[legacyHash(player.x + tick, player.y - tick) % ITEM_TYPES.length];
+    const type = AI_DROP_ITEM_TYPES[
+      legacyHash(player.x + tick, player.y - tick) % AI_DROP_ITEM_TYPES.length
+    ];
     this.#world.setItem({ x: player.x, y: player.y, type });
     const [x, y] = this.#spawn(true);
     this.#world.updatePlayer(player.id, {
@@ -238,7 +241,11 @@ export class GameSimulation {
       this.#world.updatePlayer(playerId, { action: "wait" });
       return { accepted: true, changed: false, publish: true };
     }
-    if (now - player.lastMoveAt < this.#moveIntervalMs) {
+    const speed =
+      BASE_SPEED_TILES_PER_SECOND +
+      (player.speedLevel ?? 0) * SPEED_ITEM_BONUS_TILES_PER_SECOND;
+    const moveIntervalMs = this.#moveIntervalMs * BASE_SPEED_TILES_PER_SECOND / speed;
+    if (now - player.lastMoveAt < moveIntervalMs) {
       return { accepted: false, changed: false, publish: false, reason: "rate_limited" };
     }
     this.#world.updatePlayer(playerId, { lastMoveAt: now });

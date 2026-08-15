@@ -81,6 +81,25 @@ test("movement collects items through the same simulation command", () => {
   assert.equal(world.getItemAt(1, 1), null);
 });
 
+test("legacy rollback movement gains half a tile per second from a speed item", () => {
+  const world = createTestWorld();
+  addPlayer(world, { id: "P1", x: 0, y: 1 });
+  world.updatePlayer("P1", { speedLevel: 0 });
+  world.setItem({ x: 1, y: 1, type: "speed" });
+  const simulation = createGameSimulation({ world, moveIntervalMs: 1000 / 3 });
+
+  assert.equal(simulation.applyAction("P1", "right", { now: 1000 }).changed, true);
+  assert.equal(world.getPlayer("P1").speedLevel, 1);
+  assert.equal(
+    simulation.applyAction("P1", "right", { now: 1280 }).accepted,
+    false,
+  );
+  assert.equal(
+    simulation.applyAction("P1", "right", { now: 1286 }).accepted,
+    true,
+  );
+});
+
 test("bomb placement is immediate and respects the owner bomb limit", () => {
   const world = createTestWorld();
   addPlayer(world, { id: "P1", x: 4, y: 5 });

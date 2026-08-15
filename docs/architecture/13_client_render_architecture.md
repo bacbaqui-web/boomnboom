@@ -77,6 +77,10 @@ lastAckedCommandSeq
 
 local predictor는 `AuthoritativeState + PendingCommands`로 predicted state를 만든다.
 
+owner snapshot의 `speedLevel`이 있으면 기본 3칸/초와 아이템당 +0.5칸/초 설정을
+shared config에서 계산한다. 전환 기간의 구형 server처럼 필드가 없을 때만 기존
+속도를 사용해 client-first 배포 중 prediction mismatch를 막는다.
+
 ### 일반 tick
 
 1. predicted tick의 input state 선택

@@ -128,7 +128,7 @@ owner_snapshot
   snapshotSeq
   serverTick
   lastProcessedCommandSeq
-  player { px, py, vx, vy, direction, targetCellX, targetCellY, alive, lifeId, teleport }
+  player { px, py, vx, vy, direction, targetCellX, targetCellY, speedLevel, alive, lifeId, teleport }
   clock { rttEcho?, nextBeatTick }
 ```
 
@@ -137,12 +137,15 @@ client는 ACK 이하 pending command를 제거하고 나머지를 replay한다.
 `targetCellX/Y`는 keyup 뒤 남은 이동과 이동 중 폭탄의 설치 칸을 client prediction이
 server와 동일하게 replay하기 위한 authoritative movement state다. 두 값은 함께
 정수이거나 함께 `null`이어야 한다.
+`speedLevel`은 server가 확정한 누적 속도 아이템 수다. 필드가 없는 구형 server와
+연결된 새 client는 전환 호환을 위해 구형 이동 설정을 사용하며, 새 server는 항상
+0 이상의 정수를 보낸다.
 
 ## 7. Remote Entity Snapshot
 
 moving entity sample은 다음 원칙을 따른다.
 
-- 각 sample은 absolute `px, py, vx, vy`, `serverTick`, `lifeId`를 가진다.
+- 각 sample은 absolute `px, py, vx, vy`, `speedLevel`, `serverTick`, `lifeId`를 가진다.
 - 움직이는 remote player는 기본 15Hz로 관심 영역 subscriber에게 보낸다.
 - spawn, death, respawn과 forced relocation은 `teleport` 또는 새 `lifeId`를 가진다.
 - stale `snapshotSeq`는 폐기한다.

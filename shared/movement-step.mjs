@@ -386,10 +386,80 @@ export function stepMovement(
   const arrivalState = arrived
     ? { ...moved, vx: acceleratedVx, vy: acceleratedVy }
     : moved;
+  if (!arrived) {
+    return {
+      state: moved,
+      contacts: [...xSweep.contacts, ...ySweep.contacts],
+    };
+  }
+  const continued = continueAfterArrival(
+    arrivalState,
+    input,
+    travelDirection,
+    collisionReader,
+    config,
+  );
+  const unusedVx = acceleratedVx - vx;
+  const unusedVy = acceleratedVy - vy;
+  const continuedTarget = targetForState(continued, config);
+  if (
+    !config.carryRemainderAcrossCells ||
+    !continuedTarget ||
+    directionToTarget(continued, continuedTarget) !== travelDirection ||
+    (unusedVx === 0 && unusedVy === 0)
+  ) {
+    return {
+      state: continued,
+      contacts: [...xSweep.contacts, ...ySweep.contacts],
+    };
+  }
+
+  const carryX = Math.sign(unusedVx) * Math.min(
+    Math.abs(unusedVx),
+    Math.abs(continuedTarget.px - continued.px),
+  );
+  const carryY = Math.sign(unusedVy) * Math.min(
+    Math.abs(unusedVy),
+    Math.abs(continuedTarget.py - continued.py),
+  );
+  const carryXSweep = sweepX(
+    continued.px,
+    continued.py,
+    carryX,
+    collisionReader,
+    config,
+  );
+  const carryYSweep = sweepY(
+    carryXSweep.position,
+    continued.py,
+    carryY,
+    collisionReader,
+    config,
+  );
+  const carried = {
+    ...continued,
+    px: carryXSweep.position,
+    py: carryYSweep.position,
+    vx: carryXSweep.contacts.length > 0 ? 0 : acceleratedVx,
+    vy: carryYSweep.contacts.length > 0 ? 0 : acceleratedVy,
+  };
+  const carriedArrived =
+    carried.px === continuedTarget.px && carried.py === continuedTarget.py;
   return {
-    state: arrived
-      ? continueAfterArrival(arrivalState, input, travelDirection, collisionReader, config)
-      : moved,
-    contacts: [...xSweep.contacts, ...ySweep.contacts],
+    state: carriedArrived
+      ? continueAfterArrival(
+          carried,
+          input,
+          travelDirection,
+          collisionReader,
+          config,
+        )
+      : carried,
+    contacts: [
+      ...xSweep.contacts,
+      ...ySweep.contacts,
+      ...carryXSweep.contacts,
+      ...carryYSweep.contacts,
+    ],
   };
 }

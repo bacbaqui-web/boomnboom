@@ -2,9 +2,9 @@
 
 ## 1. 목적과 현재 차이
 
-이 문서는 Protocol V3 Sprint의 목표 simulation을 정의한다. 현재 production은
-message 도착 시 140ms 간격으로 정수 한 칸을 이동하고 bomb를 1초 world tick에서
-처리한다. 전환 순서와 rollback은 `docs/98_sprint_plan.md`가 소유한다.
+이 문서는 Protocol V3의 현재 simulation을 정의한다. 기본 경로는 30Hz fixed-point
+이동이며 V2 rollback만 message 도착 시 정수 한 칸을 이동한다. 전환 순서와
+rollback은 `docs/98_sprint_plan.md`가 소유한다.
 
 ## 2. 권한과 최소 구성
 
@@ -101,6 +101,8 @@ Movement Core가 하지 않는 일:
 
 초기 tuning 기준:
 
+- 기본 최고속도: 초당 3칸
+- 속도 아이템: 1개당 초당 0.5칸 누적 증가
 - 최고속도 도달: 약 120ms
 - queued turn grace: 2~3 simulation tick
 - moving corner assist: 교차점 중심에서 최대 `320/1024 tile`, 정지 상태에는 미적용
@@ -113,6 +115,11 @@ Movement Core가 하지 않는 일:
 player-player blocking은 현재 gameplay를 보존한다. 이 동적 충돌은 stale remote state
 때문에 local misprediction을 만들 수 있으므로 correction metric으로 따로 관찰한다.
 측정 없이 non-blocking rule로 바꾸지 않는다.
+
+`speedLevel`은 World Owner의 authoritative player stat이다. 서버와 local predictor는
+같은 `movementConfigForSpeedLevel()`을 사용하며, 1024 fixed unit에서 생기는 소수
+오차는 가장 가까운 정수 unit으로 고정한다. 칸 중심 도착 때 남는 같은 방향 속도는
+다음 칸으로 이어서 평균 이동속도가 아이템 표시값과 어긋나지 않게 한다.
 
 ## 6. Input Scheduling과 Buffer
 

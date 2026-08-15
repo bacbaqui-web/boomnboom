@@ -1,5 +1,8 @@
 import { isNetTickAfter } from "../../shared/net-tick.mjs";
-import { DEFAULT_MOVEMENT_CONFIG } from "../../shared/movement-config.mjs";
+import {
+  DEFAULT_MOVEMENT_CONFIG,
+  movementConfigForSpeedLevel,
+} from "../../shared/movement-config.mjs";
 import { stepMovement } from "../../shared/movement-step.mjs";
 import type { PendingCommand } from "./command-timeline.ts";
 import type { Position } from "./position-interpolator.ts";
@@ -68,12 +71,18 @@ export class LocalMovementPredictor {
   #lifeId: number | null = null;
   #maxReplayTicks: number;
   #lastReplayTicks = 0;
+  #movementConfig:
+    | typeof DEFAULT_MOVEMENT_CONFIG
+    | ReturnType<typeof movementConfigForSpeedLevel> = DEFAULT_MOVEMENT_CONFIG;
 
   constructor({ maxReplayTicks = 16 } = {}) {
     this.#maxReplayTicks = maxReplayTicks;
   }
 
   reset(snapshot: V3OwnerSnapshot) {
+    this.#movementConfig = Number.isSafeInteger(snapshot.player.speedLevel)
+      ? movementConfigForSpeedLevel(snapshot.player.speedLevel)
+      : DEFAULT_MOVEMENT_CONFIG;
     this.#state = stateFromOwner(snapshot);
     this.#predictedTick = snapshot.serverTick;
     this.#snapshotSeq = snapshot.snapshotSeq;
@@ -101,7 +110,12 @@ export class LocalMovementPredictor {
     while (isNetTickAfter(targetTick, this.#predictedTick) && steps < this.#maxReplayTicks) {
       const tick = (this.#predictedTick + 1) >>> 0;
       direction = directionAtTick(direction, tick, pending);
-      const result = stepMovement(this.#state, { tick, direction }, collision);
+      const result = stepMovement(
+        this.#state,
+        { tick, direction },
+        collision,
+        this.#movementConfig,
+      );
       this.#state = result.state as LocalMovementState;
       this.#predictedTick = tick;
       collisionCrossing = collisionCrossing || result.contacts.length > 0;
@@ -115,7 +129,12 @@ export class LocalMovementPredictor {
     if (!this.#state) return { position: null, collisionCrossing: false };
     const tick = (this.#predictedTick + 1) >>> 0;
     const direction = directionAtTick(this.#state.desiredDirection, tick, pending);
-    const result = stepMovement(this.#state, { tick, direction }, collision);
+    const result = stepMovement(
+      this.#state,
+      { tick, direction },
+      collision,
+      this.#movementConfig,
+    );
     return {
       position: tilePosition(result.state as LocalMovementState),
       collisionCrossing: result.contacts.length > 0,
@@ -133,6 +152,9 @@ export class LocalMovementPredictor {
     const previousTick = this.#predictedTick;
     const previousLifeId = this.#lifeId;
     this.#state = stateFromOwner(snapshot);
+    this.#movementConfig = Number.isSafeInteger(snapshot.player.speedLevel)
+      ? movementConfigForSpeedLevel(snapshot.player.speedLevel)
+      : DEFAULT_MOVEMENT_CONFIG;
     this.#predictedTick = snapshot.serverTick;
     this.#snapshotSeq = snapshot.snapshotSeq;
     this.#lifeId = snapshot.player.lifeId;

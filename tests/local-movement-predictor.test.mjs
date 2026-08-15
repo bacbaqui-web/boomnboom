@@ -5,7 +5,7 @@ import { LocalMovementPredictor } from "../app/game/local-movement-predictor.ts"
 
 const openWorld = { isBlockedCell: () => false };
 
-function owner({ tick = 0, seq = 0, px = 512, vx = 0, lifeId = 1, ack = null } = {}) {
+function owner({ tick = 0, seq = 0, px = 512, vx = 0, lifeId = 1, ack = null, speedLevel } = {}) {
   return {
     protocol: 3,
     type: "owner_snapshot",
@@ -18,6 +18,7 @@ function owner({ tick = 0, seq = 0, px = 512, vx = 0, lifeId = 1, ack = null } =
       targetCellX: null, targetCellY: null,
       x: Math.floor(px / 1024), y: 0, alive: true, joined: true, isAI: false,
       nickname: "P1", power: 1, range: 2, shield: 0, lifeId, teleport: false,
+      ...(speedLevel === undefined ? {} : { speedLevel }),
     },
   };
 }
@@ -31,6 +32,23 @@ test("keydown predicts exactly one shared step in-frame and scheduler cannot dup
   assert.equal(predictor.advanceTo(1, timeline.pending, openWorld).position.x, 0.0625);
   assert.equal(predictor.advanceTo(1, timeline.pending, openWorld).position.x, 0.0625);
   assert.equal(predictor.advanceTo(2, timeline.pending, openWorld).position.x, 0.1875);
+});
+
+test("prediction uses the authoritative speed level while old snapshots keep legacy speed", () => {
+  function cruiseDistance(speedLevel) {
+    const predictor = new LocalMovementPredictor({ maxReplayTicks: 64 });
+    const timeline = new CommandTimeline();
+    predictor.reset(owner({ speedLevel }));
+    timeline.commit(timeline.prepareDirection("right", 1));
+    predictor.advanceTo(10, timeline.pending, openWorld);
+    const start = predictor.position.x;
+    predictor.advanceTo(40, timeline.pending, openWorld);
+    return predictor.position.x - start;
+  }
+
+  assert.ok(Math.abs(cruiseDistance(0) - 3) < 0.02);
+  assert.ok(Math.abs(cruiseDistance(1) - 3.5) < 0.02);
+  assert.ok(cruiseDistance(undefined) > 7);
 });
 
 test("render preview fills the next fixed tick without mutating prediction", () => {

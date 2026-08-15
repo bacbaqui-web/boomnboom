@@ -18,6 +18,7 @@ export type PlayerEntity = {
   power: number;
   range: number;
   shield: number;
+  speedLevel?: number;
   nickname: string;
   joined: boolean;
   alive: boolean;
@@ -47,7 +48,7 @@ export type ItemEntity = {
   id: string;
   x: number;
   y: number;
-  type: "bomb" | "shield" | "flame";
+  type: "bomb" | "shield" | "flame" | "speed";
 };
 
 export type FlameEntity = {

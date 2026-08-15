@@ -1,20 +1,21 @@
 # BOOMnBOOM 최근 작업 보고서
 
-## 0. 최신 Task — 모든 플레이어 연속 이동, 칸 점프와 전투 효과음
+## 0. 최신 Task — 기본 3칸/초와 속도 아이템
 
-- 원격 사람 플레이어는 기존 V3 15Hz absolute snapshot history를 rAF에서 보간한다.
-- Oracle server 교체 전에도 화면이 끊기지 않도록 구형 AI의 정확한 직교 1칸 update는
-  remote snapshot buffer가 보간하며, respawn/teleport는 기존처럼 즉시 snap한다.
-- AI는 500ms마다 의사결정만 하고, 결정된 방향과 폭탄을 사람과 같은 30Hz Command
-  Buffer와 Movement/Bomb System에서 처리한다. 구형 한 칸 즉시 이동은 product AI
-  경로에서 사용하지 않는다.
-- local, AI와 다른 사람은 보간된 위치가 인접 칸 경계를 통과할 때 175ms 동안 바닥
-  기준 `scale(1.05, 0.9) → translateY(-10px) scale(0.9, 1.05) → 착지`를 재생한다.
-- 이동할 때마다 두 음으로 된 짧은 `뽁뽁` 효과음을 재생하되, 여러 적의 소리가
-  겹치지 않도록 local player 이동에만 적용한다.
-- 폭발음은 pending 폭탄이 아니라 server가 확정한 V3 explosion event를 처음 적용할
-  때만 재생한다. 만료·중복 event는 소리를 내지 않는다.
-- BGM과 효과음은 기존 4단계 음량/음소거 상태를 함께 따른다.
+- 새 player와 AI의 V3 기본 최고속도를 초당 3칸으로 낮췄다.
+- AI 사망 드롭 pool을 폭탄·방어막·화력·속도 4종으로 확장했다.
+- 속도 아이템은 server가 획득을 확정하며 `speedLevel`을 1 올린다. 1개당 최고속도가
+  초당 0.5칸씩 누적 증가하고 별도 상한은 두지 않는다.
+- server movement와 local prediction은 같은 fixed-point 설정을 사용한다. 칸 중심에
+  도착했을 때 남는 같은 방향 이동량을 다음 칸으로 넘겨 표시 속도와 실제 평균
+  속도가 어긋나지 않게 했다.
+- V3 owner/entity snapshot과 V2 rollback projection 모두 `speedLevel`을 전달한다.
+- 전환 중 구형 Oracle server가 `speedLevel`을 보내지 않으면 새 client가 기존 속도를
+  유지하므로 client-first 배포에서도 심한 위치 보정이 생기지 않는다.
+- HUD에는 현재 칸/초, 맵 아이템과 범례에는 초록색 `➤ 속도 +0.5`를 표시한다.
+- 검증: client build/test 81개, server test 74개, ESLint, TypeScript와 diff check가
+  통과했다. 실제 WebSocket join→속도 아이템 획득에서 `speedLevel 0→1`, 최고속도
+  `102→119 fixed-unit/tick`, 아이템 제거를 확인했다.
 
 ---
 

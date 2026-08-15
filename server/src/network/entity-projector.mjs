@@ -12,6 +12,7 @@ export function projectPlayer(player) {
     power: player.power,
     range: player.range,
     shield: player.shield,
+    speedLevel: Number.isSafeInteger(player.speedLevel) ? player.speedLevel : 0,
     nickname: player.nickname,
     joined: player.joined,
     alive: player.alive,

@@ -135,7 +135,7 @@ test("owner exits its bomb AABB once, then the same cell blocks re-entry", () =>
   assert.equal(player.vx, 0);
 });
 
-for (const [type, field] of [["bomb", "power"], ["shield", "shield"], ["flame", "range"]]) {
+for (const [type, field] of [["bomb", "power"], ["shield", "shield"], ["flame", "range"], ["speed", "speedLevel"]]) {
   test(`fixed movement collects ${type} and applies its server-authoritative stat`, () => {
     const world = createFlatWorld();
     addJoinedPlayer(world);
@@ -151,8 +151,29 @@ for (const [type, field] of [["bomb", "power"], ["shield", "shield"], ["flame", 
       );
       if (result.itemChanged) collected = result.collectedItems[0];
     }
-    assert.equal(world.getPlayer("P1")[field], before + 1);
+    assert.equal(world.getPlayer("P1")[field], (before ?? 0) + 1);
     assert.equal(world.getItemAt(1, 0), null);
     assert.equal(collected.item.id, "DROP");
   });
 }
+
+test("speedLevel zero cruises near three tiles per second and each item adds half", () => {
+  function cruiseDistance(speedLevel) {
+    const world = createFlatWorld();
+    addJoinedPlayer(world);
+    world.updatePlayer("P1", { speedLevel });
+    const system = createPlayerMovementSystem({ world });
+    system.initializePlayer("P1");
+    for (let tick = 1; tick <= 10; tick += 1) {
+      system.step(tick, new Map([["P1", { direction: "right", actions: [] }]]));
+    }
+    const start = world.getPlayer("P1").px;
+    for (let tick = 11; tick <= 40; tick += 1) {
+      system.step(tick, new Map([["P1", { direction: "right", actions: [] }]]));
+    }
+    return (world.getPlayer("P1").px - start) / 1024;
+  }
+
+  assert.ok(Math.abs(cruiseDistance(0) - 3) < 0.02);
+  assert.ok(Math.abs(cruiseDistance(1) - 3.5) < 0.02);
+});

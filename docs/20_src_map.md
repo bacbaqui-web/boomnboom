@@ -133,6 +133,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `src/simulation/fixed-step-loop.mjs`: 30Hz scheduling과 bounded catch-up metric
 - `src/simulation/player-command-buffer.mjs`: V3 sequence/target tick/queue 검증과 input state
 - `src/simulation/player-movement-system.mjs`: shared core 실행, 목표 칸 예약과 World Owner commit
+- `src/simulation/item-rules.mjs`: AI 드롭 4종과 아이템별 authoritative stat update
 
 ### `server/src/simulation/game-simulation.mjs`
 
@@ -236,8 +237,9 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 
 ### 현재 gameplay 시간
 
-- 이동 rate limit: 140ms
+- V2 rollback 이동 rate limit: 기본 약 333ms, speed item에 따라 단축
 - V3 fixed movement: 30Hz, entity snapshot 15Hz
+- V3 기본 이동속도: 초당 3칸, speed item 1개당 초당 0.5칸 증가
 - AI interval: 500ms
 - world tick: 기본 1000ms
 - bomb fuse: 3 tick

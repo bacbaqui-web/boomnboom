@@ -10,6 +10,7 @@ export function GameLegend({
       <span><i className="itemIcon bombUp">●</i>폭탄 수</span>
       <span><i className="itemIcon shieldUp">◆</i>방어막</span>
       <span><i className="itemIcon flameUp">🔥</i>화력</span>
+      <span><i className="itemIcon speedUp">➤</i>속도 +0.5</span>
       <span className="bgmTitle">♫ Midnight Tile Loop</span>
       <button
         className={`volumeButton level-${volumeLevel}`}

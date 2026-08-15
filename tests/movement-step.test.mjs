@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_MOVEMENT_CONFIG } from "../shared/movement-config.mjs";
+import {
+  BASE_GAMEPLAY_MOVEMENT_CONFIG,
+  DEFAULT_MOVEMENT_CONFIG,
+  movementConfigForSpeedLevel,
+  speedTilesPerSecond,
+} from "../shared/movement-config.mjs";
 import { stepMovement } from "../shared/movement-step.mjs";
 import {
   addNetTicks,
@@ -32,6 +37,19 @@ function initialState(overrides = {}) {
 
 test("client golden ticks match the fixed-point movement contract byte-for-byte", () => {
   assert.equal(runMovementGoldenFixture(), GOLDEN_EXPECTED_JSON);
+});
+
+test("gameplay speed starts at three tiles per second and gains half a tile per item", () => {
+  assert.equal(speedTilesPerSecond(0), 3);
+  assert.equal(speedTilesPerSecond(1), 3.5);
+  assert.equal(speedTilesPerSecond(4), 5);
+  assert.equal(BASE_GAMEPLAY_MOVEMENT_CONFIG.maxSpeedPerTick, 102);
+  assert.equal(movementConfigForSpeedLevel(1).maxSpeedPerTick, 119);
+  assert.ok(
+    Math.abs(
+      BASE_GAMEPLAY_MOVEMENT_CONFIG.maxSpeedPerTick * 30 / 1024 - 3,
+    ) < 0.02,
+  );
 });
 
 test("a pressed direction commits the adjacent cell and keyup still completes it", () => {

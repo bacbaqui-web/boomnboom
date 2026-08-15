@@ -143,6 +143,7 @@ main.gameActive .gameShell { margin: auto; }
 .item-bomb { border-radius: 50%; background: #ffd43b; color: #111; }
 .item-shield { background: #8eefff; color: #2476b3; }
 .item-flame { background: #ffab4f; }
+.item-speed { background: #adf7b6; color: #167847; }
 .flame { z-index: 14; display: grid; place-items: center; color: #fff05d; font-size: 42px; line-height: 1; text-shadow: 0 0 5px #ff342e, 0 0 12px #ff342e; }
 
 .enemyPointer { position: absolute; z-index: 22; width: 32px; height: 32px; display: grid; place-items: center; transform: translate(-50%, -50%); pointer-events: none; }
@@ -186,6 +187,7 @@ main.gameActive .gameShell { margin: auto; }
 .bombUp { background: #ffd43b; }
 .shieldUp { background: #8eefff; }
 .flameUp { background: #ffab4f; }
+.speedUp { background: #adf7b6; color: #167847; }
 .volumeButton { position: relative; width: 66px; height: 30px; margin-left: auto; padding: 0 !important; display: flex; align-items: center; justify-content: center; border: 2px solid var(--ink); border-radius: 8px; background: white; }
 .speakerBody { position: relative; width: 7px; height: 11px; margin-left: -22px; border-radius: 2px; background: var(--ink); }
 .speakerBody::after { content: ""; position: absolute; left: 5px; top: -3px; border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-left: 10px solid var(--ink); }

@@ -1,6 +1,10 @@
-import { DEFAULT_MOVEMENT_CONFIG } from "../../../shared/movement-config.mjs";
+import {
+  DEFAULT_MOVEMENT_CONFIG,
+  movementConfigForSpeedLevel,
+} from "../../../shared/movement-config.mjs";
 import { stepMovement } from "../../../shared/movement-step.mjs";
 import { playerOverlapsCell } from "./fixed-aabb.mjs";
+import { itemStatUpdate } from "./item-rules.mjs";
 
 function centerForCell(cell, unitsPerTile) {
   return cell * unitsPerTile + unitsPerTile / 2;
@@ -139,11 +143,14 @@ export function createPlayerMovementSystem({
         },
       };
       const before = movementState(player, movementConfig);
+      const playerMovementConfig = Number.isSafeInteger(player.speedLevel)
+        ? movementConfigForSpeedLevel(player.speedLevel)
+        : movementConfig;
       const result = stepMovement(
         before,
         { tick, direction: command.direction },
         collisionReader,
-        movementConfig,
+        playerMovementConfig,
       );
       const action = command.direction === "neutral" ? "wait" : command.direction;
       world.commitPlayerMovement(playerId, result.state, {
@@ -179,12 +186,8 @@ export function createPlayerMovementSystem({
       contactsByPlayer.set(playerId, result.contacts);
       const item = world.getItemAt(after.x, after.y);
       if (item && playerOverlapsCell(after, item.x, item.y, movementConfig)) {
-        if (item.type === "bomb") world.updatePlayer(playerId, { power: after.power + 1 });
-        else if (item.type === "shield") {
-          world.updatePlayer(playerId, { shield: after.shield + 1 });
-        } else if (item.type === "flame") {
-          world.updatePlayer(playerId, { range: after.range + 1 });
-        }
+        const update = itemStatUpdate(after, item.type);
+        if (update) world.updatePlayer(playerId, update);
         world.removeItemAt(item.x, item.y);
         collectedItems.push({ playerId, item });
         itemChanged = true;

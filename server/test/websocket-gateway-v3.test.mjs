@@ -239,7 +239,7 @@ test("V3 movement crossing a chunk boundary sends interest chunks before entity 
   await client.collector.waitFor(
     (message) => message.type === "pong" && message.clientTimeMs === 43,
   );
-  for (let tick = 1; tick <= 70; tick += 1) harness.step(tick);
+  for (let tick = 1; tick <= 180; tick += 1) harness.step(tick);
 
   await client.collector.waitFor((message) => message.type === "interest_update");
   await client.collector.waitFor(
@@ -446,7 +446,7 @@ test("300ms-class delayed escape input is judged at explosion tick, never at a p
   t.after(() => owner.socket.terminate());
   t.after(() => runner.socket.terminate());
   harness.world.updatePlayer(owner.playerId, { x: 0, y: 0 });
-  harness.world.updatePlayer(runner.playerId, { x: 1, y: 0 });
+  harness.world.updatePlayer(runner.playerId, { x: 2, y: 0 });
   harness.movementSystem.initializePlayer(owner.playerId, { resetToCell: true });
   harness.movementSystem.initializePlayer(runner.playerId, { resetToCell: true });
   owner.socket.send(JSON.stringify({
@@ -465,7 +465,7 @@ test("300ms-class delayed escape input is judged at explosion tick, never at a p
     protocol: 3,
     type: "input_state",
     commandSeq: 1,
-    targetTick: 79,
+    targetTick: 75,
     direction: "right",
   }));
   runner.socket.send(JSON.stringify({ protocol: 3, type: "ping", clientTimeMs: 192 }));

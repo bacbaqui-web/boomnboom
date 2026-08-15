@@ -28,6 +28,7 @@ function absolutePlayerSample(player, config, { teleport = false, serverTick = 0
     power: player.power,
     range: player.range,
     shield: player.shield,
+    speedLevel: Number.isSafeInteger(player.speedLevel) ? player.speedLevel : 0,
     lifeId: player.lifeId ?? 1,
     teleport: teleport || player.teleportTick === serverTick,
   };

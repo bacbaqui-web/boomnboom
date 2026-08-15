@@ -1,5 +1,8 @@
 import { isNetTickAfter, netTickDelta } from "../../shared/net-tick.mjs";
-import { DEFAULT_MOVEMENT_CONFIG } from "../../shared/movement-config.mjs";
+import {
+  DEFAULT_MOVEMENT_CONFIG,
+  movementConfigForSpeedLevel,
+} from "../../shared/movement-config.mjs";
 import type { Position } from "./position-interpolator.ts";
 import type { V3EntitySnapshot, V3PlayerSample } from "./protocol-v3.ts";
 
@@ -16,6 +19,7 @@ type TimedRemoteSample = {
   lifeId: number;
   teleport: boolean;
   isAI: boolean;
+  maxSpeedTilesPerTick: number;
 };
 
 function positionOf(sample: V3PlayerSample, unitsPerTile: number): Position {
@@ -105,6 +109,9 @@ export class RemoteSnapshotBuffer {
       lifeId: sample.lifeId,
       teleport: sample.teleport,
       isAI: sample.isAI,
+      maxSpeedTilesPerTick: Number.isSafeInteger(sample.speedLevel)
+        ? movementConfigForSpeedLevel(sample.speedLevel).maxSpeedPerTick / this.#unitsPerTile
+        : this.#maxSpeedTilesPerTick,
     };
     const index = history.findIndex((candidate) => candidate.timelineTick > timelineTick);
     if (index < 0) history.push(entry);
@@ -161,7 +168,7 @@ export class RemoteSnapshotBuffer {
       next.position.y - previous.position.y,
     );
     if (next.isAI && distance <= 1.01) return false;
-    return distance > this.#maxSpeedTilesPerTick * elapsedTicks + 0.25;
+    return distance > next.maxSpeedTilesPerTick * elapsedTicks + 0.25;
   }
 
   clear() {

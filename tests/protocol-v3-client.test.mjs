@@ -38,6 +38,17 @@ test("V3 player projection keeps fixed fields while terrain coordinates stay int
   assert.deepEqual([player.px, player.py, player.vx], [1536, -512, 64]);
 });
 
+test("V3 player projection preserves the authoritative speed item level", () => {
+  const store = initializedStore();
+  store.apply(projectV3StoreMessage(message("owner_snapshot", {
+    snapshotSeq: 8,
+    lastProcessedCommandSeq: 2,
+    player: sample({ speedLevel: 3 }),
+  })));
+  const player = store.getEntitySnapshot().entities.find((entity) => entity.kind === "player");
+  assert.equal(player.speedLevel, 3);
+});
+
 test("owner/entity snapshots use independent sequence domains in either arrival order", () => {
   for (const order of ["owner-first", "entity-first"]) {
     const store = initializedStore();
