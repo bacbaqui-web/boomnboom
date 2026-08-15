@@ -21,5 +21,6 @@ test("client composes the authoritative WebSocket world from focused modules", a
   assert.match(entities, /style=\{cellPosition\((?:flame|entity), tileSize\)\}/);
   assert.match(styles, /\.flame \{[^}]*display: grid;[^}]*place-items: center;/);
   assert.match(page, /WorldTickHud|WorldViewport|GameControls/);
+  assert.doesNotMatch(`${page}\n${viewport}\n${entities}\n${styles}`, /queuedAction|actionCue/);
   assert.doesNotMatch(page, /WebSocket|requestAnimationFrame|Audio\(/);
 });

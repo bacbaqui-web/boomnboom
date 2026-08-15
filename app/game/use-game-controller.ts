@@ -54,7 +54,6 @@ export function useGameController() {
   });
   const [nickname, setNickname] = useState("");
   const [joined, setJoined] = useState(false);
-  const [queuedAction, setQueuedAction] = useState<Action>("wait");
   const [volumeLevel, setVolumeLevel] = useState(1);
   const [localVisualPosition, setLocalVisualPosition] = useState<{ x: number; y: number } | null>(null);
   const [pendingBombs, setPendingBombs] = useState<PendingBombVisual[]>([]);
@@ -287,7 +286,6 @@ export function useGameController() {
   }, [refreshPendingBombs]);
 
   const sendAction = useCallback((action: Action) => {
-    setQueuedAction(action === "stop" ? "wait" : action);
     if (networkProtocol === 3) {
       if (action === "bomb") {
         sendV3ActionCommand("bomb");
@@ -359,7 +357,6 @@ export function useGameController() {
     networkProtocol,
     nickname,
     joined,
-    queuedAction,
     volumeLevel,
     enterWorld,
     respawn,

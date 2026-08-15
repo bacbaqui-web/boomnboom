@@ -8,7 +8,7 @@ import { findLocalBomb } from "./entity-selectors";
 import { playPlayerJump } from "./player-animation";
 import { PlayerAvatar } from "./PlayerAvatar";
 import type { Position } from "./position-interpolator";
-import type { Action, PlayerEntity } from "./protocol";
+import type { PlayerEntity } from "./protocol";
 import type { RemotePositionSource } from "./remote-snapshot-buffer";
 import type { PendingBombVisual } from "./pending-bomb-presenter";
 import type { ExplosionFlameVisual } from "./explosion-event-presenter";
@@ -25,7 +25,6 @@ export function WorldViewport({
   remotePositionSource,
   pendingBombs,
   explosionFlames,
-  queuedAction,
   children,
 }: {
   store: ClientWorldStore;
@@ -37,7 +36,6 @@ export function WorldViewport({
   remotePositionSource: RemotePositionSource | null;
   pendingBombs: readonly PendingBombVisual[];
   explosionFlames: readonly ExplosionFlameVisual[];
-  queuedAction: Action;
   children?: React.ReactNode;
 }) {
   const boardRef = useRef<HTMLDivElement | null>(null);
@@ -147,7 +145,6 @@ export function WorldViewport({
             ref={localAvatarRef}
             player={localPlayer}
             variant="me"
-            queuedAction={queuedAction}
           />
         </span>
       ) : null}
