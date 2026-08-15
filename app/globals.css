@@ -157,7 +157,11 @@ main.gameActive .gameShell { margin: auto; }
 .coordinates { position: absolute; z-index: 25; left: 7px; bottom: 6px; padding: 4px 7px; border-radius: 8px; background: #102755c9; color: white; font: 800 9px monospace; }
 
 .gameOverlay { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: #0b2255c7; backdrop-filter: blur(3px); }
-.gameOverlay.joinOverlay { position: fixed; }
+.gameOverlay.joinOverlay {
+  position: fixed;
+  background: linear-gradient(180deg, #69d0ef 0%, #d8f8fc 100%);
+  backdrop-filter: none;
+}
 .gameOverlay form,
 .gameOverlay > div { width: min(86%, 390px); padding: 26px 28px; display: flex; flex-direction: column; align-items: center; border: 4px solid var(--ink); border-radius: 20px; background: #fff4c9; box-shadow: 0 8px var(--ink); text-align: center; }
 .gameOverlay small { color: #ef4559; font-weight: 1000; letter-spacing: 2px; }
