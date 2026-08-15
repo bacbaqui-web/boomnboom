@@ -5,6 +5,7 @@ import type {
   PlayerEntity,
   ServerMessage,
 } from "./protocol.ts";
+import type { PlayerColorId } from "./player-color.ts";
 
 export type V3Direction = "up" | "down" | "left" | "right" | "neutral";
 
@@ -41,6 +42,7 @@ export type V3PlayerSample = {
   joined: boolean;
   isAI: boolean;
   nickname: string;
+  color?: PlayerColorId;
   power: number;
   range: number;
   shield: number;
@@ -101,6 +103,7 @@ export type V3WorldEvent = V3ServerMessage & {
     y: number;
     isAI: boolean;
     nickname: string;
+    color?: PlayerColorId;
   }[];
 };
 
@@ -214,6 +217,7 @@ export function v3SampleToPlayer(sample: V3PlayerSample): PlayerEntity {
     shield: sample.shield,
     speedLevel: sample.speedLevel,
     nickname: sample.nickname,
+    color: sample.color,
     joined: sample.joined,
     alive: sample.alive,
   };
@@ -250,6 +254,7 @@ export function projectV3StoreMessage(message: V3ServerMessage): ServerMessage |
         range: 1,
         shield: 0,
         nickname: "",
+        color: "blue",
         joined: true,
         alive: true,
       },

@@ -45,6 +45,18 @@ test("Protocol V3 validates bounded movement/action schemas", () => {
     type: "resume",
     resumeToken: "short",
   })).error.code, "invalid_resume_token");
+  assert.equal(validateV3ClientMessage(JSON.stringify({
+    protocol: 3,
+    type: "join",
+    nickname: "P1",
+    color: "orange",
+  })).value.color, "orange");
+  assert.equal(validateV3ClientMessage(JSON.stringify({
+    protocol: 3,
+    type: "join",
+    nickname: "P1",
+    color: "ai-red",
+  })).error.code, "invalid_player_color");
 });
 
 test("Protocol V3 server envelope carries the fixed simulation clock", () => {

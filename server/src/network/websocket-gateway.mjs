@@ -183,7 +183,7 @@ export function createWebSocketGateway({
         sendError(session, { code: "already_joined", message: "이미 참가했습니다." });
         return;
       }
-      const result = simulation.joinPlayer(session.playerId, message.nickname);
+      const result = simulation.joinPlayer(session.playerId, message.nickname, message.color);
       if (!result.accepted) {
         sendError(session, { code: "join_rejected", message: "참가할 수 없습니다." });
         return;

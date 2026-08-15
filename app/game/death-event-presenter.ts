@@ -1,4 +1,5 @@
 import type { V3WorldEvent } from "./protocol-v3.ts";
+import type { PlayerColorId } from "./player-color.ts";
 
 export const PLAYER_DEATH_ANIMATION_MS = 650;
 
@@ -10,6 +11,7 @@ export type DeathVisual = {
   y: number;
   isAI: boolean;
   nickname: string;
+  color?: PlayerColorId;
   expiresAt: number;
 };
 
@@ -38,6 +40,7 @@ export class DeathEventPresenter {
         y: damage.y,
         isAI: Boolean(damage.isAI),
         nickname: typeof damage.nickname === "string" ? damage.nickname : "",
+        color: damage.color,
         expiresAt: now + PLAYER_DEATH_ANIMATION_MS,
       });
       added += 1;

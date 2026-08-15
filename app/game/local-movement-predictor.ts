@@ -181,9 +181,6 @@ export class LocalMovementPredictor {
 
   get bombCell() {
     if (!this.#state) return null;
-    if (this.#state.targetCellX !== null && this.#state.targetCellY !== null) {
-      return { x: this.#state.targetCellX, y: this.#state.targetCellY };
-    }
     return {
       x: Math.floor(this.#state.px / DEFAULT_MOVEMENT_CONFIG.unitsPerTile),
       y: Math.floor(this.#state.py / DEFAULT_MOVEMENT_CONFIG.unitsPerTile),

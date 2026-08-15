@@ -15,6 +15,7 @@ import { LocalMovementPredictor } from "./local-movement-predictor";
 import { MovementPrediction } from "./movement-prediction";
 import { resolveNetworkProtocol } from "./network-protocol";
 import { PendingBombPresenter, type PendingBombVisual } from "./pending-bomb-presenter";
+import type { PlayerColorId } from "./player-color";
 import { PositionInterpolator } from "./position-interpolator";
 import type {
   Action,
@@ -383,7 +384,7 @@ export function useGameController() {
   );
 
   const enterWorld = useCallback(
-    (rawNickname: string) => {
+    (rawNickname: string, color: PlayerColorId) => {
       const clean = rawNickname.trim().slice(0, 12);
       if (!clean) return false;
       setNickname(clean);
@@ -392,7 +393,7 @@ export function useGameController() {
       predictionSessionRef.current = { playerId: "", ackClientSeq: -1, alive: false };
       setLocalVisualPosition(null);
       resetV3Runtime();
-      socketRef.current?.join(clean);
+      socketRef.current?.join(clean, color);
       audioRef.current?.start(snapshot.metadata, snapshot);
       return true;
     },

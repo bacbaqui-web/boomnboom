@@ -2,9 +2,8 @@
 
 ## 1. 목적과 전환 상태
 
-이 문서는 Protocol V3의 구현 계약을 정의한다. production은 현재 V2-only이며 V3는
-아직 구현되지 않았다. V3 server를 V2 호환 상태로 먼저 배포하고 V3 client를 나중에
-전환한다.
+이 문서는 Protocol V3의 구현 계약을 정의한다. production client의 기본값은 V3이며
+`?protocol=2`가 rollback 경로다. Oracle server는 V2와 V3를 함께 수용한다.
 
 V3의 목적은 generic networking framework가 아니라 다음 다섯 가지다.
 
@@ -75,7 +74,8 @@ absolute state라 이전 snapshot delta가 없어도 적용할 수 있다.
 ```
 
 direction은 다음 command까지 유지되는 state다. key repeat마다 인접 칸 command를
-보내지 않는다. 상태 변경은 즉시 보내고 연결 복구용 bounded heartbeat만 허용한다.
+보내지 않는다. 상태 변경은 즉시 보내고, 키를 누르는 동안 250ms bounded heartbeat로
+같은 방향을 다시 보내 connection/runtime reset 뒤에도 held input을 복구한다.
 
 ### `action_command`
 
@@ -94,7 +94,8 @@ tick 순서를 고정한다.
 
 ### 기타
 
-- `join { nickname }`
+- `join { nickname, color }`: `color`는 공용 사람용 8색 ID 중 하나이며, 생략 시
+  `blue`를 사용한다. AI 전용 빨강 값은 사람 join에서 거절한다.
 - `resume { playerId, resumeToken }`
 - `ready { baselineTick, knownChunkRevisions }`
 - `chunk_resync { chunkKey, revision }`
@@ -128,7 +129,7 @@ owner_snapshot
   snapshotSeq
   serverTick
   lastProcessedCommandSeq
-  player { px, py, vx, vy, direction, targetCellX, targetCellY, speedLevel, alive, lifeId, teleport }
+  player { px, py, vx, vy, direction, targetCellX, targetCellY, speedLevel, color, alive, lifeId, teleport }
   clock { rttEcho?, nextBeatTick }
 ```
 

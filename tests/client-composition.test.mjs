@@ -20,7 +20,8 @@ test("client composes the authoritative WebSocket world from focused modules", a
   assert.match(socket, /knownChunkRevisions/);
   assert.match(viewport, /requestAnimationFrame/);
   assert.match(viewport, /cancelAnimationFrame/);
-  assert.match(viewport, /transformAt/);
+  assert.match(viewport, /CameraRuntime\.transformFor/);
+  assert.match(viewport, /paintPlayerTravelPose/);
   assert.match(controller, /new PositionInterpolator\(1000 \/ 30\)/);
   assert.match(controller, /predictor\.previewNext/);
   assert.match(controller, /requestAnimationFrame\(runPredictionFrame\)/);
@@ -33,6 +34,9 @@ test("client composes the authoritative WebSocket world from focused modules", a
   assert.match(styles, /\.flame \{[^}]*display: grid;[^}]*place-items: center;/);
   assert.match(page, /WorldViewport/);
   assert.match(joinOverlay, /gameOverlay joinOverlay/);
+  assert.doesNotMatch(joinOverlay, /ENTER THE WORLD|캐릭터 머리 위에 표시됩니다/);
+  assert.match(joinOverlay, /PLAYER_COLOR_OPTIONS\.map/);
+  assert.match(joinOverlay, /playerColorSamples/);
   assert.match(styles, /\.gameOverlay\.joinOverlay\s*\{\s*position:\s*fixed;/);
   assert.match(page, /GameControls/);
   assert.match(page, /game\.joined \? "gameActive"/);

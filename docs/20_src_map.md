@@ -39,6 +39,7 @@ Browser
 - `shared/movement-config.mjs`: fixed unit, 속도, 가속/감속, 충돌 반경과 turn grace
 - `shared/movement-step.mjs`: 인접 목표 칸 확정, 중심선 이동, 도착 후 연속 진행과
   plain `isBlockedCell` reader를 받는 순수 1-tick 이동·충돌 계산
+- `shared/player-colors.mjs`: 빨강을 제외한 사람용 8색 ID와 기본값·서버 검증
 - `tests/fixtures/movement-golden-fixture.mjs`: client/server 공용 결정적 tick fixture
 
 server fixed movement와 client local predictor가 이 코어를 함께 사용한다. canonical
@@ -72,12 +73,13 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `movement-prediction.ts`: pending input을 한 칸 앞 visual target으로 제한하고 ack/session에 수렴
 - `position-interpolator.ts`: camera/remote 위치와 V3 local 30Hz preview 사이의 시간 기반 보간
 - `camera-runtime.ts`: visual world position을 중앙 camera transform으로 투영
-- `player-animation.ts`: 대기 500ms와 이동 10px jump의 pose·duration 계약
-- `input-runtime.ts`, `use-game-input.ts`: keyboard/pointer 145ms hold, stop/bomb와 cleanup
+- `player-animation.ts`: 실제 칸 중앙 간 위치에서 계산하는 10px jump/squash pose
+- `held-direction-tracker.ts`: 동시에 눌린 키의 우선순위와 pointer 해제 뒤 keyboard 복귀
+- `input-runtime.ts`, `use-game-input.ts`: keyboard/pointer hold, stop/bomb와 cleanup
 - `audio-runtime.ts`: BGM Audio, server clock seek/drift와 4단계 volume
 - `use-game-controller.ts`: Store/Socket/Input/Audio와 nickname/respawn UI state 조립
 - `clock-sync.ts`: V3 server tick, RTT/jitter와 bounded future command lead
-- `input-sampler.ts`: V3 key state 변경을 repeat timer 없이 즉시 direction state로 변환
+- `input-sampler.ts`: V3 key state 변경 즉시 전송과 250ms held-direction heartbeat
 - `command-timeline.ts`: 전송 성공한 V3 command sequence와 bounded pending queue
 - `local-movement-predictor.ts`: shared movement fixed tick, owner restore/pending replay와
   state를 변경하지 않는 다음 1-tick render preview
@@ -94,16 +96,17 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
   revision selector와 절대좌표 floor pattern 유지
 - `EntityLayer.tsx`: remote player rAF 보간과 world 좌표의 bomb/item/flame/사망 렌더링
 - V3 remote player는 snapshot buffer를, V2 remote player는 기존 latest-target 보간을 사용
-- `player-animation.ts`: 바닥 기준 idle/jump pose와 인접 칸 경계 판정; local, AI,
-  다른 플레이어가 같은 렌더 전용 점프를 사용
-- `PlayerAvatar.tsx`: player body, nickname, shield와 local action cue 렌더링
+- `player-animation.ts`: 바닥 기준 idle과 중앙→경계 최고점→다음 중앙의 위치 기반 pose;
+  local, AI, 다른 플레이어가 같은 렌더 전용 점프를 사용
+- `player-color.ts`: 공용 색상 ID를 캐릭터 CSS 변수로 바꾸는 client 표현 adapter
+- `PlayerAvatar.tsx`: 사람별 선택 색상, AI 전용 빨강, nickname과 shield 렌더링
 - `EnemyPointers.tsx`, `entity-selectors.ts`: V2 summary 또는 V3 player snapshot에서
   화면 밖 적 방향을 투영하고 local bomb 조회
 - `WorldViewport.tsx`: 15×11 overflow crop, local player 중앙 anchor와 rAF `translate3d`;
   V3 bomb은 player 중심에 고정하지 않고 월드 좌표에 남기며 local 칸 경계 이동음을 요청
 - `audio-runtime.ts`: BGM 동기화·음량과 local 이동/서버 확정 폭발 합성 효과음
 - `GameLegend.tsx`: 아이템 범례와 BGM 음량 UI
-- `JoinOverlay.tsx`, `DeathOverlay.tsx`: 입장과 사망 후 재접속 UI
+- `JoinOverlay.tsx`, `DeathOverlay.tsx`: 닉네임·사람용 8색 선택 입장과 사망 후 재접속 UI
 - `GameControls.tsx`, `PlayerStatus.tsx`: 조작 입력과 플레이어 상태 UI
 
 ### `app/globals.css`
@@ -150,7 +153,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 
 ### V3 fixed gameplay system
 
-- `bomb-system.mjs`: 확정된 이동 목표 칸 우선 fixed bomb placement, owner limit,
+- `bomb-system.mjs`: authoritative 몸 중심이 속한 칸의 fixed bomb placement, owner limit,
   90-tick fuse와 action result
 - `explosion-system.mjs`: exact blast/crate/current-AABB damage, AI drop·respawn와 event
 - `player-respawn-system.mjs`: V3 lifeId/teleport, fixed motion과 pre-life queue reset
@@ -255,7 +258,7 @@ unversioned, `?protocol=1`과 다른 version은 426으로 거절한다.
 
 ### Client → Server
 
-- `join`, `ready { knownChunkRevisions }`
+- `join { nickname, color }`, `ready { knownChunkRevisions }`
 - `input { clientSeq, action }`, `respawn { clientSeq }`
 - `chunk_resync { chunkKey, revision }`, `ping`
 
@@ -275,7 +278,8 @@ V2 일반 이동 packet에는 tile matrix가 없고, 청크 snapshot은 초기 p
 
 V3는 `/boom-ws?protocol=3` 또는 `boom-v3`로 명시한다. join 뒤 같은 baseline tick의
 world init, 반경 2 청크, owner/entity snapshot을 받고 ready 이후 future-tick
-`input_state`와 `action_command`를 보낸다. server는 30Hz에서 command를 소비하고
+`input_state`와 `action_command`를 보낸다. join의 `color`는 사람용 8색 중 하나이며
+AI 전용 빨강은 허용하지 않는다. server는 30Hz에서 command를 소비하고
 2 tick마다 absolute owner/entity snapshot을 보낸다. bomb/respawn, exact-tick 폭발,
 현재 위치 피해, item과 shield 판정은 server authority로 처리한다. 연결이 끊기면
 10초 lease 안에서 회전형 memory-only token으로 같은 player를 resume한다.

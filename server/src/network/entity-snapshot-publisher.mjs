@@ -25,6 +25,7 @@ function absolutePlayerSample(player, config, { teleport = false, serverTick = 0
     joined: player.joined,
     isAI: player.isAI,
     nickname: player.nickname,
+    color: player.color,
     power: player.power,
     range: player.range,
     shield: player.shield,

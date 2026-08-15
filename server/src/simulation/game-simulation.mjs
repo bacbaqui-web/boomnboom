@@ -5,6 +5,10 @@ import {
   BASE_SPEED_TILES_PER_SECOND,
   SPEED_ITEM_BONUS_TILES_PER_SECOND,
 } from "../../../shared/movement-config.mjs";
+import {
+  DEFAULT_HUMAN_PLAYER_COLOR,
+  normalizeHumanPlayerColor,
+} from "../../../shared/player-colors.mjs";
 
 const DIRECTIONS = {
   up: [0, -1],
@@ -75,6 +79,7 @@ export class GameSimulation {
       speedLevel: 0,
       lastMoveAt: 0,
       nickname: isAI ? `BOOM AI ${entityNumber}` : "",
+      color: isAI ? "ai-red" : DEFAULT_HUMAN_PLAYER_COLOR,
       joined: isAI,
       alive: isAI,
     };
@@ -88,12 +93,13 @@ export class GameSimulation {
     return this.#world.removePlayer(playerId);
   }
 
-  joinPlayer(playerId, nickname) {
+  joinPlayer(playerId, nickname, color = DEFAULT_HUMAN_PLAYER_COLOR) {
     const player = this.#world.getPlayer(playerId);
     if (!player || player.joined) return { accepted: false, publish: false };
     this.#world.updatePlayer(playerId, {
       nickname:
         String(nickname || "").trim().slice(0, 12) || `플레이어${playerId.slice(1)}`,
+      color: normalizeHumanPlayerColor(color),
       joined: true,
       alive: true,
       action: "wait",

@@ -97,13 +97,13 @@ export function createV3SessionFlow({
     session.initialized = true;
   }
 
-  function join(session, nickname) {
+  function join(session, nickname, color) {
     if (session.initialized || session.playerId) {
       sendError(session, { code: "already_joined", message: "이미 참가했습니다." });
       return;
     }
     const player = simulation.addPlayer();
-    const result = simulation.joinPlayer(player.id, nickname);
+    const result = simulation.joinPlayer(player.id, nickname, color);
     if (!result.accepted) {
       simulation.removePlayer(player.id);
       sendError(session, { code: "join_rejected", message: "참가할 수 없습니다." });
@@ -232,7 +232,7 @@ export function createV3SessionFlow({
         return;
       }
       const message = parsed.value;
-      if (message.type === "join") return join(session, message.nickname);
+      if (message.type === "join") return join(session, message.nickname, message.color);
       if (message.type === "resume") return resume(session, message.resumeToken);
       if (message.type === "ping") {
         send(session, "pong", { clientTimeMs: message.clientTimeMs });

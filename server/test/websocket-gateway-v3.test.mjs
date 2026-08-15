@@ -127,11 +127,14 @@ async function openSocket(url, protocols) {
 async function joinV3(harness, url) {
   const client = await openSocket(`${url}?protocol=3`);
   const hello = await client.collector.waitFor((message) => message.type === "hello");
-  client.socket.send(JSON.stringify({ protocol: 3, type: "join", nickname: "V3 테스터" }));
+  client.socket.send(JSON.stringify({
+    protocol: 3, type: "join", nickname: "V3 테스터", color: "silver",
+  }));
   const joinResult = await client.collector.waitFor((message) => message.type === "join_result");
   const worldInit = await client.collector.waitFor((message) => message.type === "world_init");
   const playerId = worldInit.playerId;
-  await client.collector.waitFor((message) => message.type === "entity_snapshot");
+  const baseline = await client.collector.waitFor((message) => message.type === "entity_snapshot");
+  assert.equal(baseline.players.find((player) => player.id === playerId)?.color, "silver");
   const revisions = Object.fromEntries(
     client.collector.messages
       .filter((message) => message.type === "chunk_snapshot" && message.reason === "initial")

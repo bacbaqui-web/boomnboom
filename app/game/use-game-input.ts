@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { InputRuntime } from "./input-runtime";
 import { InputSampler } from "./input-sampler";
+import { HeldDirectionTracker } from "./held-direction-tracker";
 import type { Action, MoveAction } from "./protocol";
 
 const keyDirections: Record<string, MoveAction> = {
@@ -30,46 +31,78 @@ export function useGameInput(
       : new InputRuntime(send),
     [mode, send],
   );
+  const enabledRef = useRef(enabled);
+  const heldDirectionRef = useRef(new HeldDirectionTracker());
+
+  const resumeHeldDirection = useCallback(() => {
+    if (!enabledRef.current) return;
+    const direction = heldDirectionRef.current.activeDirection;
+    if (direction) runtime.start(direction);
+    else runtime.stop();
+  }, [runtime]);
 
   const startMoving = useCallback((direction: MoveAction) => {
-    runtime.start(direction);
+    heldDirectionRef.current.pressPointer(direction);
+    if (enabledRef.current) runtime.start(direction);
   }, [runtime]);
-  const stopMoving = useCallback(() => runtime.stop(), [runtime]);
-  const bomb = useCallback(() => runtime.bomb(), [runtime]);
+  const stopMoving = useCallback(() => {
+    heldDirectionRef.current.releasePointer();
+    resumeHeldDirection();
+  }, [resumeHeldDirection]);
+  const bomb = useCallback(() => {
+    if (enabledRef.current) runtime.bomb();
+  }, [runtime]);
 
   useEffect(() => {
-    if (!enabled) {
-      runtime.destroy();
-      return;
-    }
+    enabledRef.current = enabled;
+    if (enabled) resumeHeldDirection();
+    else runtime.destroy();
+  }, [enabled, resumeHeldDirection, runtime]);
+
+  useEffect(() => {
+    const heldDirection = heldDirectionRef.current;
     const onKeyDown = (event: KeyboardEvent) => {
       const direction = keyDirections[event.key.toLowerCase()];
       if (direction) {
+        if (!enabledRef.current) return;
         event.preventDefault();
-        if (!event.repeat) runtime.start(direction);
+        const keyId = event.code || event.key.toLowerCase();
+        heldDirectionRef.current.pressKey(keyId, direction);
+        resumeHeldDirection();
       } else if (event.key === " ") {
+        if (!enabledRef.current) return;
         event.preventDefault();
         if (!event.repeat) runtime.bomb();
       }
     };
     const onKeyUp = (event: KeyboardEvent) => {
-      if (keyDirections[event.key.toLowerCase()]) runtime.stop();
+      if (!keyDirections[event.key.toLowerCase()]) return;
+      heldDirectionRef.current.releaseKey(event.code || event.key.toLowerCase());
+      resumeHeldDirection();
     };
-    const stop = () => runtime.stop();
+    const stopPointer = () => {
+      heldDirectionRef.current.releasePointer();
+      resumeHeldDirection();
+    };
+    const reset = () => {
+      heldDirectionRef.current.reset();
+      runtime.stop();
+    };
     addEventListener("keydown", onKeyDown);
     addEventListener("keyup", onKeyUp);
-    addEventListener("pointerup", stop);
-    addEventListener("pointercancel", stop);
-    addEventListener("blur", stop);
+    addEventListener("pointerup", stopPointer);
+    addEventListener("pointercancel", stopPointer);
+    addEventListener("blur", reset);
     return () => {
       removeEventListener("keydown", onKeyDown);
       removeEventListener("keyup", onKeyUp);
-      removeEventListener("pointerup", stop);
-      removeEventListener("pointercancel", stop);
-      removeEventListener("blur", stop);
+      removeEventListener("pointerup", stopPointer);
+      removeEventListener("pointercancel", stopPointer);
+      removeEventListener("blur", reset);
+      heldDirection.reset();
       runtime.destroy();
     };
-  }, [enabled, runtime]);
+  }, [resumeHeldDirection, runtime]);
 
   return { startMoving, stopMoving, bomb };
 }

@@ -29,6 +29,18 @@ test("Protocol V2 rejects malformed, unsupported, and invalid-schema messages", 
     }).error.code,
     "invalid_revisions",
   );
+  assert.equal(
+    validateV2ClientMessage({
+      protocol: 2, type: "join", nickname: "P1", color: "red",
+    }).error.code,
+    "invalid_player_color",
+  );
+  assert.equal(
+    validateV2ClientMessage({
+      protocol: 2, type: "join", nickname: "P1", color: "cyan",
+    }).value.color,
+    "cyan",
+  );
 });
 
 test("chunk delta carries the exact revision gap and changed cells", () => {

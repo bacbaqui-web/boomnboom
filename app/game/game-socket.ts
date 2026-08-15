@@ -15,6 +15,7 @@ import {
   type V3WorldEvent,
 } from "./protocol-v3.ts";
 import { ClientWorldStore } from "./world-store.ts";
+import { DEFAULT_PLAYER_COLOR, playerColorId, type PlayerColorId } from "./player-color.ts";
 
 export const ORACLE_WS_URL = "wss://insight.magamiscom.ing/boom-ws";
 
@@ -38,6 +39,7 @@ export class GameSocket {
   #retryTimer: ReturnType<typeof setTimeout> | null = null;
   #stopped = false;
   #nickname = "";
+  #playerColor: PlayerColorId = DEFAULT_PLAYER_COLOR;
   #sessionId = "";
   #resumeToken = "";
   #clientSeq = 0;
@@ -108,8 +110,9 @@ export class GameSocket {
     if (this.#protocol === 3) this.#onV3Reset();
   }
 
-  join(nickname: string) {
+  join(nickname: string, color: PlayerColorId = DEFAULT_PLAYER_COLOR) {
     this.#nickname = nickname.trim().slice(0, 12);
+    this.#playerColor = playerColorId(color);
     this.#sendJoin();
   }
 
@@ -277,7 +280,12 @@ export class GameSocket {
 
   #sendJoin() {
     if (!this.#nickname || !this.#sessionId) return;
-    this.#send({ protocol: this.#protocol, type: "join", nickname: this.#nickname });
+    this.#send({
+      protocol: this.#protocol,
+      type: "join",
+      nickname: this.#nickname,
+      color: this.#playerColor,
+    });
   }
 
   #sendPing() {

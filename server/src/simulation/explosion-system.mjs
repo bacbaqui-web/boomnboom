@@ -13,7 +13,7 @@ function dropType(player, tick) {
 }
 
 function damageVisual(player, movementConfig) {
-  return {
+  const visual = {
     playerId: player.id,
     x: Number.isSafeInteger(player.px)
       ? player.px / movementConfig.unitsPerTile - 0.5
@@ -24,6 +24,7 @@ function damageVisual(player, movementConfig) {
     isAI: player.isAI,
     nickname: player.nickname,
   };
+  return player.color ? { ...visual, color: player.color } : visual;
 }
 
 export function createExplosionSystem({

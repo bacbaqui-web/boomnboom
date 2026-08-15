@@ -2,9 +2,6 @@ import { addNetTicks, isNetTickAfter } from "../../../shared/net-tick.mjs";
 import { DEFAULT_MOVEMENT_CONFIG } from "../../../shared/movement-config.mjs";
 
 function cellForPlayer(player, unitsPerTile) {
-  if (Number.isSafeInteger(player.targetCellX) && Number.isSafeInteger(player.targetCellY)) {
-    return { x: player.targetCellX, y: player.targetCellY };
-  }
   const px = Number.isSafeInteger(player.px)
     ? player.px
     : player.x * unitsPerTile + unitsPerTile / 2;

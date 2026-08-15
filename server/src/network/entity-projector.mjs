@@ -14,6 +14,7 @@ export function projectPlayer(player) {
     shield: player.shield,
     speedLevel: Number.isSafeInteger(player.speedLevel) ? player.speedLevel : 0,
     nickname: player.nickname,
+    color: player.color,
     joined: player.joined,
     alive: player.alive,
   };

@@ -47,7 +47,7 @@ test("fixed bomb placement uses the authoritative tick position and exact 90 tic
   assert.equal(world.readBombs()[0].fuse, 2);
 });
 
-test("moving players place bombs in their committed destination cell", () => {
+test("moving players place bombs in the cell containing most of their body", () => {
   const world = flatWorld();
   addPlayer(world);
   world.updatePlayer("P1", {
@@ -58,10 +58,10 @@ test("moving players place bombs in their committed destination cell", () => {
   const system = createBombSystem({ world });
   const placed = system.step(10, commands());
   assert.equal(placed.results[0].accepted, true);
-  assert.deepEqual(placed.results[0].cell, { x: 3, y: 3 });
+  assert.deepEqual(placed.results[0].cell, { x: 2, y: 3 });
   assert.deepEqual(
     [world.readBombs()[0].x, world.readBombs()[0].y],
-    [3, 3],
+    [2, 3],
   );
 });
 

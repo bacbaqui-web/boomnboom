@@ -5,7 +5,12 @@ import { CameraRuntime } from "./camera-runtime";
 import { EnemyPointers } from "./EnemyPointers";
 import { EntityLayer } from "./EntityLayer";
 import { findLocalBomb, selectEnemySummaries } from "./entity-selectors";
-import { crossedAdjacentCell, playerCell, playPlayerJump } from "./player-animation";
+import {
+  clearPlayerTravelPose,
+  crossedAdjacentCell,
+  paintPlayerTravelPose,
+  playerCell,
+} from "./player-animation";
 import { PlayerAvatar } from "./PlayerAvatar";
 import type { Position } from "./position-interpolator";
 import type { PlayerEntity } from "./protocol";
@@ -46,9 +51,9 @@ export function WorldViewport({
   const boardRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const localAvatarRef = useRef<HTMLSpanElement | null>(null);
-  const localJumpRef = useRef<Animation | null>(null);
   const localVisualCellRef = useRef<{ x: number; y: number } | null>(null);
-  const lastLocalJumpAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const previousLocalVisualRef = useRef<Position | null>(null);
+  const lastLocalStepAtRef = useRef(Number.NEGATIVE_INFINITY);
   const cameraRef = useRef(new CameraRuntime(175));
   const previousPlayerRef = useRef<{ x: number; y: number; alive: boolean } | null>(null);
   const [tileSize, setTileSize] = useState(0);
@@ -77,11 +82,7 @@ export function WorldViewport({
       (!previous.alive && localPlayer.alive) ||
       distance > 2;
     cameraRef.current.setTarget(localVisualPosition.x, localVisualPosition.y, performance.now(), { teleport });
-    if (previous?.alive && localPlayer.alive && distance > 0 && !teleport && localAvatarRef.current) {
-      localJumpRef.current = playPlayerJump(localAvatarRef.current, localJumpRef.current);
-    } else if (teleport) {
-      localJumpRef.current?.cancel();
-    }
+    if (teleport) previousLocalVisualRef.current = null;
     previousPlayerRef.current = {
       x: localVisualPosition.x,
       y: localVisualPosition.y,
@@ -91,26 +92,23 @@ export function WorldViewport({
 
   useEffect(() => {
     let frame = 0;
+    const localAvatarElement = localAvatarRef.current;
     localVisualCellRef.current = null;
+    previousLocalVisualRef.current = null;
     const paint = (now: number) => {
       const board = boardRef.current;
       const root = rootRef.current;
       if (board && root && tileSize > 0) {
+        let visual: Position;
         if (localPositionSource) {
-          const visual = localPositionSource.sample(now);
+          visual = localPositionSource.sample(now);
           const cell = playerCell(visual);
           if (
             localPlayer?.alive &&
             crossedAdjacentCell(localVisualCellRef.current, cell) &&
-            now - lastLocalJumpAtRef.current >= 90
+            now - lastLocalStepAtRef.current >= 90
           ) {
-            if (localAvatarRef.current) {
-              localJumpRef.current = playPlayerJump(
-                localAvatarRef.current,
-                localJumpRef.current,
-              );
-            }
-            lastLocalJumpAtRef.current = now;
+            lastLocalStepAtRef.current = now;
             onLocalStep?.();
           }
           localVisualCellRef.current = cell;
@@ -121,20 +119,29 @@ export function WorldViewport({
               tileSize,
             );
         } else {
-          root.style.transform = cameraRef.current.transformAt(
-              now,
+          visual = cameraRef.current.sample(now);
+          root.style.transform = CameraRuntime.transformFor(
+              visual,
               board.clientWidth,
               board.clientHeight,
               tileSize,
             );
         }
+        if (localAvatarRef.current) {
+          paintPlayerTravelPose(
+            localAvatarRef.current,
+            previousLocalVisualRef.current,
+            visual,
+          );
+        }
+        previousLocalVisualRef.current = visual;
       }
       frame = requestAnimationFrame(paint);
     };
     frame = requestAnimationFrame(paint);
     return () => {
       cancelAnimationFrame(frame);
-      localJumpRef.current?.cancel();
+      clearPlayerTravelPose(localAvatarElement);
     };
   }, [localPlayer?.alive, localPositionSource, onLocalStep, tileSize]);
 

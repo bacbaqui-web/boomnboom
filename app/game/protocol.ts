@@ -1,3 +1,5 @@
+import type { PlayerColorId } from "./player-color";
+
 export const PROTOCOL_VERSION = 2 as const;
 export const CHUNK_SIZE = 16;
 export const PRELOAD_CHUNK_COUNT = 25;
@@ -20,6 +22,7 @@ export type PlayerEntity = {
   shield: number;
   speedLevel?: number;
   nickname: string;
+  color?: PlayerColorId;
   joined: boolean;
   alive: boolean;
   px?: number;

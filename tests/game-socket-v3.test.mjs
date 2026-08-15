@@ -49,7 +49,7 @@ test("GameSocket V3 completes baseline/ready and writes typed input only on an o
       return fakeSocket;
     },
   });
-  socket.join("P1");
+  socket.join("P1", "purple");
   socket.connect();
   fakeSocket.onmessage({ data: JSON.stringify(envelope("hello", { sessionId: "P1" })) });
   fakeSocket.onmessage({ data: JSON.stringify(envelope("world_init", {
@@ -67,7 +67,9 @@ test("GameSocket V3 completes baseline/ready and writes typed input only on an o
 
   assert.match(createdUrl, /protocol=3/);
   assert.equal(createdProtocol, "boom-v3");
-  assert.ok(sent.some((message) => message.type === "join" && message.protocol === 3));
+  assert.ok(sent.some(
+    (message) => message.type === "join" && message.protocol === 3 && message.color === "purple",
+  ));
   assert.ok(sent.some((message) => message.type === "ready" && message.baselineTick === 0));
   assert.equal(owners.length, 1);
   assert.equal(entities.length, 1);
@@ -120,7 +122,7 @@ test("GameSocket reconnects with memory-only resume first and falls back to clea
       return fake;
     },
   });
-  socket.join("P1");
+  socket.join("P1", "orange");
   socket.connect();
   sockets[0].onmessage({ data: JSON.stringify(envelope("hello", {
     sessionId: "C1", serverTick: 500_000,
@@ -152,7 +154,9 @@ test("GameSocket reconnects with memory-only resume first and falls back to clea
   sockets[2].onmessage({ data: JSON.stringify(envelope("resume_result", {
     accepted: false, reason: "resume_expired",
   })) });
-  assert.equal(sockets[2].sent.at(-1).type, "join");
+  assert.deepEqual(sockets[2].sent.at(-1), {
+    protocol: 3, type: "join", nickname: "P1", color: "orange",
+  });
   socket.disconnect();
 });
 

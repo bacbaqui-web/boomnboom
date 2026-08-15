@@ -102,9 +102,9 @@ main.gameActive .gameShell { margin: auto; }
   transform-origin: 50% 100%;
   animation: fighterIdleSquash 500ms ease-in-out infinite;
 }
-.fighter.me { background: var(--blue); box-shadow: inset -5px -6px #1382ca, inset 5px 4px #8ee8ff; }
+.fighter.me,
+.fighter.rival { background: var(--fighter-color, var(--blue)); box-shadow: inset -5px -6px var(--fighter-shadow, #1382ca), inset 5px 4px var(--fighter-highlight, #8ee8ff); }
 .fighter.ai { background: var(--coral); box-shadow: inset -5px -6px #cf3d53, inset 5px 4px #ffaaa4; }
-.fighter.rival { background: #76e496; }
 .fighter em {
   position: absolute;
   bottom: 108%;
@@ -171,6 +171,11 @@ main.gameActive .gameShell { margin: auto; }
 .gameOverlay input:focus { box-shadow: 0 0 0 4px #22b5ef55; }
 .gameOverlay button { margin-top: 12px; padding: 11px 22px; border: 3px solid var(--ink); border-radius: 10px; background: var(--yellow); box-shadow: 0 4px var(--ink); font-weight: 1000; }
 .gameOverlay button:disabled { opacity: 0.45; cursor: not-allowed; }
+.playerColorPicker { width: 100%; margin: 17px 0 0; padding: 0; border: 0; }
+.playerColorPicker legend { width: 100%; margin-bottom: 8px; color: #52647d; font-size: 11px; font-weight: 900; text-align: center; }
+.playerColorSamples { display: grid; grid-template-columns: repeat(8, 1fr); gap: 7px; }
+.gameOverlay .playerColorSwatch { aspect-ratio: 1; min-width: 0; margin: 0; padding: 0; border: 3px solid #ffffff; border-radius: 50%; background: var(--fighter-color); box-shadow: inset -3px -3px var(--fighter-shadow), inset 3px 3px var(--fighter-highlight), 0 0 0 2px #8090a5; }
+.gameOverlay .playerColorSwatch.selected { box-shadow: inset -3px -3px var(--fighter-shadow), inset 3px 3px var(--fighter-highlight), 0 0 0 3px var(--ink), 0 0 0 6px #ffffff; transform: translateY(-2px); }
 .gameOverlay.death { background: #5b0c27c9; }
 .gameOverlay.death button { background: var(--coral); color: white; }
 

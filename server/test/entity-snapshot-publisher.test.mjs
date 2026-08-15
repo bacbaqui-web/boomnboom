@@ -25,7 +25,8 @@ test("entity snapshot includes exact fixed bomb, item, and flame state", () => {
   });
   world.addPlayer({
     id: "P1", x: 0, y: 0, joined: true, alive: true, isAI: false,
-    action: "wait", nickname: "P1", power: 1, range: 2, shield: 0, speedLevel: 2,
+    action: "wait", nickname: "P1", color: "cyan",
+    power: 1, range: 2, shield: 0, speedLevel: 2,
     targetCellX: 1, targetCellY: 0,
   });
   world.addBomb({
@@ -60,6 +61,8 @@ test("entity snapshot includes exact fixed bomb, item, and flame state", () => {
   );
   assert.equal(owner.player.speedLevel, 2);
   assert.equal(entities.players[0].speedLevel, 2);
+  assert.equal(owner.player.color, "cyan");
+  assert.equal(entities.players[0].color, "cyan");
   assert.equal(entities.bombs[0].fuse, 2);
   assert.equal(entities.bombs[0].explodeTick, 100);
   assert.equal(entities.items[0].id, "I1");

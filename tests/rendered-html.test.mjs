@@ -18,6 +18,9 @@ test("server-renders the BOOMnBOOM game shell without the removed top HUD", asyn
   assert.match(html, /Oracle 게임 서버에 접속하는 중/);
   assert.doesNotMatch(html, /다음 턴까지 1초 게이지|부드럽게 움직이는 공유 월드|서버 연결됨/);
   assert.doesNotMatch(html, /LIVE WORLD|접속 즉시 같은 맵에 스폰/);
+  assert.match(html, /닉네임을 정해주세요/);
+  assert.doesNotMatch(html, /ENTER THE WORLD|캐릭터 머리 위에 표시됩니다/);
+  assert.equal(html.match(/playerColorSwatch/g)?.length, 8);
   assert.doesNotMatch(html, /재생성/);
   assert.match(html, /og-world\.png/);
 });

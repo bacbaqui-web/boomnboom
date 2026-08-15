@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
-import { crossedAdjacentCell, playerCell, playPlayerJump } from "./player-animation";
+import { clearPlayerTravelPose, paintPlayerTravelPose } from "./player-animation";
 import { PlayerAvatar } from "./PlayerAvatar";
 import type { PendingBombVisual } from "./pending-bomb-presenter";
 import type { ExplosionFlameVisual } from "./explosion-event-presenter";
@@ -22,11 +22,9 @@ function AnimatedPlayer({
 }) {
   const elementRef = useRef<HTMLSpanElement | null>(null);
   const avatarRef = useRef<HTMLSpanElement | null>(null);
-  const jumpRef = useRef<Animation | null>(null);
   const motionRef = useRef(new PositionInterpolator(135));
   const previousRef = useRef({ x: player.x, y: player.y });
-  const visualCellRef = useRef<{ x: number; y: number } | null>(null);
-  const lastJumpAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const previousVisualRef = useRef<{ x: number; y: number } | null>(null);
 
   useLayoutEffect(() => {
     if (remotePositionSource) return;
@@ -34,30 +32,19 @@ function AnimatedPlayer({
     const distance = Math.hypot(player.x - previous.x, player.y - previous.y);
     const teleport = distance > 2;
     motionRef.current.setTarget(player.x, player.y, performance.now(), { teleport });
-    if (distance > 0 && !teleport && avatarRef.current) {
-      jumpRef.current = playPlayerJump(avatarRef.current, jumpRef.current);
-    } else if (teleport) {
-      jumpRef.current?.cancel();
-    }
+    if (teleport) previousVisualRef.current = null;
     previousRef.current = { x: player.x, y: player.y };
   }, [player.x, player.y, remotePositionSource]);
 
   useEffect(() => {
     let frame = 0;
+    const avatarElement = avatarRef.current;
     const paint = (now: number) => {
       const visual = remotePositionSource?.sample(player.id, now) ?? motionRef.current.sample(now);
-      if (remotePositionSource && visual) {
-        const cell = playerCell(visual);
-        if (
-          crossedAdjacentCell(visualCellRef.current, cell) &&
-          now - lastJumpAtRef.current >= 90 &&
-          avatarRef.current
-        ) {
-          jumpRef.current = playPlayerJump(avatarRef.current, jumpRef.current);
-          lastJumpAtRef.current = now;
-        }
-        visualCellRef.current = cell;
+      if (avatarRef.current) {
+        paintPlayerTravelPose(avatarRef.current, previousVisualRef.current, visual);
       }
+      previousVisualRef.current = visual;
       if (elementRef.current) {
         elementRef.current.style.transform = `translate3d(${(visual.x + 0.14) * tileSize}px, ${(visual.y + 0.14) * tileSize}px, 0)`;
       }
@@ -66,7 +53,7 @@ function AnimatedPlayer({
     frame = requestAnimationFrame(paint);
     return () => {
       cancelAnimationFrame(frame);
-      jumpRef.current?.cancel();
+      clearPlayerTravelPose(avatarElement);
     };
   }, [player.id, remotePositionSource, tileSize]);
 
@@ -221,7 +208,12 @@ export const EntityLayer = memo(function EntityLayer({
           }}
         >
           <PlayerAvatar
-            player={{ nickname: visual.nickname, isAI: visual.isAI, shield: 0 }}
+            player={{
+              nickname: visual.nickname,
+              isAI: visual.isAI,
+              shield: 0,
+              color: visual.color,
+            }}
             variant={
               visual.playerId === localPlayer?.id
                 ? "me"

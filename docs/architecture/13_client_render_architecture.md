@@ -68,6 +68,8 @@ lastAckedCommandSeq
 ```
 
 - direction change와 neutral을 즉시 command로 만든다.
+- held direction은 250ms heartbeat로 다시 보내되 command sequence와 queue 상한을
+  그대로 적용한다.
 - bomb/respawn edge를 coalesce하지 않는다.
 - socket send가 실제 성공한 command만 pending queue에 넣는다.
 - queue는 target tick과 sequence 순서다.
@@ -193,9 +195,11 @@ pending(commandSeq, predictedCell)
 - local player는 viewport 중앙 anchor를 유지하고 camera가 predicted movement를 따라간다.
 - camera transform과 player body squash/jump transform을 다른 DOM layer가 소유한다.
 - body animation은 movement state를 변경하지 않는다.
-- local, AI와 다른 사람은 각자의 rAF 보간 위치가 다음 인접 칸 경계를 넘을 때만
-  같은 바닥 기준 175ms jump/squash를 한 번 재생한다. 첫 sample, teleport와 두 칸
-  이상 discontinuity는 jump를 만들지 않는다.
+- local, AI와 다른 사람은 각자의 rAF 보간 위치에서 칸 중앙 사이 진행률을 계산한다.
+  출발·도착 중앙은 `scale(1.05, 0.90)`, 두 중앙 사이 최고점은 10px 상승과
+  `scale(0.90, 1.05)`이며, 시간제 animation을 겹쳐 재생하지 않는다.
+- 한 frame에서 0.35칸을 넘는 teleport/discontinuity와 정지 상태는 이동 pose를
+  만들지 않고 기존 idle animation으로 돌아간다.
 - 이동 효과음은 local player의 화면상 칸 경계 통과에만 재생한다. 원격 6 AI의
   발소리를 모두 합성하지 않아 전투음을 가리지 않는다.
 - 폭발 효과음은 server가 확정한 V3 explosion event를 만료 전에 처음 적용했을 때만

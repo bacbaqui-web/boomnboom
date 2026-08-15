@@ -1,3 +1,5 @@
+import { isHumanPlayerColor, normalizeHumanPlayerColor } from "../../../shared/player-colors.mjs";
+
 export const PROTOCOL_V3 = 3;
 export const V3_DIRECTIONS = new Set(["up", "down", "left", "right", "neutral"]);
 export const V3_ACTIONS = new Set(["bomb", "respawn"]);
@@ -49,7 +51,18 @@ export function validateV3ClientMessage(
     if (typeof message.nickname !== "string" || message.nickname.length > 24) {
       return failure("invalid_nickname", "닉네임 문자열을 확인해주세요.");
     }
-    return { ok: true, value: { protocol: 3, type: "join", nickname: message.nickname } };
+    if (message.color !== undefined && !isHumanPlayerColor(message.color)) {
+      return failure("invalid_player_color", "플레이어 색상을 확인해주세요.");
+    }
+    return {
+      ok: true,
+      value: {
+        protocol: 3,
+        type: "join",
+        nickname: message.nickname,
+        color: normalizeHumanPlayerColor(message.color),
+      },
+    };
   }
   if (message.type === "resume") {
     if (typeof message.resumeToken !== "string" || !/^[a-f0-9]{32}$/.test(message.resumeToken)) {

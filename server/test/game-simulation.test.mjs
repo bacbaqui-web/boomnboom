@@ -55,8 +55,14 @@ test("new human and AI players start with one tile of bomb range", () => {
   const world = createTestWorld();
   const simulation = createGameSimulation({ world });
 
-  assert.equal(simulation.addPlayer({ isAI: true }).range, 1);
-  assert.equal(simulation.addPlayer().range, 1);
+  const ai = simulation.addPlayer({ isAI: true });
+  const human = simulation.addPlayer();
+  assert.equal(ai.range, 1);
+  assert.equal(ai.color, "ai-red");
+  assert.equal(human.range, 1);
+  assert.equal(human.color, "blue");
+  assert.equal(simulation.joinPlayer(human.id, "P1", "purple").accepted, true);
+  assert.equal(world.getPlayer(human.id).color, "purple");
 });
 
 test("movement uses the authoritative 140ms cadence and one canonical tile per accepted input", () => {

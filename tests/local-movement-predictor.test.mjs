@@ -110,14 +110,14 @@ test("prediction uses the shared collision reader and never crosses a blocked ce
   assert.deepEqual(result.position, { x: 0, y: 0 });
 });
 
-test("prediction exposes the committed destination for bomb placement and finishes after keyup", () => {
+test("prediction uses the body-majority cell for bombs and finishes after keyup", () => {
   const predictor = new LocalMovementPredictor();
   const timeline = new CommandTimeline();
   predictor.reset(owner());
   const right = timeline.prepareDirection("right", 1);
   timeline.commit(right);
   predictor.advanceTo(2, timeline.pending, openWorld);
-  assert.deepEqual(predictor.bombCell, { x: 1, y: 0 });
+  assert.deepEqual(predictor.bombCell, { x: 0, y: 0 });
 
   const neutral = timeline.prepareDirection("neutral", 3);
   timeline.commit(neutral);

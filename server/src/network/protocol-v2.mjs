@@ -1,3 +1,5 @@
+import { isHumanPlayerColor, normalizeHumanPlayerColor } from "../../../shared/player-colors.mjs";
+
 export const PROTOCOL_V2 = 2;
 export const V2_ACTIONS = new Set(["up", "down", "left", "right", "bomb", "wait", "stop"]);
 
@@ -26,7 +28,18 @@ export function validateV2ClientMessage(raw) {
     if (typeof message.nickname !== "string") {
       return failure("invalid_nickname", "닉네임 문자열이 필요합니다.");
     }
-    return { ok: true, value: { protocol: 2, type: "join", nickname: message.nickname } };
+    if (message.color !== undefined && !isHumanPlayerColor(message.color)) {
+      return failure("invalid_player_color", "플레이어 색상을 확인해주세요.");
+    }
+    return {
+      ok: true,
+      value: {
+        protocol: 2,
+        type: "join",
+        nickname: message.nickname,
+        color: normalizeHumanPlayerColor(message.color),
+      },
+    };
   }
   if (message.type === "ready") {
     const known = message.knownChunkRevisions ?? {};
