@@ -1,5 +1,5 @@
 import { findSpawn } from "../world/spawn-finder.mjs";
-import { uniqueBlastCells } from "./explosion.mjs";
+import { resolveChainExplosions } from "./explosion.mjs";
 import { AI_DROP_ITEM_TYPES, itemStatUpdate } from "./item-rules.mjs";
 import {
   BASE_SPEED_TILES_PER_SECOND,
@@ -70,7 +70,7 @@ export class GameSimulation {
       action: "wait",
       score: 0,
       power: 1,
-      range: 2,
+      range: 1,
       shield: 0,
       speedLevel: 0,
       lastMoveAt: 0,
@@ -257,20 +257,28 @@ export class GameSimulation {
     const bombsAtStart = this.#world
       .readBombs()
       .filter((bomb) => bomb.clockDomain !== "v3");
+    const previousFlameCells = new Set(
+      this.#world
+        .readFlames()
+        .filter((flame) => flame.clockDomain !== "v3")
+        .map((flame) => `${flame.x},${flame.y}`),
+    );
     const exploding = [];
     for (const bomb of bombsAtStart) {
       if (bomb.bornTick === tick) continue;
       const fuse = bomb.fuse - 1;
       this.#world.updateBomb(bomb.id, { fuse });
-      if (fuse <= 0) exploding.push({ ...bomb, fuse });
+      if (fuse <= 0 || previousFlameCells.has(`${bomb.x},${bomb.y}`)) {
+        exploding.push({ ...bomb, fuse });
+      }
     }
-    for (const bomb of exploding) this.#world.removeBomb(bomb.id);
-
-    const blastCells = uniqueBlastCells(exploding, {
+    const chain = resolveChainExplosions(exploding, bombsAtStart, {
       isPermanentWall: (x, y) => this.#world.isPermanentWall(x, y),
       hasCrate: (x, y) => this.#world.hasCrate(x, y),
     });
-    const flames = [...blastCells.values()];
+    for (const bomb of chain.bombs) this.#world.removeBomb(bomb.id);
+
+    const flames = [...chain.cells.values()];
     this.#world.replaceFlamesForDomain("legacy", flames);
 
     for (const cell of flames) {
@@ -280,7 +288,7 @@ export class GameSimulation {
     }
 
     for (const player of this.#world.readPlayers()) {
-      if (!player.alive || !blastCells.has(`${Math.round(player.x)},${Math.round(player.y)}`)) {
+      if (!player.alive || !chain.cells.has(`${Math.round(player.x)},${Math.round(player.y)}`)) {
         continue;
       }
       this.#damagePlayer(player.id, tick);

@@ -94,6 +94,14 @@ export type V3WorldEvent = V3ServerMessage & {
   eventTick: number;
   expireTick: number;
   cells?: { x: number; y: number }[];
+  damaged?: {
+    playerId: string;
+    outcome: "shield" | "death" | "ai_respawn";
+    x: number;
+    y: number;
+    isAI: boolean;
+    nickname: string;
+  }[];
 };
 
 function finiteNumber(value: unknown, fallback = 0) {
@@ -239,7 +247,7 @@ export function projectV3StoreMessage(message: V3ServerMessage): ServerMessage |
         action: "wait",
         score: 0,
         power: 1,
-        range: 2,
+        range: 1,
         shield: 0,
         nickname: "",
         joined: true,

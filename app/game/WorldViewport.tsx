@@ -12,6 +12,7 @@ import type { PlayerEntity } from "./protocol";
 import type { RemotePositionSource } from "./remote-snapshot-buffer";
 import type { PendingBombVisual } from "./pending-bomb-presenter";
 import type { ExplosionFlameVisual } from "./explosion-event-presenter";
+import type { DeathVisual } from "./death-event-presenter";
 import { TerrainLayer } from "./TerrainLayer";
 import type { ClientWorldStore, EntitySnapshot, WorldSnapshot } from "./world-store";
 
@@ -25,6 +26,7 @@ export function WorldViewport({
   remotePositionSource,
   pendingBombs,
   explosionFlames,
+  deathVisuals,
   onLocalStep,
   children,
 }: {
@@ -37,6 +39,7 @@ export function WorldViewport({
   remotePositionSource: RemotePositionSource | null;
   pendingBombs: readonly PendingBombVisual[];
   explosionFlames: readonly ExplosionFlameVisual[];
+  deathVisuals: readonly DeathVisual[];
   onLocalStep?: () => void;
   children?: React.ReactNode;
 }) {
@@ -168,11 +171,12 @@ export function WorldViewport({
               remotePositionSource={remotePositionSource}
               pendingBombs={pendingBombs}
               explosionFlames={explosionFlames}
+              deathVisuals={deathVisuals}
             />
           </>
         ) : null}
       </div>
-      {localPlayer?.alive ? (
+      {localPlayer?.alive && !deathVisuals.some((visual) => visual.playerId === localPlayer.id) ? (
         <span
           className="playerAnchor centerPlayer"
           style={{ width: tileSize * 0.72, height: tileSize * 0.72 }}

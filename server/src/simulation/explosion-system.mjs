@@ -1,6 +1,6 @@
 import { addNetTicks, isNetTickAtOrAfter } from "../../../shared/net-tick.mjs";
 import { DEFAULT_MOVEMENT_CONFIG } from "../../../shared/movement-config.mjs";
-import { uniqueBlastCells } from "./explosion.mjs";
+import { resolveChainExplosions } from "./explosion.mjs";
 import { playerOverlapsCell } from "./fixed-aabb.mjs";
 import { AI_DROP_ITEM_TYPES } from "./item-rules.mjs";
 
@@ -10,6 +10,20 @@ function dropType(player, tick) {
   return AI_DROP_ITEM_TYPES[
     ((value ^ (value >>> 16)) >>> 0) % AI_DROP_ITEM_TYPES.length
   ];
+}
+
+function damageVisual(player, movementConfig) {
+  return {
+    playerId: player.id,
+    x: Number.isSafeInteger(player.px)
+      ? player.px / movementConfig.unitsPerTile - 0.5
+      : player.x,
+    y: Number.isSafeInteger(player.py)
+      ? player.py / movementConfig.unitsPerTile - 0.5
+      : player.y,
+    isAI: player.isAI,
+    nickname: player.nickname,
+  };
 }
 
 export function createExplosionSystem({
@@ -37,12 +51,13 @@ export function createExplosionSystem({
           continue;
         }
         seen.add(player.id);
+        const visual = damageVisual(player, movementConfig);
         if (player.shield > 0) {
           world.updatePlayer(player.id, {
             shield: player.shield - 1,
             action: "wait",
           });
-          damaged.push({ playerId: player.id, outcome: "shield" });
+          damaged.push({ ...visual, outcome: "shield" });
           continue;
         }
         world.updatePlayer(player.id, {
@@ -69,12 +84,12 @@ export function createExplosionSystem({
           });
           const respawned = respawnAI(player.id, tick);
           damaged.push({
-            playerId: player.id,
+            ...visual,
             outcome: respawned ? "ai_respawn" : "death",
           });
           continue;
         }
-        damaged.push({ playerId: player.id, outcome: "death" });
+        damaged.push({ ...visual, outcome: "death" });
       }
       damagedByEvent.set(eventSeq, seen);
     }
@@ -90,20 +105,40 @@ export function createExplosionSystem({
     for (const eventSeq of damagedByEvent.keys()) {
       if (!activeEvents.has(eventSeq)) damagedByEvent.delete(eventSeq);
     }
-    const exploding = world.readBombs().filter(
+    const armedBombs = world.readBombs().filter((bomb) => bomb.clockDomain === "v3");
+    const activeFlameCells = new Set(active.map((flame) => `${flame.x},${flame.y}`));
+    const initiallyExploding = armedBombs.filter(
       (bomb) =>
-        bomb.clockDomain === "v3" && isNetTickAtOrAfter(tick, bomb.explodeTick),
+        isNetTickAtOrAfter(tick, bomb.explodeTick) ||
+        activeFlameCells.has(`${bomb.x},${bomb.y}`),
     );
-    if (exploding.length === 0) {
+    if (initiallyExploding.length === 0) {
       world.replaceFlamesForDomain("v3", active);
       const damaged = damagePlayers(tick, active);
-      return { changed: damaged.length > 0, events: [], damaged };
+      if (damaged.length === 0) return { changed: false, events: [], damaged };
+      const eventSeq = nextEventSeq;
+      nextEventSeq = addNetTicks(nextEventSeq, 1);
+      return {
+        changed: true,
+        events: [{
+          eventSeq,
+          eventType: "player_damage",
+          eventTick: tick,
+          expireTick: addNetTicks(tick, flameTicks),
+          cells: [],
+          destroyedCrates: [],
+          bombIds: [],
+          damaged,
+        }],
+        damaged,
+      };
     }
-    for (const bomb of exploding) world.removeBomb(bomb.id);
-    const blastCells = uniqueBlastCells(exploding, {
+    const chain = resolveChainExplosions(initiallyExploding, armedBombs, {
       isPermanentWall: (x, y) => world.isPermanentWall(x, y),
       hasCrate: (x, y) => world.hasCrate(x, y),
     });
+    for (const bomb of chain.bombs) world.removeBomb(bomb.id);
+    const blastCells = chain.cells;
     const destroyedCrates = [];
     for (const cell of blastCells.values()) {
       if (world.destroyCrate(cell.x, cell.y)) destroyedCrates.push(cell);
@@ -127,7 +162,7 @@ export function createExplosionSystem({
       eventType: "explosion",
       eventTick: tick,
       expireTick,
-      bombIds: exploding.map((bomb) => bomb.id),
+      bombIds: chain.bombs.map((bomb) => bomb.id),
       cells: [...blastCells.values()],
       destroyedCrates,
       damaged,

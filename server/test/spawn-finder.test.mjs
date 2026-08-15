@@ -28,3 +28,20 @@ test("spawn search never mutates existing terrain or chunk revisions", () => {
     assert.deepEqual(after.tiles, snapshot.tiles);
   }
 });
+
+test("human and AI spawns stay near an active human while preserving safe spacing", () => {
+  const world = { readTile: () => "floor" };
+  const players = [
+    { id: "BOT-1", x: 0, y: 0, isAI: true, joined: true, alive: true },
+    { id: "P1", x: 100, y: 50, isAI: false, joined: true, alive: true },
+  ];
+
+  for (const isAI of [false, true]) {
+    const [x, y] = findSpawn({ world, players, spawnNumber: 2, isAI });
+    const distanceFromHuman = Math.hypot(x - 100, y - 50);
+    const manhattanFromHuman = Math.abs(x - 100) + Math.abs(y - 50);
+    assert.ok(distanceFromHuman >= 6 && distanceFromHuman <= 13);
+    assert.ok(manhattanFromHuman >= 5);
+    assert.ok(Math.hypot(x, y) > 50);
+  }
+});

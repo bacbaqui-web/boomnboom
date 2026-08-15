@@ -19,12 +19,27 @@ export function blastCellsForBomb({ bomb, isPermanentWall, hasCrate }) {
   return cells;
 }
 
-export function uniqueBlastCells(bombs, terrain) {
+export function resolveChainExplosions(initialBombs, armedBombs, terrain) {
+  const triggered = [...initialBombs];
+  const triggeredIds = new Set(triggered.map((bomb) => bomb.id));
   const cells = new Map();
-  for (const bomb of bombs) {
-    for (const cell of blastCellsForBomb({ bomb, ...terrain })) {
-      cells.set(`${cell.x},${cell.y}`, cell);
+
+  for (let index = 0; index < triggered.length; index += 1) {
+    const bomb = triggered[index];
+    const blast = blastCellsForBomb({ bomb, ...terrain });
+    for (const cell of blast) cells.set(`${cell.x},${cell.y}`, cell);
+    const blastKeys = new Set(blast.map((cell) => `${cell.x},${cell.y}`));
+    for (const candidate of armedBombs) {
+      if (
+        triggeredIds.has(candidate.id) ||
+        !blastKeys.has(`${candidate.x},${candidate.y}`)
+      ) {
+        continue;
+      }
+      triggeredIds.add(candidate.id);
+      triggered.push(candidate);
     }
   }
-  return cells;
+
+  return { bombs: triggered, cells };
 }

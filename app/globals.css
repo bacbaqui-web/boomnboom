@@ -124,6 +124,10 @@ main.gameActive .gameShell { margin: auto; }
   pointer-events: none;
 }
 .fighter.shielded::after { content: ""; position: absolute; inset: -8px; border: 3px solid #9bf5ff; border-radius: 50%; box-shadow: 0 0 7px #25cfff, inset 0 0 7px #25cfff; animation: shieldPulse 0.55s ease-in-out infinite alternate; }
+.deathBurst { z-index: 28; pointer-events: none; }
+.fighter.dying { animation: fighterDeath 650ms cubic-bezier(0.2, 0.8, 0.25, 1) forwards; }
+.fighter.dying::before { content: ""; position: absolute; inset: -14px; border: 5px solid #fff36a; border-radius: 50%; box-shadow: 0 0 12px #ff3b38; animation: deathRing 650ms ease-out forwards; }
+.fighter.dying::after { content: "✦"; position: absolute; inset: -18px; display: grid; place-items: center; border: 0; color: white; font-size: 40px; text-shadow: 0 0 8px #ff3b38, 0 0 16px #ff8a00; animation: deathSpark 650ms ease-out forwards; }
 .centerPlayer { left: 50%; top: 50%; z-index: 20; transform: translate(-50%, -50%); }
 .bomb {
   position: absolute;
@@ -206,6 +210,21 @@ main.gameActive .gameShell { margin: auto; }
 @keyframes fighterIdleSquash {
   0%, 100% { transform: scale(1.02, 0.98); }
   50% { transform: scale(0.98, 1.02); }
+}
+@keyframes fighterDeath {
+  0% { transform: translateY(0) scale(1.1, 0.86); opacity: 1; }
+  28% { transform: translateY(-10px) scale(0.82, 1.2) rotate(-8deg); opacity: 1; }
+  58% { transform: translateY(-4px) scale(1.38, 0.48) rotate(8deg); opacity: 0.9; }
+  100% { transform: translateY(4px) scale(0.08); opacity: 0; }
+}
+@keyframes deathRing {
+  0% { scale: 0.25; opacity: 1; }
+  100% { scale: 1.8; opacity: 0; }
+}
+@keyframes deathSpark {
+  0%, 25% { scale: 0.25; rotate: 0deg; opacity: 0; }
+  45% { scale: 1.25; rotate: 25deg; opacity: 1; }
+  100% { scale: 2; rotate: 75deg; opacity: 0; }
 }
 
 @media (max-width: 650px) {

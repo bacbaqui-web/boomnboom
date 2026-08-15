@@ -200,6 +200,9 @@ pending(commandSeq, predictedCell)
   발소리를 모두 합성하지 않아 전투음을 가리지 않는다.
 - 폭발 효과음은 server가 확정한 V3 explosion event를 만료 전에 처음 적용했을 때만
   재생한다. prediction, pending bomb와 단순 flame snapshot은 소리를 만들지 않는다.
+- explosion 또는 live-flame damage event의 authoritative damaged 위치에서 사람과 AI의 사망 모션을
+  650ms 재생한다. live player는 중복 표시하지 않으며 local 재접속 overlay는 이
+  모션이 끝난 뒤 표시한다. shield outcome은 사망 모션을 만들지 않는다.
 
 ## 12. Clock Sync
 

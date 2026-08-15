@@ -26,6 +26,13 @@ function initializedStore() {
   return store;
 }
 
+test("V3 world init presents the one-tile starting bomb range before the first snapshot", () => {
+  const projected = projectV3StoreMessage(message("world_init", {
+    worldId: "WORLD", playerId: "P1", baselineTick: 5, chunkSize: 16,
+  }));
+  assert.equal(projected.player.range, 1);
+});
+
 test("V3 player projection keeps fixed fields while terrain coordinates stay integer cells", () => {
   const store = initializedStore();
   store.apply(projectV3StoreMessage(message("owner_snapshot", {

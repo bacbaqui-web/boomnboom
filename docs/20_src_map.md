@@ -86,12 +86,13 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `remote-snapshot-buffer.ts`: 원격 player별 bounded absolute history, 보간/외삽/freeze
 - `pending-bomb-presenter.ts`: V3 bomb pending/result/authoritative snapshot race 표시
 - `explosion-event-presenter.ts`: exact explosion event의 late fast-forward와 flame dedupe
+- `death-event-presenter.ts`: server damaged event를 650ms 사망 visual로 dedupe/만료
 
 ### Render와 UI
 
 - `TerrainLayer.tsx`: Store의 25청크 중 player 주변 3×3만 DOM으로 만들고 chunk
   revision selector와 절대좌표 floor pattern 유지
-- `EntityLayer.tsx`: remote player rAF 보간과 world 좌표의 bomb/item/flame 렌더링
+- `EntityLayer.tsx`: remote player rAF 보간과 world 좌표의 bomb/item/flame/사망 렌더링
 - V3 remote player는 snapshot buffer를, V2 remote player는 기존 latest-target 보간을 사용
 - `player-animation.ts`: 바닥 기준 idle/jump pose와 인접 칸 경계 판정; local, AI,
   다른 플레이어가 같은 렌더 전용 점프를 사용
@@ -160,6 +161,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 
 - wall과 crate에서 멈추는 blast cell 계산
 - 겹친 폭발 cell의 순수 deduplication
+- blast가 닿은 armed bomb를 같은 tick에 모두 찾는 순수 chain resolution
 - World Owner와 entity를 mutation하지 않음
 
 ### `server/src/ai/bot-controller.mjs`
@@ -335,8 +337,8 @@ serializer를 제거했다.
   replay/reset과 200/300ms RTT·jitter 계약
 - `tests/remote-snapshot-buffer.test.mjs`: 15Hz→60/120Hz 일정 속도, stale/drop/stall,
   100ms 외삽 상한, lifecycle snap과 terrain selector 격리
-- `tests/pending-bomb-presenter`, `explosion-event-presenter`: result/snapshot race와
-  event expiry/late fast-forward/authoritative flame dedupe
+- `tests/pending-bomb-presenter`, `explosion-event-presenter`, `death-event-presenter`:
+  result/snapshot race, event expiry/late fast-forward, flame dedupe와 사망 visual 만료
 - `server/test/bomb-system`, `explosion-system`, `websocket-gateway-v3`: fixed bomb 규칙,
   current-position damage와 실제 two-client 결과 일치
 - `server/test/connection-registry`, `websocket-gateway-resume`: token rotation, lease expiry,

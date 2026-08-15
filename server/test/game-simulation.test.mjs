@@ -51,6 +51,14 @@ function addPlayer(world, {
   });
 }
 
+test("new human and AI players start with one tile of bomb range", () => {
+  const world = createTestWorld();
+  const simulation = createGameSimulation({ world });
+
+  assert.equal(simulation.addPlayer({ isAI: true }).range, 1);
+  assert.equal(simulation.addPlayer().range, 1);
+});
+
 test("movement uses the authoritative 140ms cadence and one canonical tile per accepted input", () => {
   const world = createTestWorld({ walls: [[3, 1]] });
   addPlayer(world, { id: "P1", x: 0, y: 1 });
@@ -190,4 +198,16 @@ test("late timer catch-up advances each missed bomb tick exactly once", () => {
   assert.equal(world.readBombs().length, 0);
   assert.ok(world.readFlames().length > 0);
   assert.equal(simulation.advanceToTick(3).advancedTicks, 0);
+});
+
+test("legacy rollback bombs also chain when one blast reaches another bomb", () => {
+  const world = createTestWorld();
+  addPlayer(world, { id: "OWNER", x: 8, y: 8 });
+  world.addBomb({ id: "B1", x: 0, y: 0, owner: "OWNER", range: 2, fuse: 1, bornTick: 0 });
+  world.addBomb({ id: "B2", x: 2, y: 0, owner: "OWNER", range: 2, fuse: 3, bornTick: 0 });
+  const simulation = createGameSimulation({ world });
+
+  simulation.advanceToTick(1);
+  assert.equal(world.readBombs().length, 0);
+  assert.ok(world.readFlames().some((flame) => flame.x === 4 && flame.y === 0));
 });

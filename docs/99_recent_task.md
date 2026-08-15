@@ -1,12 +1,16 @@
 # BOOMnBOOM 최근 작업 보고서
 
-## 0. 최신 Task — 최초 입장창 화면 중앙 정렬
+## 0. 최신 Task — 폭탄 연쇄 폭발과 사망 모션
 
-- 게임 시작 전 닉네임 입장창에 전용 `joinOverlay` 표시 책임을 추가했다.
-- 입장창은 게임 보드 위치와 무관하게 viewport 전체를 기준으로 `position: fixed` 중앙
-  정렬한다.
-- 사망 뒤 재접속창은 기존 `position: absolute`를 유지해 게임판 중앙에 표시된다.
-- 게임 시작 뒤 board, controls와 legend의 중앙 배치는 변경하지 않았다.
+- V3와 V2 rollback 모두 폭발 cell이 다른 폭탄에 닿으면 남은 fuse와 무관하게 같은
+  tick에 폭발한다. 새 blast가 다시 폭탄에 닿는 다단 연쇄도 한 번에 처리한다.
+- 남아 있는 live flame 위에 설치된 폭탄도 다음 simulation step에서 즉시 폭발한다.
+- server explosion event와 live-flame damage event는 피격 당시 player의
+  authoritative sub-tile 위치, AI 여부와 닉네임을 함께 전달한다.
+- client는 shield를 제외한 사람 사망과 AI respawn을 피격 위치에서 650ms 동안
+  찌그러짐, 튀어 오름, 폭발 ring과 spark 모션으로 표시한다.
+- 사망 모션 중 기존 캐릭터는 중복 표시하지 않고, local 재접속창은 모션이 끝난 뒤
+  나타난다.
 
 ---
 

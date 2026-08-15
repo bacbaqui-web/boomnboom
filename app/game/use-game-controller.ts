@@ -5,6 +5,7 @@ import { AudioRuntime } from "./audio-runtime";
 import { ClockSync } from "./clock-sync";
 import { CommandTimeline } from "./command-timeline";
 import { CorrectionSmoother } from "./correction-smoother";
+import { DeathEventPresenter, type DeathVisual } from "./death-event-presenter";
 import {
   ExplosionEventPresenter,
   type ExplosionFlameVisual,
@@ -51,6 +52,7 @@ export function useGameController() {
   const remoteSnapshotBufferRef = useRef(new RemoteSnapshotBuffer());
   const pendingBombPresenterRef = useRef(new PendingBombPresenter());
   const explosionEventPresenterRef = useRef(new ExplosionEventPresenter());
+  const deathEventPresenterRef = useRef(new DeathEventPresenter());
   const collisionReaderRef = useRef({
     isBlockedCell: (cellX: number, cellY: number) => !store.canEnterCell(cellX, cellY),
   });
@@ -60,6 +62,7 @@ export function useGameController() {
   const [localVisualPosition, setLocalVisualPosition] = useState<{ x: number; y: number } | null>(null);
   const [pendingBombs, setPendingBombs] = useState<PendingBombVisual[]>([]);
   const [explosionFlames, setExplosionFlames] = useState<ExplosionFlameVisual[]>([]);
+  const [deathVisuals, setDeathVisuals] = useState<DeathVisual[]>([]);
   const explosionSignatureRef = useRef("");
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
   const entitySnapshot = useSyncExternalStore(
@@ -100,8 +103,10 @@ export function useGameController() {
     remoteSnapshotBufferRef.current.clear();
     pendingBombPresenterRef.current.reset();
     explosionEventPresenterRef.current.reset();
+    deathEventPresenterRef.current.reset();
     setPendingBombs([]);
     setExplosionFlames([]);
+    setDeathVisuals([]);
     explosionSignatureRef.current = "";
   }, []);
 
@@ -154,11 +159,22 @@ export function useGameController() {
       event,
       clockSyncRef.current.estimatedServerTickFloat(Date.now()),
     );
-    if (accepted && event.eventType === "explosion") {
-      audioRef.current?.playExplosion();
+    if (accepted) {
+      if (event.eventType === "explosion") audioRef.current?.playExplosion();
+      deathEventPresenterRef.current.ingest(event, performance.now());
+      setDeathVisuals(deathEventPresenterRef.current.active(performance.now()));
     }
     refreshExplosionFlames();
   }, [refreshExplosionFlames]);
+
+  useEffect(() => {
+    if (deathVisuals.length === 0) return;
+    const nextExpiry = Math.min(...deathVisuals.map((visual) => visual.expiresAt));
+    const timer = window.setTimeout(() => {
+      setDeathVisuals(deathEventPresenterRef.current.active(performance.now()));
+    }, Math.max(0, nextExpiry - performance.now()) + 16);
+    return () => window.clearTimeout(timer);
+  }, [deathVisuals]);
 
   const handleV3ActionResult = useCallback((result: V3ActionResult) => {
     if (result.accepted) commandTimelineRef.current.acknowledge(result.commandSeq);
@@ -405,6 +421,10 @@ export function useGameController() {
     remotePositionSource: networkProtocol === 3 ? remotePositionSource : null,
     pendingBombs: networkProtocol === 3 ? pendingBombs : [],
     explosionFlames: networkProtocol === 3 ? explosionFlames : [],
+    deathVisuals: networkProtocol === 3 ? deathVisuals : [],
+    localDeathAnimating:
+      networkProtocol === 3 &&
+      deathVisuals.some((visual) => visual.playerId === localPlayer?.id),
     networkProtocol,
     nickname,
     joined,

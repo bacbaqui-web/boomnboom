@@ -32,3 +32,13 @@ test("continuous movement triggers a jump only when an adjacent tile boundary is
   assert.equal(crossedAdjacentCell({ x: 3, y: 2 }, { x: 5, y: 2 }), false);
   assert.equal(crossedAdjacentCell(null, { x: 4, y: 2 }), false);
 });
+
+test("death motion bursts from the hit position before the avatar disappears", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.fighter\.dying\s*\{[^}]*fighterDeath 650ms/);
+  assert.match(css, /@keyframes fighterDeath/);
+  assert.match(css, /translateY\(-10px\)/);
+  assert.match(css, /scale\(0\.08\)/);
+  assert.match(css, /@keyframes deathRing/);
+  assert.match(css, /@keyframes deathSpark/);
+});

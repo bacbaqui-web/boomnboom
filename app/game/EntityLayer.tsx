@@ -5,6 +5,7 @@ import { crossedAdjacentCell, playerCell, playPlayerJump } from "./player-animat
 import { PlayerAvatar } from "./PlayerAvatar";
 import type { PendingBombVisual } from "./pending-bomb-presenter";
 import type { ExplosionFlameVisual } from "./explosion-event-presenter";
+import type { DeathVisual } from "./death-event-presenter";
 import { PositionInterpolator } from "./position-interpolator";
 import type { PlayerEntity, WorldEntity } from "./protocol";
 import type { RemotePositionSource } from "./remote-snapshot-buffer";
@@ -110,6 +111,7 @@ export const EntityLayer = memo(function EntityLayer({
   remotePositionSource,
   pendingBombs,
   explosionFlames,
+  deathVisuals,
 }: {
   store: ClientWorldStore;
   tileSize: number;
@@ -118,12 +120,14 @@ export const EntityLayer = memo(function EntityLayer({
   remotePositionSource: RemotePositionSource | null;
   pendingBombs: readonly PendingBombVisual[];
   explosionFlames: readonly ExplosionFlameVisual[];
+  deathVisuals: readonly DeathVisual[];
 }) {
   const snapshot = useSyncExternalStore(
     store.subscribeEntities,
     store.getEntitySnapshot,
     store.getEntitySnapshot,
   );
+  const dyingPlayerIds = new Set(deathVisuals.map((visual) => visual.playerId));
   return (
     <div className="entityLayer">
       {explosionFlames.map((flame) => (
@@ -151,7 +155,7 @@ export const EntityLayer = memo(function EntityLayer({
       ))}
       {snapshot.entities.map((entity: WorldEntity) => {
         if (entity.kind === "player") {
-          return entity.id === localPlayer?.id || !entity.alive ? null : (
+          return entity.id === localPlayer?.id || !entity.alive || dyingPlayerIds.has(entity.id) ? null : (
             <AnimatedPlayer
               key={`player:${entity.id}`}
               player={entity}
@@ -206,6 +210,29 @@ export const EntityLayer = memo(function EntityLayer({
           </span>
         );
       })}
+      {deathVisuals.map((visual) => (
+        <span
+          key={visual.id}
+          className="playerAnchor worldEntity deathBurst"
+          style={{
+            ...staticPosition(visual, 0.14, tileSize),
+            width: tileSize * 0.72,
+            height: tileSize * 0.72,
+          }}
+        >
+          <PlayerAvatar
+            player={{ nickname: visual.nickname, isAI: visual.isAI, shield: 0 }}
+            variant={
+              visual.playerId === localPlayer?.id
+                ? "me"
+                : visual.isAI
+                  ? "ai"
+                  : "rival"
+            }
+            dying
+          />
+        </span>
+      ))}
     </div>
   );
 });

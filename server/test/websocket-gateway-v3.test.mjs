@@ -396,9 +396,18 @@ test("two V3 clients receive the same bomb tick, explosion event, flames, and da
   assert.deepEqual(ownerEvent.cells, victimEvent.cells);
   assert.notEqual(ownerEvent.eventSeq, action.commandSeq);
   assert.deepEqual(ownerEvent.damaged, victimEvent.damaged);
-  assert.ok(ownerEvent.damaged.some(
-    (damage) => damage.playerId === victim.playerId && damage.outcome === "death",
-  ));
+  const victimDamage = ownerEvent.damaged.find(
+    (damage) => damage.playerId === victim.playerId,
+  );
+  assert.deepEqual(
+    {
+      outcome: victimDamage.outcome,
+      x: victimDamage.x,
+      y: victimDamage.y,
+      isAI: victimDamage.isAI,
+    },
+    { outcome: "death", x: 1, y: 0, isAI: false },
+  );
 
   harness.step(92);
   const victimOwner = await victim.collector.waitFor(

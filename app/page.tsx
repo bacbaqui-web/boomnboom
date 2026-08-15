@@ -21,9 +21,10 @@ export default function Home() {
       remotePositionSource={game.remotePositionSource}
       pendingBombs={game.pendingBombs}
       explosionFlames={game.explosionFlames}
+      deathVisuals={game.deathVisuals}
       onLocalStep={game.playLocalStep}
     >
-      {game.joined && game.localPlayer && !game.localPlayer.alive ? (
+      {game.joined && game.localPlayer && !game.localPlayer.alive && !game.localDeathAnimating ? (
         <DeathOverlay onRespawn={game.respawn} />
       ) : null}
     </WorldViewport>

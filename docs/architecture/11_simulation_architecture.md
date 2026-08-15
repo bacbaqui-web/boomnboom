@@ -181,12 +181,18 @@ Unity의 command slack과 같은 목적이며 별도 local key delay가 아니�
 
 - bomb command는 movement와 같은 command sequence domain을 사용하지만 Bomb System이
   별도로 처리한다.
+- 사람과 AI의 초기 bomb range는 중심 칸 바깥으로 1칸이며 flame 아이템마다 1칸
+  증가한다.
 - placement cell은 command를 실행하는 tick의 authoritative player 중심에서 shared
   cell helper로 결정한다.
 - alive, bomb limit, 동일 cell bomb와 tile 가능 여부를 server만 확정한다.
 - 성공 결과는 `bombId`, `cell`, `spawnTick`, `explodeTick`을 가진다.
 - owner가 bomb를 놓은 cell에서 빠져나갈 수 있도록 spawn 당시 겹친 player는 완전히
   cell을 벗어날 때까지 해당 bomb collision만 통과한다. 이후 재진입은 차단한다.
+- 폭발 cell에 닿은 armed bomb는 남은 fuse와 무관하게 같은 tick에 터진다. 새로
+  확장된 blast가 다시 폭탄에 닿으면 더 이상 후보가 없을 때까지 연쇄 처리한다.
+- 남아 있는 live flame 위에 새 폭탄이 생긴 경우에도 다음 fixed step에서 즉시
+  폭발한다.
 - pending bomb는 client visual이며 collision과 fuse를 만들지 않는다.
 
 폭발과 flame damage는 exact server tick 현재 위치로 판정한다. shooter식 rewind와

@@ -54,8 +54,60 @@ test("explosion uses current fixed positions, destroys crates, and applies shiel
   assert.equal(world.readTerrainTile(1, 0), "floor");
   assert.equal(result.events[0].eventTick, 3);
   assert.equal(result.events[0].expireTick, 18);
+  assert.deepEqual(
+    result.events[0].damaged.find((damage) => damage.playerId === "DOOMED"),
+    {
+      playerId: "DOOMED",
+      x: -1,
+      y: 0,
+      isAI: false,
+      nickname: "DOOMED",
+      outcome: "death",
+    },
+  );
   system.step(4);
   assert.equal(world.getPlayer("SHIELD").alive, true);
+});
+
+test("a blast triggers every armed bomb reached by the same-tick chain", () => {
+  const world = worldWithCrates();
+  addPlayer(world, "OWNER", 8, 8);
+  fixedBomb(world, { id: "V3-B1", x: 0, range: 2, explodeTick: 3 });
+  fixedBomb(world, { id: "V3-B2", x: 2, range: 2, explodeTick: 90 });
+  fixedBomb(world, { id: "V3-B3", x: 4, range: 2, explodeTick: 90 });
+  const system = createExplosionSystem({ world });
+
+  const result = system.step(3);
+  assert.deepEqual(result.events[0].bombIds, ["V3-B1", "V3-B2", "V3-B3"]);
+  assert.equal(world.readBombs().length, 0);
+  assert.ok(result.events[0].cells.some((cell) => cell.x === 6 && cell.y === 0));
+});
+
+test("a crate that stops the blast also prevents a bomb behind it from chaining", () => {
+  const world = worldWithCrates([[1, 0]]);
+  addPlayer(world, "OWNER", 8, 8);
+  fixedBomb(world, { id: "V3-B1", x: 0, range: 2, explodeTick: 3 });
+  fixedBomb(world, { id: "V3-B2", x: 2, range: 2, explodeTick: 90 });
+  const system = createExplosionSystem({ world });
+
+  const result = system.step(3);
+  assert.deepEqual(result.events[0].bombIds, ["V3-B1"]);
+  assert.deepEqual(world.readBombs().map((bomb) => bomb.id), ["V3-B2"]);
+});
+
+test("a bomb placed in a live flame explodes immediately", () => {
+  const world = worldWithCrates();
+  addPlayer(world, "OWNER", 8, 8);
+  world.replaceFlamesForDomain("v3", [{
+    id: "F1", x: 2, y: 0, clockDomain: "v3", eventSeq: 20,
+    startTick: 1, expireTick: 20,
+  }]);
+  fixedBomb(world, { id: "V3-B2", x: 2, explodeTick: 90 });
+  const system = createExplosionSystem({ world });
+
+  const result = system.step(3);
+  assert.equal(world.readBombs().length, 0);
+  assert.deepEqual(result.events[0].bombIds, ["V3-B2"]);
 });
 
 test("V3 and legacy flame clocks preserve each other's active flames", () => {
@@ -122,9 +174,12 @@ test("continuous fixed movement into a live V3 flame uses the same damage rule",
     startTick: 0, expireTick: 20,
   }]);
   const explosion = createExplosionSystem({ world });
+  let result = null;
   for (let tick = 1; tick <= 5 && world.getPlayer("RUNNER").alive; tick += 1) {
     movement.step(tick, new Map([["RUNNER", { direction: "up", actions: [] }]]));
-    explosion.step(tick);
+    result = explosion.step(tick);
   }
   assert.equal(world.getPlayer("RUNNER").alive, false);
+  assert.equal(result.events[0].eventType, "player_damage");
+  assert.equal(result.events[0].damaged[0].playerId, "RUNNER");
 });

@@ -5,6 +5,10 @@ const CARDINAL_DIRECTIONS = [
   [-1, 0],
 ];
 
+const DEFAULT_MINIMUM_PLAYER_DISTANCE = 5;
+const TARGET_DISTANCE_MIN = 7;
+const TARGET_DISTANCE_SPAN = 6;
+
 function candidateCellsAround(centerX, centerY, maxRadius = 6) {
   const cells = [{ x: centerX, y: centerY }];
   for (let radius = 1; radius <= maxRadius; radius += 1) {
@@ -35,20 +39,31 @@ function canSpawnAt({ world, x, y, players, bombs, minimumPlayerDistance }) {
   );
 }
 
+function selectSpawnAnchor(players, spawnNumber) {
+  const activePlayers = players.filter((player) => player.alive);
+  const activeHumans = activePlayers.filter((player) => !player.isAI && player.joined !== false);
+  const candidates = activeHumans.length > 0 ? activeHumans : activePlayers;
+  if (candidates.length === 0) return { x: 1, y: 1 };
+  return candidates[(Math.max(1, spawnNumber) - 1) % candidates.length];
+}
+
 export function findSpawn({
   world,
   players = [],
   bombs = [],
   spawnNumber = 1,
   isAI = false,
-  minimumPlayerDistance = 10,
+  minimumPlayerDistance = DEFAULT_MINIMUM_PLAYER_DISTANCE,
 }) {
-  const anchor = players[0] ?? { x: 1, y: 1 };
+  const activePlayers = players.filter((player) => player.alive);
+  const anchor = selectSpawnAnchor(players, spawnNumber);
   const targets = [];
-  if (isAI && players.length === 0) targets.push({ x: 1, y: 1 });
+  if (isAI && activePlayers.length === 0) targets.push({ x: 1, y: 1 });
 
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const distance = 14 + ((spawnNumber * 7 + attempt * 5) % 15);
+    const distance =
+      TARGET_DISTANCE_MIN +
+      ((spawnNumber * 7 + attempt * 5) % TARGET_DISTANCE_SPAN);
     const angle = spawnNumber * 2.399 + attempt * 0.73;
     targets.push({
       x: Math.round(anchor.x + Math.cos(angle) * distance),

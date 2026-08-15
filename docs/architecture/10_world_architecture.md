@@ -125,8 +125,10 @@ WorldChunk
 ## 8. Spawn
 
 - spawn은 materialize된 월드의 유효한 floor를 검색한다.
+- 살아 있는 사람 player가 있으면 이를 우선 기준점으로 삼고, 사람과 AI 모두 대략
+  7~12칸 거리의 후보에서 spawn한다. 사람이 없으면 살아 있는 AI를 기준점으로 삼는다.
 - 다른 살아 있는 player와 최소 거리, wall/crate/bomb 부재와 탈출 가능한 인접
-  floor를 확인한다.
+  floor를 확인한다. 현재 최소 player 간격은 Manhattan distance 5칸이다.
 - spawn을 위해 기존 crate를 영구 삭제하지 않는다.
 - 접속 시 주변 crate가 보일 수 있다.
 - 안전한 위치를 찾지 못하면 검색 반경을 넓히며 임의 좌표를 floor로 바꾸지
