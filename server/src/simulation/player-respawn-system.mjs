@@ -18,7 +18,7 @@ export function createPlayerRespawnSystem({
             teleportTick: tick % 2 === 0 ? tick : (tick + 1) >>> 0,
           });
           movementSystem.initializePlayer(playerId, { resetToCell: true });
-          commandBuffer.resetPlayerIntent(playerId);
+          commandBuffer.resetPlayerSession(playerId);
           respawnedPlayerIds.add(playerId);
         }
         results.push({

@@ -118,6 +118,10 @@ export class GameSimulation {
       y,
       prevX: x,
       prevY: y,
+      power: 1,
+      range: 1,
+      shield: 0,
+      speedLevel: 0,
       alive: true,
       action: "wait",
     });

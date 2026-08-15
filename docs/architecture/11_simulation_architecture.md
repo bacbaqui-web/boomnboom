@@ -108,9 +108,9 @@ Movement Core가 하지 않는 일:
 - moving corner assist: 교차점 중심에서 최대 `320/1024 tile`, 정지 상태에는 미적용
 - 막힌 인접 칸은 목표로 확정하지 않음
 
-폭탄 설치는 현재 AABB가 가장 많이 겹친 칸이나 반올림한 칸이 아니라
-`targetCellX/Y`를 우선 사용한다. 따라서 이동을 시작한 직후 폭탄을 눌러도 플레이어가
-진행하기로 확정한 칸에 설치된다. 목표가 없을 때만 현재 위치가 속한 칸을 사용한다.
+폭탄 설치는 command 실행 tick의 authoritative 중심점이 속한 칸을 사용한다.
+대칭 AABB에서는 플레이어 몸이 가장 많이 겹친 칸과 같으며 이동 목표 칸을 미리
+사용하지 않는다.
 
 player-player blocking은 현재 gameplay를 보존한다. 이 동적 충돌은 stale remote state
 때문에 local misprediction을 만들 수 있으므로 correction metric으로 따로 관찰한다.
@@ -215,6 +215,11 @@ teleport
 server는 매 input packet에 correction을 별도 전송하지 않고 15Hz owner snapshot에
 ACK state를 piggyback한다. bomb처럼 즉시 UI 결과가 필요한 edge action만 별도
 `action_result`를 보낸다.
+
+사람 respawn은 새 생명 경계다. 위치·fixed motion·`lifeId`와 함께 폭탄 수, 화력,
+방어막과 속도 아이템을 시작값으로 초기화하고 command sequence/queue도 새 session으로
+초기화한다. client가 새 생명에서 0번부터 보내는 command를 이전 생명의 stale input으로
+판정하지 않는다.
 
 ## 10. 과부하와 보안
 

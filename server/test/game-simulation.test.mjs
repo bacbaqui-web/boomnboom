@@ -30,6 +30,7 @@ function addPlayer(world, {
   power = 1,
   range = 2,
   shield = 0,
+  speedLevel = 0,
   alive = true,
 } = {}) {
   world.addPlayer({
@@ -44,12 +45,41 @@ function addPlayer(world, {
     power,
     range,
     shield,
+    speedLevel,
     lastMoveAt: 0,
     nickname: id,
     joined: true,
     alive,
   });
 }
+
+test("human respawn resets every item stat to its starting value", () => {
+  const world = createTestWorld();
+  addPlayer(world, {
+    id: "P1",
+    x: 4,
+    y: 5,
+    power: 4,
+    range: 5,
+    shield: 2,
+    speedLevel: 3,
+    alive: false,
+  });
+  const simulation = createGameSimulation({ world });
+
+  assert.equal(simulation.respawnPlayer("P1").accepted, true);
+  const player = world.getPlayer("P1");
+  assert.deepEqual(
+    {
+      alive: player.alive,
+      power: player.power,
+      range: player.range,
+      shield: player.shield,
+      speedLevel: player.speedLevel,
+    },
+    { alive: true, power: 1, range: 1, shield: 0, speedLevel: 0 },
+  );
+});
 
 test("new human and AI players start with one tile of bomb range", () => {
   const world = createTestWorld();

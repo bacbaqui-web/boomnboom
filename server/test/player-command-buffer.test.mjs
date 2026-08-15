@@ -86,3 +86,18 @@ test("life reset clears pre-life movement and action queues without rewinding se
   assert.deepEqual(after.actions, []);
   assert.equal(buffer.enqueue("P1", action(3, 4), 3).accepted, true);
 });
+
+test("respawn session reset accepts a fresh command sequence from zero", () => {
+  const buffer = createPlayerCommandBuffer();
+  buffer.registerPlayer("P1");
+  assert.equal(buffer.enqueue("P1", action(7, 1, "respawn"), 0).accepted, true);
+  assert.equal(buffer.consumeTick(1).get("P1").lastProcessedCommandSeq, 7);
+
+  assert.equal(buffer.resetPlayerSession("P1"), true);
+  assert.equal(buffer.enqueue("P1", input(0, 2, "right"), 1).accepted, true);
+  assert.deepEqual(buffer.consumeTick(2).get("P1"), {
+    direction: "right",
+    lastProcessedCommandSeq: 0,
+    actions: [],
+  });
+});

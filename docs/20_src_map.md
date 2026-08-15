@@ -156,7 +156,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `bomb-system.mjs`: authoritative 몸 중심이 속한 칸의 fixed bomb placement, owner limit,
   90-tick fuse와 action result
 - `explosion-system.mjs`: exact blast/crate/current-AABB damage, AI drop·respawn와 event
-- `player-respawn-system.mjs`: V3 lifeId/teleport, fixed motion과 pre-life queue reset
+- `player-respawn-system.mjs`: V3 lifeId/teleport, fixed motion과 새 생명 command session reset
 - `fixed-aabb.mjs`: player와 bomb/flame/item cell overlap 순수 판정
 - `player-movement-system.mjs`: fixed movement commit, bomb pass-through 종료와 item 획득
 
@@ -351,8 +351,9 @@ serializer를 제거했다.
 - `server/test/coordinates.test.mjs`, `chunk-generator.test.mjs`: 음수 좌표와 결정적 경계 생성
 - `server/test/world-owner.test.mjs`, `spawn-finder.test.mjs`: canonical revision/metric과 spawn non-mutation
 - `server/test/game-simulation.test.mjs`: 이동 cadence/collision/item, 폭탄,
-  폭발 순간·live flame 접촉 damage, shield/death/AI drop·respawn, 영구 crate
+  폭발 순간·live flame 접촉 damage, shield/death/AI drop·respawn, 사람 respawn 능력치 초기화, 영구 crate
   파괴와 tick catch-up
+- `server/test/player-respawn-system.test.mjs`: respawn lifeId/teleport와 command sequence 초기화
 - `server/test/bot-controller.test.mjs`: no-human idle, read snapshot intent와 shared
   Simulation command
 - `server/test/protocol-v2.test.mjs`, `backpressure-sender.test.mjs`: protocol과 전송 제한
