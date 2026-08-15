@@ -57,7 +57,7 @@ main.gameActive .gameShell { margin: auto; }
 .terrainLayer,
 .entityLayer { position: absolute; left: 0; top: 0; }
 .worldRoot { width: 0; height: 0; will-change: transform; }
-.terrainChunk { position: absolute; display: grid; }
+.terrainChunk { position: absolute; display: grid; contain: layout paint style; }
 .tile {
   min-width: 0;
   min-height: 0;

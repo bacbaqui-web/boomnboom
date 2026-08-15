@@ -63,7 +63,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 
 - `world-state.ts`: world clock/metadata, chunk/entity cache의 Runtime state shape
 - `world-message-applier.ts`: snapshot/delta/stale/gap/reconnect message 적용
-- `world-selectors.ts`: 진입 가능한 cell과 known chunk revision 조회
+- `world-selectors.ts`: 진입 가능한 cell, known chunk revision과 3×3 terrain render 범위 조회
 - `world-store.ts`: global/entity/chunk-key external-store subscription façade
 - chunk delta는 해당 chunk listener만 깨우고 movement/tick은 terrain input을 바꾸지 않음
 
@@ -89,7 +89,8 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 
 ### Render와 UI
 
-- `TerrainLayer.tsx`: 25청크 fixed DOM, chunk revision selector와 절대좌표 floor pattern
+- `TerrainLayer.tsx`: Store의 25청크 중 player 주변 3×3만 DOM으로 만들고 chunk
+  revision selector와 절대좌표 floor pattern 유지
 - `EntityLayer.tsx`: remote player rAF 보간과 world 좌표의 bomb/item/flame 렌더링
 - V3 remote player는 snapshot buffer를, V2 remote player는 기존 latest-target 보간을 사용
 - `PlayerAvatar.tsx`: player body, nickname, shield와 local action cue 렌더링

@@ -22,7 +22,11 @@ test("client composes the authoritative WebSocket world from focused modules", a
   assert.match(viewport, /transformAt/);
   assert.match(controller, /new PositionInterpolator\(1000 \/ 30\)/);
   assert.match(controller, /predictor\.previewNext/);
+  assert.match(controller, /requestAnimationFrame\(runPredictionFrame\)/);
+  assert.match(controller, /cancelAnimationFrame\(frame\)/);
+  assert.doesNotMatch(controller, /setInterval\(\(\) => \{\s*const predictor/);
   assert.match(terrain, /data-revision/);
+  assert.match(terrain, /selectNearbyChunkKeys/);
   assert.match(entities, /staticPosition\(entity, 0, tileSize\)/);
   assert.match(entities, /style=\{cellPosition\((?:flame|entity), tileSize\)\}/);
   assert.match(styles, /\.flame \{[^}]*display: grid;[^}]*place-items: center;/);

@@ -27,3 +27,22 @@ export function knownChunkRevisions(state: WorldRuntimeState) {
     [...state.chunks].map(([key, chunk]) => [key, chunk.revision]),
   );
 }
+
+export function selectNearbyChunkKeys(
+  chunkKeys: readonly string[],
+  worldX: number,
+  worldY: number,
+  chunkSize = 16,
+  radius = 1,
+) {
+  const centerX = Math.floor(worldX / chunkSize);
+  const centerY = Math.floor(worldY / chunkSize);
+  return chunkKeys.filter((chunkKey) => {
+    if (!/^-?\d+,-?\d+$/.test(chunkKey)) return false;
+    const [chunkX, chunkY] = chunkKey.split(",").map(Number);
+    return (
+      Math.abs(chunkX - centerX) <= radius &&
+      Math.abs(chunkY - centerY) <= radius
+    );
+  });
+}

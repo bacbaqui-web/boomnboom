@@ -87,6 +87,8 @@ local predictor는 `AuthoritativeState + PendingCommands`로 predicted state를 
 
 preview는 render target일 뿐 predicted state, command ACK와 bomb cell을 변경하지 않는다.
 충돌 reader도 실제 prediction과 동일하므로 벽을 가로질러 미리 그리지 않는다.
+browser는 fixed tick 진입 여부를 `requestAnimationFrame`에서 확인해 background timer
+jitter를 화면 이동에 더하지 않는다. shared Movement Core 자체는 server와 같은 30Hz다.
 
 ### Owner snapshot 수신
 
@@ -159,6 +161,8 @@ remote interpolation은 latest arrival에서 target으로 새 easing을 시작�
   state를 canonical Map에 섞지 않는다.
 - `snapshotSeq`, `eventSeq`, chunk revision과 lifeId stale 검사를 각각 수행한다.
 - moving entity sample 때문에 terrain subscriber를 갱신하지 않는다.
+- preload 반경 2의 25개 chunk는 Store에 유지하되, TerrainLayer는 local player 중심
+  반경 1의 9개 chunk만 DOM으로 만든다. cache와 render 범위를 같은 것으로 취급하지 않는다.
 
 ## 10. Pending Bomb Presentation
 

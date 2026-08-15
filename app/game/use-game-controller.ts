@@ -251,18 +251,22 @@ export function useGameController() {
 
   useEffect(() => {
     if (networkProtocol !== 3 || !joined || !snapshot.initialized) return;
-    const timer = setInterval(() => {
+    let frame = 0;
+    const runPredictionFrame = (now: number) => {
       const predictor = localPredictorRef.current;
-      if (!predictor.position) return;
-      const result = predictor.advanceTo(
-        clockSyncRef.current.predictionTargetTick(Date.now()),
-        commandTimelineRef.current.pending,
-        collisionReaderRef.current,
-      );
-      if (result.replayTicks > 0) updateLocalRenderTarget(performance.now());
-      refreshExplosionFlames();
-    }, 1000 / 30);
-    return () => clearInterval(timer);
+      if (predictor.position) {
+        const result = predictor.advanceTo(
+          clockSyncRef.current.predictionTargetTick(Date.now()),
+          commandTimelineRef.current.pending,
+          collisionReaderRef.current,
+        );
+        if (result.replayTicks > 0) updateLocalRenderTarget(now);
+        refreshExplosionFlames();
+      }
+      frame = requestAnimationFrame(runPredictionFrame);
+    };
+    frame = requestAnimationFrame(runPredictionFrame);
+    return () => cancelAnimationFrame(frame);
   }, [joined, networkProtocol, refreshExplosionFlames, snapshot.initialized, updateLocalRenderTarget]);
 
   useEffect(() => {

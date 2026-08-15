@@ -128,7 +128,14 @@ export function WorldViewport({
       <div ref={rootRef} className="worldRoot">
         {tileSize > 0 ? (
           <>
-            <TerrainLayer store={store} chunkKeys={snapshot.chunkKeys} tileSize={tileSize} />
+            <TerrainLayer
+              store={store}
+              chunkKeys={snapshot.chunkKeys}
+              tileSize={tileSize}
+              centerX={localPlayer?.x ?? 0}
+              centerY={localPlayer?.y ?? 0}
+              chunkSize={metadata?.chunkSize ?? 16}
+            />
             <EntityLayer
               store={store}
               tileSize={tileSize}
