@@ -38,6 +38,9 @@
 
 ### 배포 상태
 
-- source 변경은 아직 commit/push하지 않았다.
-- Oracle server와 공개 Sites는 아직 배포하지 않았다.
-- 공개 반영은 server-first로 Oracle을 배포한 뒤 Sites를 배포해야 한다.
+- 제품 변경은 `1628f10`으로 commit하고 GitHub와 Sites source repository에 push했다.
+- Oracle은 server/shared 백업 뒤 `boomnboom` 서비스만 재시작했고, 공개 health와
+  V3 join·25 chunk baseline·선택 색상 동기화·ping smoke를 통과했다.
+- Sites lockfile을 정규화한 뒤 packaged artifact로 version 60을 공개 배포했다.
+- 공개 페이지에서 새 닉네임 문구가 확인됐고, 제거 대상 문구는 더 이상 나오지 않는다.
+- 공개 URL: `https://bubble-boom-arcade.bacbaqui2.chatgpt.site/`
