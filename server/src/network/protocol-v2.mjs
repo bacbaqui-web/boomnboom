@@ -106,7 +106,6 @@ export function chunkSnapshotPayload(snapshot, chunkSize) {
     originY: snapshot.chunkY * chunkSize,
     revision: snapshot.revision,
     tiles: snapshot.tiles,
-    respawns: snapshot.respawns,
   };
 }
 
@@ -117,23 +116,10 @@ export function diffChunkSnapshots(before, after) {
       changes.push({ index, tile: after.tiles[index] });
     }
   }
-  const beforeRespawns = new Map(before.respawns.map((respawn) => [respawn.index, respawn]));
-  const afterRespawns = new Map(after.respawns.map((respawn) => [respawn.index, respawn]));
-  const respawnChanges = [];
-  for (const [index, respawn] of afterRespawns) {
-    if (JSON.stringify(beforeRespawns.get(index)) !== JSON.stringify(respawn)) {
-      respawnChanges.push({ index, ...respawn });
-    }
-  }
-  const removedRespawnIndexes = [...beforeRespawns.keys()].filter(
-    (index) => !afterRespawns.has(index),
-  );
   return {
     chunkKey: after.key,
     fromRevision: before.revision,
     revision: after.revision,
     changes,
-    respawnChanges,
-    removedRespawnIndexes,
   };
 }

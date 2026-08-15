@@ -7,7 +7,8 @@ BOOMnBOOM은 링크로 바로 참가하는 실시간 공유 월드 폭탄 게임
 - Oracle Node 서버가 월드, 충돌, AI, 폭탄과 청크 revision을 확정합니다.
 - Sites에 배포되는 V2 웹 클라이언트는 주변 25청크를 받아 15×11 화면만
   부드럽게 보여줍니다.
-- 폭발과 상자 재생성은 영구 world clock/BGM 박자에 맞춰 처리됩니다.
+- 폭발은 영구 world clock/BGM 박자에 맞춰 처리되며, 파괴된 상자는 빈 바닥으로
+  유지됩니다. 폭발 뒤 남아 있는 불꽃 칸에 들어가도 피해를 받습니다.
 
 ## 요구 사항
 
@@ -48,12 +49,12 @@ Sites V2 Client
 
 - `app/game/`: V2 protocol, state/message/store, input/camera/audio Runtime과 render layer
 - `server/src/world/`: 결정적 16×16 청크와 canonical entity owner
-- `server/src/simulation/`: 이동, 폭탄, 폭발, 피해, item과 respawn 규칙
+- `server/src/simulation/`: 이동, 폭탄, 폭발, 피해, item과 player respawn 규칙
 - `server/src/network/`: V2 connection/session/projection/snapshot·delta publication
 - `docs/`: 제품 불변식, Architecture, source map과 현재 Sprint
 
 현재 실시간 월드는 Oracle 프로세스 메모리가 authority입니다. 서버 재시작 뒤 base
-terrain은 같은 seed/version으로 복원되지만 player, bomb, item과 진행 중인 respawn은
+terrain은 같은 seed/version으로 복원되지만 player, bomb, item과 파괴된 상자는
 초기화됩니다. D1은 현재 제품 경로에 사용하지 않습니다.
 
 ## 배포 순서

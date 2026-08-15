@@ -21,7 +21,6 @@ export class GameSimulation {
   #world;
   #tick;
   #moveIntervalMs;
-  #crateRespawnTicks;
   #bombFuseTicks;
   #nextPlayerNumber = 1;
   #nextBotNumber = 1;
@@ -31,13 +30,11 @@ export class GameSimulation {
     world,
     initialTick = 0,
     moveIntervalMs = 140,
-    crateRespawnTicks = 8,
     bombFuseTicks = 3,
   }) {
     this.#world = world;
     this.#tick = initialTick;
     this.#moveIntervalMs = moveIntervalMs;
-    this.#crateRespawnTicks = crateRespawnTicks;
     this.#bombFuseTicks = bombFuseTicks;
   }
 
@@ -143,6 +140,35 @@ export class GameSimulation {
     return true;
   }
 
+  #damagePlayer(playerId, tick) {
+    const player = this.#world.getPlayer(playerId);
+    if (!player?.alive) return false;
+    if (player.shield > 0) {
+      this.#world.updatePlayer(player.id, { action: "wait", shield: player.shield - 1 });
+      return true;
+    }
+    if (!player.isAI) {
+      this.#world.updatePlayer(player.id, { action: "wait", alive: false });
+      return true;
+    }
+    const type = ITEM_TYPES[legacyHash(player.x + tick, player.y - tick) % ITEM_TYPES.length];
+    this.#world.setItem({ x: player.x, y: player.y, type });
+    const [x, y] = this.#spawn(true);
+    this.#world.updatePlayer(player.id, {
+      x,
+      y,
+      prevX: x,
+      prevY: y,
+      action: "wait",
+    });
+    this.#world.materializeAround(x, y, 2);
+    return true;
+  }
+
+  #hasFlameAt(x, y) {
+    return this.#world.readFlames().some((flame) => flame.x === x && flame.y === y);
+  }
+
   #movePlayer(playerId, action) {
     const player = this.#world.getPlayer(playerId);
     if (!player) return false;
@@ -165,7 +191,11 @@ export class GameSimulation {
     this.#world.updatePlayer(playerId, { x, y });
     this.#world.materializeAround(x, y, 2);
     this.#world.trimColdChunks();
-    this.#collectItem(playerId);
+    if (this.#hasFlameAt(x, y)) this.#damagePlayer(playerId, this.#tick);
+    const movedPlayer = this.#world.getPlayer(playerId);
+    if (movedPlayer?.alive && movedPlayer.x === x && movedPlayer.y === y) {
+      this.#collectItem(playerId);
+    }
     return true;
   }
 
@@ -231,7 +261,7 @@ export class GameSimulation {
 
     for (const cell of flames) {
       if (this.#world.hasCrate(cell.x, cell.y)) {
-        this.#world.destroyCrate(cell.x, cell.y, tick + this.#crateRespawnTicks);
+        this.#world.destroyCrate(cell.x, cell.y);
       }
     }
 
@@ -239,51 +269,7 @@ export class GameSimulation {
       if (!player.alive || !blastCells.has(`${Math.round(player.x)},${Math.round(player.y)}`)) {
         continue;
       }
-      if (player.shield > 0) {
-        this.#world.updatePlayer(player.id, { action: "wait", shield: player.shield - 1 });
-      } else if (!player.isAI) {
-        this.#world.updatePlayer(player.id, { action: "wait", alive: false });
-      } else {
-        const type =
-          ITEM_TYPES[legacyHash(player.x + tick, player.y - tick) % ITEM_TYPES.length];
-        this.#world.setItem({ x: player.x, y: player.y, type });
-        const [x, y] = this.#spawn(true);
-        this.#world.updatePlayer(player.id, {
-          x,
-          y,
-          prevX: x,
-          prevY: y,
-          action: "wait",
-        });
-        this.#world.materializeAround(x, y, 2);
-      }
-    }
-    return bombsAtStart;
-  }
-
-  #processRespawns(tick, bombsAtStart) {
-    const players = this.#world.readPlayers();
-    for (const respawn of this.#world.readRespawns()) {
-      const nearPlayer = players.some(
-        (player) =>
-          player.alive &&
-          Math.abs(player.x - respawn.x) <= 4 &&
-          Math.abs(player.y - respawn.y) <= 4,
-      );
-      const bombHere = bombsAtStart.some(
-        (bomb) => bomb.x === respawn.x && bomb.y === respawn.y,
-      );
-      if (!respawn.committed && respawn.respawnTick - tick <= 2) {
-        if (nearPlayer || bombHere) {
-          this.#world.rescheduleRespawn(respawn.x, respawn.y, tick + 3);
-          continue;
-        }
-        this.#world.setRespawnCommitted(respawn.x, respawn.y, true);
-      }
-      if (respawn.respawnTick <= tick) {
-        if (bombHere) this.#world.rescheduleRespawn(respawn.x, respawn.y, tick + 1);
-        else this.#world.restoreCrate(respawn.x, respawn.y);
-      }
+      this.#damagePlayer(player.id, tick);
     }
   }
 
@@ -294,8 +280,7 @@ export class GameSimulation {
     let advancedTicks = 0;
     while (this.#tick < targetTick) {
       this.#tick += 1;
-      const bombsAtStart = this.#advanceBombs(this.#tick);
-      this.#processRespawns(this.#tick, bombsAtStart);
+      this.#advanceBombs(this.#tick);
       advancedTicks += 1;
     }
     return { advancedTicks, publish: true };

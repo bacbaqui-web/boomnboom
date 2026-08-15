@@ -48,7 +48,7 @@
 - 요청 없이 파일, 배포 설정, 데이터베이스, history와 생성물을 삭제하거나
   되돌리지 않는다.
 - 기존 공개 게임 URL, Oracle WebSocket 경로, 닉네임 입장, 재접속, AI,
-  폭탄·아이템·상자 재생성과 BGM 동기화는 Sprint의 Preserve 계약을 따른다.
+  폭탄·아이템·상자 파괴 상태와 BGM 동기화는 Sprint의 Preserve 계약을 따른다.
 - 구형 D1 API와 스타터 파일은 사용 여부와 rollback 경계를 확인하기 전에는
   삭제하지 않는다.
 - secret, 인증 정보와 서버 credential을 출력하거나 저장소에 추가하지 않는다.

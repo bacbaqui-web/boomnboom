@@ -2,7 +2,6 @@ import {
   type EnemySummary,
   entityKey,
   type PlayerEntity,
-  type RespawnProjection,
   type ServerMessage,
   type Tile,
   type WorldEntity,
@@ -150,9 +149,6 @@ export function applyWorldMessage(
       return ignored({ applied: false, reason: "stale" });
     }
     const tiles = Array.isArray(message.tiles) ? (message.tiles as Tile[]) : [];
-    const respawns = Array.isArray(message.respawns)
-      ? (message.respawns as RespawnProjection[])
-      : [];
     const isNew = !current;
     if (state.initializing) state.initialChunkKeys.add(chunkKey);
     state.chunks.set(chunkKey, {
@@ -163,7 +159,6 @@ export function applyWorldMessage(
       originY: numberField(message, "originY"),
       revision,
       tiles: [...tiles],
-      respawns: respawns.map((respawn) => ({ ...respawn })),
     });
     updateWorldSnapshot(state, {
       ...clockChanges(state, message),
@@ -193,21 +188,10 @@ export function applyWorldMessage(
       const cell = change as { index?: number; tile?: Tile };
       if (Number.isInteger(cell.index) && cell.tile) tiles[cell.index as number] = cell.tile;
     }
-    const respawns = new Map(current.respawns.map((respawn) => [respawn.index, respawn]));
-    for (const change of Array.isArray(message.respawnChanges) ? message.respawnChanges : []) {
-      const respawn = change as RespawnProjection;
-      if (Number.isInteger(respawn.index)) respawns.set(respawn.index, { ...respawn });
-    }
-    for (const index of Array.isArray(message.removedRespawnIndexes)
-      ? message.removedRespawnIndexes
-      : []) {
-      if (Number.isInteger(index)) respawns.delete(index as number);
-    }
     state.chunks.set(chunkKey, {
       ...current,
       revision,
       tiles,
-      respawns: [...respawns.values()],
     });
     updateWorldSnapshot(state, clockChanges(state, message));
     return applied({ changedChunks: [chunkKey] });

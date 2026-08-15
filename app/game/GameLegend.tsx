@@ -7,7 +7,6 @@ export function GameLegend({
 }) {
   return (
     <div className="legend">
-      <span><i className="warning" />2초 뒤 재생성</span>
       <span><i className="itemIcon bombUp">●</i>폭탄 수</span>
       <span><i className="itemIcon shieldUp">◆</i>방어막</span>
       <span><i className="itemIcon flameUp">🔥</i>화력</span>

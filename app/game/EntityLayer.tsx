@@ -1,19 +1,29 @@
 "use client";
 
 import { memo, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { playPlayerJump } from "./player-animation";
+import { PlayerAvatar } from "./PlayerAvatar";
 import { PositionInterpolator } from "./position-interpolator";
 import type { PlayerEntity, WorldEntity } from "./protocol";
 import type { ClientWorldStore } from "./world-store";
 
 function AnimatedPlayer({ player, tileSize }: { player: PlayerEntity; tileSize: number }) {
   const elementRef = useRef<HTMLSpanElement | null>(null);
+  const avatarRef = useRef<HTMLSpanElement | null>(null);
+  const jumpRef = useRef<Animation | null>(null);
   const motionRef = useRef(new PositionInterpolator(135));
   const previousRef = useRef({ x: player.x, y: player.y });
 
   useLayoutEffect(() => {
     const previous = previousRef.current;
-    const teleport = Math.hypot(player.x - previous.x, player.y - previous.y) > 2;
+    const distance = Math.hypot(player.x - previous.x, player.y - previous.y);
+    const teleport = distance > 2;
     motionRef.current.setTarget(player.x, player.y, performance.now(), { teleport });
+    if (distance > 0 && !teleport && avatarRef.current) {
+      jumpRef.current = playPlayerJump(avatarRef.current, jumpRef.current);
+    } else if (teleport) {
+      jumpRef.current?.cancel();
+    }
     previousRef.current = { x: player.x, y: player.y };
   }, [player.x, player.y]);
 
@@ -27,18 +37,27 @@ function AnimatedPlayer({ player, tileSize }: { player: PlayerEntity; tileSize: 
       frame = requestAnimationFrame(paint);
     };
     frame = requestAnimationFrame(paint);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      jumpRef.current?.cancel();
+    };
   }, [tileSize]);
 
   return (
     <span
       ref={elementRef}
-      className={`fighter worldEntity ${player.isAI ? "ai" : "rival"} ${player.shield > 0 ? "shielded" : ""}`}
-      style={{ width: tileSize * 0.72, height: tileSize * 0.72 }}
-      title={player.nickname}
+      className="playerAnchor worldEntity"
+      style={{
+        ...staticPosition(player, 0.14, tileSize),
+        width: tileSize * 0.72,
+        height: tileSize * 0.72,
+      }}
     >
-      <em>{player.nickname}</em>
-      {player.isAI ? "AI" : "◉"}
+      <PlayerAvatar
+        ref={avatarRef}
+        player={player}
+        variant={player.isAI ? "ai" : "rival"}
+      />
     </span>
   );
 }

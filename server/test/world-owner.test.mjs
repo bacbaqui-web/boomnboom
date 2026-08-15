@@ -35,7 +35,7 @@ test("two viewers read the same canonical chunk revision", () => {
   assert.notEqual(crateIndex, -1);
   const x = crateIndex % DEFAULT_CHUNK_SIZE;
   const y = Math.floor(crateIndex / DEFAULT_CHUNK_SIZE);
-  world.destroyCrate(x, y, 20);
+  world.destroyCrate(x, y);
   const changed = world.readChunkSnapshot(0, 0);
   assert.equal(changed.revision, firstViewer.revision + 1);
 });

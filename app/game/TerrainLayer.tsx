@@ -19,9 +19,6 @@ const TerrainChunk = memo(function TerrainChunk({
   const getSnapshot = useCallback(() => store.getChunk(chunkKey), [chunkKey, store]);
   const chunk = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   if (!chunk) return null;
-  const warningCells = new Set(
-    chunk.respawns.filter((respawn) => respawn.committed).map((respawn) => respawn.index),
-  );
   return (
     <div
       className="terrainChunk"
@@ -35,12 +32,11 @@ const TerrainChunk = memo(function TerrainChunk({
         gridTemplateColumns: "repeat(16, 1fr)",
       }}
     >
-      {chunk.tiles.map((baseTile, index) => {
+      {chunk.tiles.map((tile, index) => {
         const localX = index % 16;
         const localY = Math.floor(index / 16);
         const worldX = chunk.originX + localX;
         const worldY = chunk.originY + localY;
-        const tile = warningCells.has(index) ? "warning" : baseTile;
         return (
           <div
             className={`tile ${tile} ${(worldX + worldY) & 1 ? "floorAlt" : ""}`}

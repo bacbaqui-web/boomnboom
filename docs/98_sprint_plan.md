@@ -11,6 +11,9 @@
 - 6A PASS — caller 0 레거시 D1/starter 정리와 배포 readiness
 - 6B PASS — production soak, V1 제거, Sites v41와 V2-only Oracle 공개 검증
 - 7단계 PASS — 파일명과 실제 변경 책임 정렬, 동작 보존 구조 정리
+- 8단계 PASS — crate 자동 재생성과 warning projection 제거
+- 9단계 PASS — live flame 접촉 피해 판정 추가
+- 10단계 PASS — player idle squash와 인접 칸 jump animation
 
 ## 기준
 
@@ -39,7 +42,7 @@ viewer마다 주변 타일을 다시 계산해 전체 state로 보내는 구조�
 - server: `server/index.mjs` 단일 module, 9×9 procedural cache, module-level mutation
 - 이동: server 140ms rate limit, client 145ms hold input
 - AI: 500ms
-- world tick: 1000ms, bomb/폭발/상자 재생성과 BGM clock
+- world tick: 1000ms, bomb/폭발과 BGM clock
 - client test: build + SSR/source 문자열 test 2건
 - server gameplay/protocol test: 없음
 - 기존 audit 기준 build/test는 통과하며 lint에는 기존 오류 3건과 경고 1건이 있음
@@ -55,9 +58,8 @@ viewer마다 주변 타일을 다시 계산해 전체 state로 보내는 구조�
 - 사람·AI, 폭탄, 폭탄 수/방어막/화력 item
 - authoritative grid collision과 bomb 설치 칸
 - 폭발 순간 위치 기준 피해
-- permanent wall, destructible crate, warning과 respawn
-- player 주변 9×9에는 새 warning/respawn schedule을 만들지 않음
-- 이미 commit된 warning은 player 접근 뒤에도 유지
+- permanent wall과 destructible crate
+- 파괴된 crate는 live process 수명 동안 floor로 유지
 - offscreen enemy direction
 - world clock/BGM sync와 volume control
 - local player 중앙 projection과 keyboard/pointer 조작
@@ -217,7 +219,7 @@ dual implementation을 만들지는 않는다.
 
 ### 결과
 
-- 16×16 WorldChunk, revision, respawn state와 private entity registry 구현
+- 16×16 WorldChunk, revision과 private entity registry 구현
 - 음수 좌표와 절대좌표 기반 경계 비의존 generator 구현
 - spawn terrain mutation 제거
 - player 주변 반경 2 preload와 base-only cold trim 구현
@@ -236,11 +238,11 @@ socket/timer에서 게임 규칙 mutation을 분리하고 현재 gameplay와 수
 
 ### 작업 내용
 
-- movement, bomb, explosion, damage, item과 respawn을 Simulation command로 이동
+- movement, bomb, explosion, damage와 item을 Simulation command로 이동
 - world beat loop와 real-time input cadence 분리
 - mutation batch 원자 commit과 changed chunk/entity event 생성
 - AI를 read snapshot → intent controller로 이동
-- player 9×9 warning 생성 규칙과 committed warning 계약 반영
+- crate 파괴를 canonical chunk mutation으로 반영
 - 폭발 실행 순간 위치로 damage 판정
 - health에 simulation/chunk 기본 metrics 추가
 
@@ -248,7 +250,7 @@ socket/timer에서 게임 규칙 mutation을 분리하고 현재 gameplay와 수
 
 - tick catch-up에서 중복 explosion
 - AI respawn/item ordering 변화
-- warning 연기와 commit 의미 혼동
+- crate 파괴 뒤 청크 revision 불일치
 - timer와 socket callback concurrency에서 partial state 노출
 
 ### 자동 검증
@@ -257,7 +259,7 @@ socket/timer에서 게임 규칙 mutation을 분리하고 현재 gameplay와 수
 - bomb limit/place tile/fuse
 - 폭발 범위와 순간 위치 damage
 - shield, death, AI drop/respawn과 item collect
-- warning 미생성/commit 뒤 유지/폭탄 칸 연기
+- crate 파괴 뒤 이후 tick에도 floor 유지
 - late tick catch-up와 mutation batch 원자성
 - no-human AI idle work
 
@@ -265,7 +267,7 @@ socket/timer에서 게임 규칙 mutation을 분리하고 현재 gameplay와 수
 
 - Gateway와 timer가 canonical world를 직접 mutation하지 않음
 - current gameplay Preserve test 통과
-- 명시된 피해/경고 bug regression 통과
+- 명시된 피해와 crate 파괴 regression 통과
 - server test script 실제 test files 실행
 - R3 독립 rollback 가능
 
@@ -276,7 +278,7 @@ socket/timer에서 게임 규칙 mutation을 분리하고 현재 gameplay와 수
 - AI를 read snapshot → intent Controller로 분리하고 shared action command 연결
 - V1 140ms cadence, AI 500ms, 1초 world tick과 bomb/item 수치 유지
 - 폭발 순간 위치, shield/death, AI drop/respawn과 tick catch-up 고정
-- 9×9 warning commit 연기, committed warning 유지와 bomb cell 연기 고정
+- crate 파괴와 chunk revision 계약 고정
 - server test 17/17 및 임시 V1 WebSocket smoke 통과
 - Protocol event/delta publication은 계획대로 4단계에 유지
 
@@ -449,7 +451,7 @@ socket/timer에서 게임 규칙 mutation을 분리하고 현재 gameplay와 수
 - source/import/dead path audit와 `git diff --check`
 - server config start, graceful shutdown와 `/health`
 - nginx config syntax와 public WebSocket upgrade
-- two-client + AI gameplay, bomb/death/item/crate respawn
+- two-client + AI gameplay, bomb/death/item/crate destruction
 - preload edge와 10분 이동 중 chunk/memory/traffic 관찰
 - BGM drift, mute/volume과 reconnect
 
@@ -514,13 +516,14 @@ V2-only source는 GitHub와 Oracle에 배포했다. Oracle의 직전 dual-protoc
 - Entity Layer에서 적 방향 표시와 local bomb selector 분리
 - Header/Tick HUD/Legend, Join/Death Overlay와 Player Status를 독립 UI 파일로 분리
 - hosting metadata plugin, nginx virtual-host config와 test 이름을 실제 책임에 맞춤
-- 과거 사용자 파일 `docs/99_recent_task 2.md`는 범위 밖으로 보존
+- 중복 보고 파일 `docs/99_recent_task 2.md`는 이후 사용자 요청으로 삭제하고
+  `docs/99_recent_task.md`만 canonical 최근 보고로 사용
 
 ### Preserve 계약
 
 - V2 init/25청크/ready, sequence ack, interest와 chunk/entity delta shape
 - 140ms 이동, 500ms AI, 1초 world tick과 BGM timeline
-- nickname/respawn/폭탄/item/crate warning과 shared World Owner 결과
+- nickname/player respawn/폭탄/item/crate destruction과 shared World Owner 결과
 - public Sites project ID, Oracle port/service/nginx route와 128MB 제한
 
 ### 결과
@@ -531,13 +534,88 @@ V2-only source는 GitHub와 Oracle에 배포했다. Oracle의 직전 dual-protoc
 - 새 production module과 test가 담당 대상 이름을 직접 드러냄
 - server 26건과 client unit/contract/SSR 검증에서 기존 제품 계약 유지
 
+## 8단계 — Crate Respawn Removal
+
+### 목적
+
+폭발로 파괴된 노란 상자를 다시 생성하는 기믹과 그 예고 장판을 제거한다.
+
+### 변경 Manifest
+
+- World Owner의 crate respawn schedule과 관련 command/read model 제거
+- Simulation의 warning commit, 지연과 crate 복구 tick 처리 제거
+- Protocol V2 chunk snapshot/delta에서 respawn projection 제거
+- Client Store/Terrain에서 warning state와 렌더링 제거
+- 파괴된 crate가 이후 world tick에도 floor로 유지되는 regression test 추가
+
+### Preserve 계약
+
+- 폭발 범위, 피해, wall 충돌과 crate 뒤 blast 중단
+- player/AI respawn과 AI 사망 item drop
+- chunk revision/snapshot/delta와 현재 프로세스 내 파괴 mutation 보존
+- 서버 재시작 시 terrain mutation을 초기화하는 기존 비영속 live-world 정책
+
+### 결과
+
+- crate 파괴 시 chunk tile을 floor로 한 번 변경하고 자동 복구하지 않음
+- warning tile, 예고 장판, respawn schedule과 network projection 0건
+- server 24/24, client build/unit/contract/SSR 18/18, lint와 TypeScript PASS
+
+## 9단계 — Live Flame Collision Damage
+
+### 목적
+
+폭발 순간을 피했더라도 화면에 남아 있는 불꽃 이펙트 칸으로 이동하면 서버가
+접촉 피해를 적용한다.
+
+### 변경 Manifest
+
+- 폭발 피해와 이동 중 flame 접촉 피해를 하나의 Simulation damage command로 통합
+- 이동 확정 뒤 live flame 좌표를 확인하고 생존한 경우에만 item 획득
+- shield, 사람 사망과 AI item drop/respawn 결과는 기존 규칙 유지
+- live flame 이동 피해 regression test 추가
+
+### 결과
+
+- 화면 animation이 아닌 World Owner의 flame entity 좌표로 접촉 판정
+- 사람은 사망 overlay 상태가 되고 shield가 있으면 1개를 소비해 생존
+- server 25/25 PASS
+
+## 10단계 — Player Squash and Jump Animation
+
+### 목적
+
+캐릭터가 대기할 때 바닥을 기준으로 호흡하듯 찌그러지고, 인접 칸 이동은 10px
+점프와 squash/stretch pose로 표현한다.
+
+### 변경 Manifest
+
+- 위치 anchor와 캐릭터 body를 분리해 이동과 scale transform 충돌 제거
+- local/remote player가 같은 `PlayerAvatar`와 jump pose 계약 사용
+- 대기 500ms에 `102%×98% ↔ 98%×102%` 반복
+- 이동 출발·착지 `105%×90%`, 최고점 `90%×105%`, 높이 10px 적용
+- teleport/respawn은 jump animation에서 제외
+
+### Preserve 계약
+
+- 서버 authoritative integer 위치와 client prediction/ack
+- local player 중앙 anchor와 world camera rAF 이동
+- remote player 위치 보간, nickname, shield와 local action cue
+- terrain render와 gameplay 판정에 animation 값 사용 금지
+
+### 결과
+
+- player 위치와 body animation이 독립 transform layer에서 합성됨
+- 요청한 idle/jump pose를 client contract test로 고정
+- client build/unit/contract/SSR 19/19, lint와 TypeScript PASS
+
 ## Sprint 전체 완료 기준
 
 - 같은 world coordinate가 모든 client에서 같은 tile/chunk revision
 - player가 움직여도 tile matrix packet과 terrain rerender가 없음
 - viewport보다 넓은 chunk preload와 경계 전환 지연 없음
 - authoritative 위치는 integer tile, visual camera는 연속 transform
-- bomb/폭발/피해/item/warning/respawn 결과가 두 client에서 동일
+- bomb/폭발/피해/item/player respawn/crate destruction 결과가 두 client에서 동일
 - World Owner 밖 canonical mutation 0
 - stale/duplicate/gap packet이 divergence를 만들지 않음
 - cold chunk 수와 outbound traffic이 명시된 상한 정책을 따름

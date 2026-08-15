@@ -28,7 +28,6 @@ test("cell selector refuses terrain, bombs, and other players", () => {
     originY: 0,
     revision: 1,
     tiles: ["wall", ...new Array(255).fill("floor")],
-    respawns: [],
   });
   const rival = {
     kind: "player",

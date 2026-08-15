@@ -67,7 +67,6 @@ export class WorldOwner {
         revision: 1,
         generatorVersion: this.#generatorVersion,
         tiles: [...tiles],
-        respawnsByCell: new Map(),
         lastActiveAt: 0,
       };
       this.#chunks.set(key, chunk);
@@ -103,10 +102,6 @@ export class WorldOwner {
       revision: chunk.revision,
       generatorVersion: chunk.generatorVersion,
       tiles: [...chunk.tiles],
-      respawns: [...chunk.respawnsByCell.entries()].map(([index, respawn]) => ({
-        index,
-        ...respawn,
-      })),
     };
   }
 
@@ -119,24 +114,14 @@ export class WorldOwner {
     return chunk.tiles[index];
   }
 
-  readTile(x, y, { tick = 0 } = {}) {
-    const { chunk, index } = this.#chunkAndCell(x, y);
-    const terrain = chunk.tiles[index];
-    if (terrain !== "floor") return terrain;
-    const respawn = chunk.respawnsByCell.get(index);
-    if (!respawn) return "floor";
-    const playerNearby = [...this.#players.values()].some(
-      (player) => player.alive && Math.abs(player.x - x) <= 4 && Math.abs(player.y - y) <= 4,
-    );
-    return respawn.committed || (respawn.respawnTick - tick <= 2 && !playerNearby)
-      ? "warning"
-      : "floor";
+  readTile(x, y) {
+    return this.readTerrainTile(x, y);
   }
 
-  readTileRectangle({ originX, originY, width, height, tick = 0 }) {
+  readTileRectangle({ originX, originY, width, height }) {
     return Array.from({ length: height }, (_, localY) =>
       Array.from({ length: width }, (_, localX) =>
-        this.readTile(originX + localX, originY + localY, { tick }),
+        this.readTile(originX + localX, originY + localY),
       ),
     );
   }
@@ -149,50 +134,12 @@ export class WorldOwner {
     return this.readTerrainTile(x, y) === "crate";
   }
 
-  destroyCrate(x, y, respawnTick) {
+  destroyCrate(x, y) {
     const { chunk, index } = this.#chunkAndCell(x, y);
     if (chunk.tiles[index] !== "crate") return false;
     chunk.tiles[index] = "floor";
-    chunk.respawnsByCell.set(index, { respawnTick, committed: false, x, y });
     chunk.revision += 1;
     return true;
-  }
-
-  setRespawnCommitted(x, y, committed = true) {
-    const { chunk, index } = this.#chunkAndCell(x, y);
-    const respawn = chunk.respawnsByCell.get(index);
-    if (!respawn || respawn.committed === committed) return false;
-    respawn.committed = committed;
-    chunk.revision += 1;
-    return true;
-  }
-
-  rescheduleRespawn(x, y, respawnTick) {
-    const { chunk, index } = this.#chunkAndCell(x, y);
-    const respawn = chunk.respawnsByCell.get(index);
-    if (!respawn || respawn.respawnTick === respawnTick) return false;
-    respawn.respawnTick = respawnTick;
-    chunk.revision += 1;
-    return true;
-  }
-
-  restoreCrate(x, y) {
-    const { chunk, index } = this.#chunkAndCell(x, y);
-    if (!chunk.respawnsByCell.has(index)) return false;
-    chunk.tiles[index] = "crate";
-    chunk.respawnsByCell.delete(index);
-    chunk.revision += 1;
-    return true;
-  }
-
-  readRespawns() {
-    const respawns = [];
-    for (const chunk of this.#chunks.values()) {
-      for (const respawn of chunk.respawnsByCell.values()) {
-        respawns.push({ ...respawn });
-      }
-    }
-    return respawns;
   }
 
   addPlayer(player) {
@@ -286,12 +233,7 @@ export class WorldOwner {
     }
 
     const removable = [...this.#chunks.values()]
-      .filter(
-        (chunk) =>
-          chunk.revision === 1 &&
-          chunk.respawnsByCell.size === 0 &&
-          !protectedKeys.has(chunk.key),
-      )
+      .filter((chunk) => chunk.revision === 1 && !protectedKeys.has(chunk.key))
       .sort((left, right) => left.lastActiveAt - right.lastActiveAt);
     let removed = 0;
     for (const chunk of removable) {
@@ -315,7 +257,7 @@ export class WorldOwner {
     }
     const pinnedKeys = new Set();
     for (const chunk of this.#chunks.values()) {
-      if (chunk.revision > 1 || chunk.respawnsByCell.size > 0) pinnedKeys.add(chunk.key);
+      if (chunk.revision > 1) pinnedKeys.add(chunk.key);
     }
     for (const entity of [
       ...this.#bombs.values(),
@@ -347,7 +289,6 @@ export class WorldOwner {
       items: this.#items.size,
       flames: this.#flames.length,
       entities,
-      respawns: this.readRespawns().length,
     };
   }
 }

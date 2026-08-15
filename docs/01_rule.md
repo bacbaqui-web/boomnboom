@@ -25,7 +25,7 @@
 ## 3. World Owner
 
 - `World Owner`는 공유 월드와 entity를 소유하고 변경하는 유일한 경계다.
-- 월드 타일, 플레이어, AI, 폭탄, 불꽃, 아이템과 재생성 상태는 World Owner의
+- 월드 타일, 플레이어, AI, 폭탄, 불꽃과 아이템은 World Owner의
   command를 통해서만 바뀐다.
 - Generator, Simulation, AI와 Network는 World Owner의 내부 Map과 Set을 직접
   변경하지 않는다.
@@ -53,18 +53,17 @@
 - 폭탄은 설치 command가 처리되는 시점의 authoritative 플레이어 칸에 생긴다.
 - 폭발 피해는 폭발이 실행되는 순간의 플레이어 칸으로 판정한다. 이전 fuse
   순간의 위치로 피해를 예약하지 않는다.
-- 상자 경고와 재생성은 월드 박자에 맞추되, 경고 생성 시점에 플레이어 주변
-  9×9 안이면 새 경고와 재생성을 연기한다.
-- 이미 경고가 확정된 뒤 플레이어가 접근한 경우에는 기존 경고와 예정된
-  재생성을 취소하지 않는다.
+- 폭발 뒤 flame entity가 남아 있는 동안 그 칸으로 이동을 확정한 플레이어와
+  AI에도 같은 피해와 shield 규칙을 적용한다.
+- 폭발로 파괴된 상자는 현재 live world process 수명 동안 floor로 유지하며
+  자동으로 재생성하지 않는다.
 - 시작 위치를 만들기 위해 주변 상자를 영구 삭제하지 않는다. 서버는 기존
   월드에서 유효한 floor spawn을 찾는다.
 
 ## 6. 서버 시뮬레이션과 시간
 
 - 이동 intent 처리와 1초 박자 시뮬레이션은 서로 다른 clock 책임이다.
-- 폭탄 fuse, 폭발, 불꽃 수명과 상자 재생성은 서버 시간과 world tick이
-  authority다.
+- 폭탄 fuse, 폭발과 불꽃 수명은 서버 시간과 world tick이 authority다.
 - BGM은 게임 판정을 일으키는 clock이 아니라 같은 world timeline을 표현하는
   클라이언트 Runtime이다.
 - AI도 사람과 동일한 World Owner command와 충돌 규칙을 사용한다.
@@ -100,7 +99,7 @@
 
 - 현재 Sprint의 live world authority는 단일 Oracle Node 프로세스의 메모리다.
 - base terrain은 `worldId + seed + generatorVersion`으로 복원 가능해야 한다.
-- 재시작 뒤 플레이어 연결, 폭탄, 아이템과 진행 중인 경고를 보존하는 영속화는
+- 재시작 뒤 플레이어 연결, 폭탄, 아이템과 파괴된 상자를 보존하는 영속화는
   별도 제품 결정 없이는 추가하지 않는다.
 - 서버 재시작 시 live runtime은 초기화되지만 base terrain 좌표 결과와 영구
   world clock은 유지한다.
@@ -117,7 +116,7 @@
 - 칸 단위 충돌과 폭탄 설치
 - 폭탄 수, 방어막, 화력 아이템
 - 화면 밖 적 방향 표시
-- 상자 파괴, 경고와 재생성
+- 상자 파괴 뒤 자동 재생성 없음
 - 영구 world clock과 BGM 위치 동기화
 - 공개 웹과 Oracle WebSocket 경로
 
@@ -139,7 +138,7 @@
 ## 12. 검증
 
 - 구조 변경 전에 현재 동작과 packet shape를 기록한다.
-- 월드 생성, 음수 좌표, 청크 경계, 충돌, 폭발, 재생성과 protocol 순서를
+- 월드 생성, 음수 좌표, 청크 경계, 충돌, 폭발, 영구 상자 파괴와 protocol 순서를
   자동 테스트한다.
 - client lint, production build, server test와 `git diff --check`를 수행한다.
 - 실제 2-client 공유 상태와 이동 부드러움은 브라우저 QA로 확인한다.

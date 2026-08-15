@@ -220,7 +220,7 @@ test("two subscribers receive the same chunk revision delta after one snapshot",
   const firstStart = first.collector.messages.length;
   const secondStart = second.collector.messages.length;
 
-  assert.equal(harness.world.destroyCrate(5, 5, 10), true);
+  assert.equal(harness.world.destroyCrate(5, 5), true);
   harness.gateway.publish();
   const [firstDelta, secondDelta] = await Promise.all([
     first.collector.waitFor((message) => message.type === "chunk_delta" && message.chunkKey === "0,0"),
@@ -243,7 +243,7 @@ test("chunk gaps recover with a fresh snapshot", async (t) => {
   const client = await joinV2(harness, url);
   t.after(() => client.socket.terminate());
   await sendReady(client);
-  harness.world.destroyCrate(5, 5, 10);
+  harness.world.destroyCrate(5, 5);
   harness.gateway.publish();
   await client.collector.waitFor((message) => message.type === "chunk_delta" && message.chunkKey === "0,0");
 

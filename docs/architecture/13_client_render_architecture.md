@@ -29,7 +29,7 @@ Page는 이 책임을 조립하고 공개 view props를 연결한다. socket par
 World Store는 서버 데이터를 읽기 쉽게 보관하는 Runtime cache다.
 
 - world metadata와 clock sync
-- `chunkKey → { revision, tiles, respawns }`
+- `chunkKey → { revision, tiles }`
 - `entityId → authoritative entity snapshot`
 - local player ID와 last acknowledged input sequence
 - connection/initialization 상태
@@ -72,6 +72,13 @@ refactor에 추가하지 않는다.
 - entity update가 오면 이전 visual position에서 새 target까지 보간한다.
 - camera와 remote player가 공유하는 순수 보간은 `position-interpolator.ts`에 두고,
   camera transform은 `camera-runtime.ts`만 담당한다.
+- player의 좌표 이동 anchor와 캐릭터 변형 body를 분리해 위치 transform과
+  squash/jump transform이 서로 덮어쓰지 않게 한다.
+- 대기 body는 바닥 중앙을 기준으로 500ms마다 `102%×98% → 98%×102%`를
+  반복한다.
+- 인접 칸 이동 body는 출발 `105%×90%`, 최고점 `90%×105%`와 바닥 위 10px,
+  착지 `105%×90%` pose를 사용한다.
+- teleport/respawn은 인접 칸 jump animation을 실행하지 않는다.
 - bomb는 player보다 높은 명시적 layer에 표시한다.
 - offscreen enemy pointer는 viewport projection이며 server entity를 바꾸지 않는다.
 
@@ -134,6 +141,7 @@ refactor에 추가하지 않는다.
 - 연속 key hold에서 camera frame 간 큰 jump 없음
 - key release 뒤 원래 칸으로 복귀하지 않고 승인 target까지 완료
 - respawn teleport와 일반 이동 분리
+- 대기 squash와 인접 칸 jump가 player 좌표·camera transform을 바꾸지 않음
 - chunk delta가 해당 chunk만 갱신
 - entity revision gap/stale update 처리
 - reconnect 때 잘못된 world cache 폐기

@@ -20,7 +20,6 @@ export function startServer({ environment = process.env, logger = console.log } 
     world,
     initialTick: initialTimeline.tick,
     moveIntervalMs: config.moveIntervalMs,
-    crateRespawnTicks: 8,
     bombFuseTicks: 3,
   });
   const botController = createBotController({ world });

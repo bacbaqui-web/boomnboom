@@ -58,6 +58,7 @@ Browser
 - `movement-prediction.ts`: pending input을 한 칸 앞 visual target으로 제한하고 ack/session에 수렴
 - `position-interpolator.ts`: camera와 remote player가 공유하는 시간 기반 위치 보간
 - `camera-runtime.ts`: visual world position을 중앙 camera transform으로 투영
+- `player-animation.ts`: 대기 500ms와 이동 10px jump의 pose·duration 계약
 - `input-runtime.ts`, `use-game-input.ts`: keyboard/pointer 145ms hold, stop/bomb와 cleanup
 - `audio-runtime.ts`: BGM Audio, server clock seek/drift와 4단계 volume
 - `use-game-controller.ts`: Store/Socket/Input/Audio와 nickname/respawn UI state 조립
@@ -66,6 +67,7 @@ Browser
 
 - `TerrainLayer.tsx`: 25청크 fixed DOM, chunk revision selector와 절대좌표 floor pattern
 - `EntityLayer.tsx`: remote player rAF 보간과 bomb/item/flame 렌더링
+- `PlayerAvatar.tsx`: player body, nickname, shield와 local action cue 렌더링
 - `EnemyPointers.tsx`, `entity-selectors.ts`: 화면 밖 적 방향과 local bomb 조회
 - `WorldViewport.tsx`: 15×11 overflow crop, local player 중앙 anchor와 rAF `translate3d`
 - `GameHeader.tsx`, `WorldTickHud.tsx`, `GameLegend.tsx`: 연결·박자·범례 UI
@@ -75,9 +77,9 @@ Browser
 ### `app/globals.css`
 
 - 전체 게임 shell, board, fixed chunk, entity, overlay와 control 스타일
-- player bounce/world slide와 center-relative wall shadow 제거
+- player 위치 anchor와 바닥 기준 idle squash body 스타일
 - wall/crate box-shadow 0, absolute coordinate floor 교차 pattern
-- player 이동 transform은 CSS animation이 아니라 Runtime rAF만 사용
+- player 위치 이동은 Runtime rAF, body jump/squash는 독립 animation으로 사용
 
 ### `app/layout.tsx`
 
@@ -104,7 +106,8 @@ Browser
 - authoritative 140ms movement cadence와 collision
 - bomb 설치/limit/fuse, item collect와 능력치
 - world tick catch-up, 폭발 순간 damage, shield/death와 AI drop/respawn
-- player 9×9 warning commit 연기, committed warning 유지와 bomb 칸 respawn 연기
+- live flame 칸으로 이동할 때 같은 damage/shield 규칙 적용
+- 폭발로 파괴된 crate를 floor로 확정하고 자동 재생성하지 않음
 - 모든 canonical 변경을 World Owner 공개 command로 수행
 - command 결과의 `accepted`, `changed`, `publish`를 session/timer에 반환
 
@@ -136,7 +139,6 @@ Browser
 
 - 16×16 canonical materialized chunk registry와 monotonic revision
 - player, bomb, item, flame entity registry의 유일한 소유자
-- respawn schedule을 청크 cell state로 소유
 - tile rectangle, entity snapshot과 mutation command 제공
 - player 주변 반경 2청크 materialize와 base-only cold chunk trim
 - 외부에는 Map과 mutable canonical object를 반환하지 않음
@@ -171,7 +173,7 @@ Browser
 
 1. player 주변 청크를 World Owner가 최초 접근에서 materialize한다.
 2. 이동·충돌·폭발은 World Owner의 canonical tile을 읽는다.
-3. crate 파괴와 respawn이 해당 chunk revision을 증가시킨다.
+3. crate 파괴가 해당 chunk revision을 증가시키며 이후 자동 복구하지 않는다.
 4. Gateway는 V2 구독자에게 changed chunk delta만 보내며 viewer별 tile matrix를
    만들지 않는다.
 
@@ -181,7 +183,7 @@ Browser
 - AI interval: 500ms
 - world tick: 기본 1000ms
 - bomb fuse: 3 tick
-- crate respawn: 8 tick, 마지막 2 tick warning
+- crate respawn: 없음
 - BGM/world epoch: 환경 변수 또는 2026-08-14 UTC 기준값
 
 ## 4. Protocol V2 server
@@ -253,13 +255,15 @@ serializer를 제거했다.
 - `tests/world-store.test.mjs`: snapshot/delta/gap/stale, chunk notification과 reconnect
 - `tests/world-selectors.test.mjs`: terrain/entity 기반 client cell 진입 조회
 - `tests/position-interpolator.test.mjs`, `camera-runtime.test.mjs`: 위치 보간과 camera transform
+- `tests/player-animation.test.mjs`: 바닥 기준 idle scale, 이동 scale과 10px jump pose
 - `tests/movement-prediction.test.mjs`: 즉시 target, ack, 연속 입력, reject와 session reset 5건
 - `tests/game-socket.test.mjs`: 닫힌 socket 전송 실패 sequence가 prediction에 안 들어가는지 검증
 - `tests/input-runtime.test.mjs`: movement hold/stop/bomb/unmount cleanup 2건
 - `server/test/coordinates.test.mjs`, `chunk-generator.test.mjs`: 음수 좌표와 결정적 경계 생성
 - `server/test/world-owner.test.mjs`, `spawn-finder.test.mjs`: canonical revision/metric과 spawn non-mutation
 - `server/test/game-simulation.test.mjs`: 이동 cadence/collision/item, 폭탄,
-  폭발 순간 damage, shield/death/AI drop·respawn, warning/respawn과 tick catch-up
+  폭발 순간·live flame 접촉 damage, shield/death/AI drop·respawn, 영구 crate
+  파괴와 tick catch-up
 - `server/test/bot-controller.test.mjs`: no-human idle, read snapshot intent와 shared
   Simulation command
 - `server/test/protocol-v2.test.mjs`, `backpressure-sender.test.mjs`: protocol과 전송 제한
@@ -272,7 +276,7 @@ serializer를 제거했다.
 
 | 목표 책임 | 현재 상태 |
 |---|---|
-| 단일 World Owner | 16×16 chunk/entity/respawn registry 구현 완료 |
+| 단일 World Owner | 16×16 chunk/entity registry 구현 완료 |
 | materialized shared chunk | absolute-coordinate generator와 revision 구현 완료 |
 | chunk revision/snapshot/delta | V2 server/client delta/resync 구현, viewer tile matrix 제거 |
 | server simulation boundary | gameplay/tick은 Simulation, AI는 read-only Controller로 분리 완료 |
@@ -280,6 +284,6 @@ serializer를 제거했다.
 | client chunk/entity store | revision 검증 external Store 구현 완료 |
 | terrain/entity/camera layer | fixed chunk / entity / rAF camera로 분리 완료 |
 | bounded lifecycle metrics | base-only cold trim, health count와 production 10분 soak PASS |
-| behavior regression tests | server 26건 + client/store/socket/camera/input/prediction/SSR 17건 |
+| behavior regression tests | server 25건 + client/store/socket/camera/input/prediction/SSR 검증 |
 
 이 차이는 `docs/98_sprint_plan.md`의 6단계에서 순차적으로 해소한다.

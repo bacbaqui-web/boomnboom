@@ -66,7 +66,7 @@ process lifecycle, `simulation-scheduler.mjs`가 timer, `health-handler.mjs`가 
 - active: player simulation/preload 범위
 - retained: active 밖이지만 짧은 재접근에 대비
 - cold: subscriber와 pending entity/mutation 없음
-- pinned: pending respawn, item, bomb 또는 보존되지 않은 mutation 있음
+- pinned: item, bomb 또는 보존되지 않은 mutation 있음
 
 base-only cold chunk는 TTL/LRU와 최대 청크 수로 eviction할 수 있다. pinned chunk는
 mutation journal 또는 snapshot 없이 해제하지 않는다. 다음 metrics를 health 또는
@@ -84,8 +84,7 @@ mutation journal 또는 snapshot 없이 해제하지 않는다. 다음 metrics�
 현재 Sprint는 다음 명시적 정책을 사용한다.
 
 - 유지: world ID, seed, generator version, world epoch와 base terrain 결과
-- 초기화: 사람 session, player 상태, AI runtime, bomb, flame, item, destroyed crate,
-  warning과 pending respawn
+- 초기화: 사람 session, player 상태, AI runtime, bomb, flame, item과 destroyed crate
 - 결과: 재시작 뒤 같은 좌표의 자연 지형은 같지만 진행 중 전투 변화는 초기화
 
 이 정책은 데이터 손실 버그가 아니라 현재 비영속 live-world 계약이다. 전투 상태를
@@ -97,8 +96,8 @@ schema migration과 복구 실패 정책을 먼저 설계한다.
 같은 process 안에서 cold chunk를 해제하려면 mutation을 잃지 않아야 한다.
 첫 구현은 다음 중 단순한 방법을 선택한다.
 
-1. mutation/pending state가 있는 chunk를 pinned하여 해제하지 않음
-2. compact in-memory journal에 base와 다른 cell/pending respawn만 보존
+1. mutation이 있는 chunk를 pinned하여 해제하지 않음
+2. compact in-memory journal에 base와 다른 cell만 보존
 
 Oracle disk/database persistence는 이번 Sprint의 필수 조건이 아니다. 메모리 측정
 결과 pinned chunk가 지속적으로 증가할 때 다음 Sprint에서 journal을 도입한다.
@@ -119,7 +118,7 @@ Oracle disk/database persistence는 이번 Sprint의 필수 조건이 아니다.
 - world tick과 last completed simulation time
 - connection/player/bot 수
 - chunk 상태별 수
-- bomb/item/pending respawn 수
+- bomb/item 수
 - event loop lag 또는 last tick duration
 
 World Owner 초기화 실패나 simulation loop 중단 상태를 `ok: true`로 숨기지 않는다.

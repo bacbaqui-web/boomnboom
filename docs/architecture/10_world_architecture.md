@@ -80,13 +80,11 @@ WorldChunk
   revision
   generatorVersion
   tiles[chunkSize * chunkSize]
-  respawnsByCell
   lastActiveAt
 ```
 
 - `tiles`에는 현재 충돌 가능한 wall, crate와 floor가 들어간다.
-- warning은 별도 가상 타일 생성이 아니라 `respawnsByCell`의 projection이다.
-- tile 또는 respawn schedule이 바뀌면 revision을 한 번 증가시킨다.
+- tile이 바뀌면 revision을 한 번 증가시킨다.
 - player, bomb와 item은 청크의 tile 배열에 넣지 않고 Entity Registry에서
   좌표로 관리한다.
 - 같은 mutation batch에서 한 청크를 여러 번 바꿔도 최종 commit 시 revision은
@@ -133,17 +131,14 @@ WorldChunk
 - 안전한 위치를 찾지 못하면 검색 반경을 넓히며 임의 좌표를 floor로 바꾸지
   않는다.
 
-## 9. 상자 파괴와 재생성
+## 9. 상자 파괴
 
-- 폭발로 crate가 파괴되면 해당 tile은 floor가 되고 respawn schedule이 생긴다.
-- 예정 시각 직전 warning은 schedule projection으로 표시한다.
-- schedule을 최초 생성하거나 연장할 때 active player 9×9과 bomb 점유를
-  확인한다.
-- player가 가까워 새 schedule이 허용되지 않으면 warning도 만들지 않는다.
-- schedule이 이미 commit된 뒤 player가 접근해도 그대로 유지한다.
-- 예정 칸에 bomb가 있으면 명시된 다음 world tick으로 연기한다.
-- 재생성 commit은 crate tile 복구, schedule 삭제와 revision 증가를 하나의
-  mutation batch로 처리한다.
+- 폭발로 crate가 파괴되면 해당 tile은 floor가 된다.
+- 파괴 시 해당 chunk revision을 한 번 증가시킨다.
+- 자동 재생성 schedule과 warning projection은 만들지 않는다.
+- 파괴 mutation이 있는 청크는 별도 journal이 없는 동안 프로세스 수명 내에서
+  해제하지 않아 같은 live world에서 상자가 되살아나지 않게 한다.
+- 서버 재시작 뒤 terrain mutation이 초기화되는 현재 비영속 계약은 유지한다.
 
 ## 10. Runtime index와 메모리
 
@@ -161,7 +156,7 @@ index는 canonical registry의 두 번째 원본이 아니며 mutation commit과
 
 - active/retention 범위 밖
 - subscriber 0
-- bomb, item, flame와 pending respawn 없음
+- bomb, item과 flame 없음
 - 보존해야 할 mutation이 journal 또는 persistent snapshot에 반영됨
 
 첫 구현에서는 안전성을 위해 mutation이 있는 청크를 프로세스 수명 동안
@@ -186,6 +181,5 @@ health/metrics에서 확인 가능해야 한다.
 - tile mutation별 revision 증가
 - 다른 두 viewer가 같은 chunk snapshot/revision 수신
 - spawn이 기존 지형을 바꾸지 않음
-- player 주변 미확정 respawn은 warning 없이 연기
-- 이미 commit된 warning은 player 접근 뒤에도 실행
+- 파괴된 crate가 이후 world tick에도 floor로 유지
 - eviction 뒤 base terrain 복원과 mutation 보존

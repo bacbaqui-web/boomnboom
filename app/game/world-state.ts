@@ -1,7 +1,6 @@
 import type {
   ConnectionStatus,
   EnemySummary,
-  RespawnProjection,
   Tile,
   WorldEntity,
 } from "./protocol.ts";
@@ -14,7 +13,6 @@ export type ChunkState = {
   originY: number;
   revision: number;
   tiles: readonly Tile[];
-  respawns: readonly RespawnProjection[];
 };
 
 export type WorldMetadata = {

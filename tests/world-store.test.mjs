@@ -46,7 +46,6 @@ function chunkSnapshot(revision = 1, tile = "crate") {
     originY: 0,
     revision,
     tiles: [tile, ...new Array(255).fill("floor")],
-    respawns: [],
   });
 }
 
@@ -64,13 +63,10 @@ test("World Store applies snapshot and matching delta but requests resync on a g
     fromRevision: 1,
     revision: 2,
     changes: [{ index: 0, tile: "floor" }],
-    respawnChanges: [{ index: 0, x: 0, y: 0, respawnTick: 10, committed: true }],
-    removedRespawnIndexes: [],
   }));
   assert.deepEqual(applied, { applied: true });
   assert.equal(store.getChunk("0,0").revision, 2);
   assert.equal(store.getChunk("0,0").tiles[0], "floor");
-  assert.equal(store.getChunk("0,0").respawns[0].committed, true);
 
   const gap = store.apply(message("chunk_delta", {
     chunkKey: "0,0",
@@ -139,7 +135,6 @@ test("only the changed chunk selector is notified", () => {
     fromRevision: 1,
     revision: 2,
     changes: [{ index: 0, tile: "floor" }],
-    respawnChanges: [], removedRespawnIndexes: [],
   }));
   assert.equal(first, 1);
   assert.equal(second, 0);

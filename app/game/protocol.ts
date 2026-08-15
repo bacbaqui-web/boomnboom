@@ -2,7 +2,7 @@ export const PROTOCOL_VERSION = 2 as const;
 export const CHUNK_SIZE = 16;
 export const PRELOAD_CHUNK_COUNT = 25;
 
-export type Tile = "floor" | "wall" | "crate" | "warning";
+export type Tile = "floor" | "wall" | "crate";
 export type Action = "up" | "down" | "left" | "right" | "bomb" | "wait" | "stop";
 export type MoveAction = Extract<Action, "up" | "down" | "left" | "right">;
 export type ConnectionStatus = "connecting" | "online" | "offline";
@@ -58,14 +58,6 @@ export type EnemySummary = {
   distance: number;
   nickname: string;
   isAI: boolean;
-};
-
-export type RespawnProjection = {
-  index: number;
-  x: number;
-  y: number;
-  respawnTick: number;
-  committed: boolean;
 };
 
 export type ServerMessage = {

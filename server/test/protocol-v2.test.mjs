@@ -36,22 +36,16 @@ test("chunk delta carries the exact revision gap and changed cells", () => {
     key: "-1,2",
     revision: 4,
     tiles: ["floor", "crate", "floor"],
-    respawns: [],
   };
   const after = {
     key: "-1,2",
     revision: 5,
     tiles: ["floor", "floor", "floor"],
-    respawns: [{ index: 1, x: -15, y: 32, respawnTick: 10, committed: false }],
   };
   assert.deepEqual(diffChunkSnapshots(before, after), {
     chunkKey: "-1,2",
     fromRevision: 4,
     revision: 5,
     changes: [{ index: 1, tile: "floor" }],
-    respawnChanges: [
-      { index: 1, x: -15, y: 32, respawnTick: 10, committed: false },
-    ],
-    removedRespawnIndexes: [],
   });
 });

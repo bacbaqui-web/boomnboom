@@ -20,7 +20,6 @@ export function createHealthHandler({
         ok: healthyTick,
         tick: simulation.tick,
         players: metrics.players,
-        destroyed: metrics.respawns,
         chunks: metrics.chunks,
         bombs: metrics.bombs,
         items: metrics.items,
@@ -35,7 +34,6 @@ export function createHealthHandler({
           pinnedChunks: metrics.pinnedChunks,
           retainedChunks: metrics.retainedChunks,
           materializations: metrics.materializations,
-          respawns: metrics.respawns,
         },
         entities: {
           total: metrics.entities,

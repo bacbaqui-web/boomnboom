@@ -5,20 +5,12 @@ import { CameraRuntime } from "./camera-runtime";
 import { EnemyPointers } from "./EnemyPointers";
 import { EntityLayer } from "./EntityLayer";
 import { findLocalBomb } from "./entity-selectors";
+import { playPlayerJump } from "./player-animation";
+import { PlayerAvatar } from "./PlayerAvatar";
 import type { Position } from "./position-interpolator";
 import type { Action, PlayerEntity } from "./protocol";
 import { TerrainLayer } from "./TerrainLayer";
 import type { ClientWorldStore, EntitySnapshot, WorldSnapshot } from "./world-store";
-
-const actionIcon: Record<Action, string> = {
-  up: "↑",
-  down: "↓",
-  left: "←",
-  right: "→",
-  bomb: "●",
-  wait: "Ⅱ",
-  stop: "Ⅱ",
-};
 
 export function WorldViewport({
   store,
@@ -39,6 +31,8 @@ export function WorldViewport({
 }) {
   const boardRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const localAvatarRef = useRef<HTMLSpanElement | null>(null);
+  const localJumpRef = useRef<Animation | null>(null);
   const cameraRef = useRef(new CameraRuntime(175));
   const previousPlayerRef = useRef<{ x: number; y: number; alive: boolean } | null>(null);
   const [tileSize, setTileSize] = useState(0);
@@ -59,11 +53,19 @@ export function WorldViewport({
   useLayoutEffect(() => {
     if (!localPlayer || !localVisualPosition) return;
     const previous = previousPlayerRef.current;
+    const distance = previous
+      ? Math.hypot(localVisualPosition.x - previous.x, localVisualPosition.y - previous.y)
+      : 0;
     const teleport =
       !previous ||
       (!previous.alive && localPlayer.alive) ||
-      Math.hypot(localVisualPosition.x - previous.x, localVisualPosition.y - previous.y) > 2;
+      distance > 2;
     cameraRef.current.setTarget(localVisualPosition.x, localVisualPosition.y, performance.now(), { teleport });
+    if (previous?.alive && localPlayer.alive && distance > 0 && !teleport && localAvatarRef.current) {
+      localJumpRef.current = playPlayerJump(localAvatarRef.current, localJumpRef.current);
+    } else if (teleport) {
+      localJumpRef.current?.cancel();
+    }
     previousPlayerRef.current = {
       x: localVisualPosition.x,
       y: localVisualPosition.y,
@@ -87,7 +89,10 @@ export function WorldViewport({
       frame = requestAnimationFrame(paint);
     };
     frame = requestAnimationFrame(paint);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      localJumpRef.current?.cancel();
+    };
   }, [tileSize]);
 
   const localBomb = findLocalBomb(entitySnapshot.entities, localPlayer);
@@ -107,13 +112,15 @@ export function WorldViewport({
       </div>
       {localPlayer?.alive ? (
         <span
-          className={`fighter me centerPlayer ${localPlayer.shield > 0 ? "shielded" : ""}`}
+          className="playerAnchor centerPlayer"
           style={{ width: tileSize * 0.72, height: tileSize * 0.72 }}
         >
-          <em>{localPlayer.nickname}</em>◉
-          <i className={`actionCue cue-${queuedAction}`} title="내 현재 행동">
-            {actionIcon[queuedAction]}
-          </i>
+          <PlayerAvatar
+            ref={localAvatarRef}
+            player={localPlayer}
+            variant="me"
+            queuedAction={queuedAction}
+          />
         </span>
       ) : null}
       {localBomb ? (

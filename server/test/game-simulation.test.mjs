@@ -124,48 +124,39 @@ test("damage uses player positions at the explosion tick", () => {
   );
 });
 
-test("player in a 9x9 area prevents a new warning from committing", () => {
-  const world = createTestWorld({ crates: [[5, 5]] });
-  addPlayer(world, { id: "P1", x: 5, y: 6 });
-  world.destroyCrate(5, 5, 2);
-  const simulation = createGameSimulation({ world, initialTick: 0 });
+test("moving into a live flame applies the same damage and shield rules", () => {
+  const world = createTestWorld();
+  addPlayer(world, { id: "OWNER", x: 0, y: 1, range: 2 });
+  addPlayer(world, { id: "RUNNER", x: 2, y: 2 });
+  addPlayer(world, { id: "SHIELDED", x: 1, y: 2, shield: 1 });
+  const simulation = createGameSimulation({ world, initialTick: 0, bombFuseTicks: 1 });
 
+  simulation.applyAction("OWNER", "bomb");
+  world.updatePlayer("OWNER", { x: 10, y: 10, prevX: 10, prevY: 10 });
   simulation.advanceToTick(1);
-  const respawn = world.readRespawns()[0];
-  assert.equal(respawn.committed, false);
-  assert.equal(respawn.respawnTick, 4);
-  assert.equal(world.readTile(5, 5, { tick: 1 }), "floor");
+  assert.ok(world.readFlames().some((flame) => flame.x === 2 && flame.y === 1));
+
+  simulation.applyAction("RUNNER", "up", { now: 1000 });
+  simulation.applyAction("SHIELDED", "up", { now: 1000 });
+  assert.equal(world.getPlayer("RUNNER").alive, false);
+  assert.equal(world.getPlayer("SHIELDED").alive, true);
+  assert.equal(world.getPlayer("SHIELDED").shield, 0);
 });
 
-test("a committed warning remains committed after a player approaches", () => {
-  const world = createTestWorld({ crates: [[5, 5]] });
-  world.destroyCrate(5, 5, 3);
-  const simulation = createGameSimulation({ world, initialTick: 0 });
+test("a crate destroyed by an explosion remains floor on later world ticks", () => {
+  const world = createTestWorld({ crates: [[1, 1]] });
+  addPlayer(world, { id: "P1", x: 0, y: 1, range: 2 });
+  const simulation = createGameSimulation({ world, initialTick: 0, bombFuseTicks: 1 });
 
+  simulation.applyAction("P1", "bomb");
+  world.updatePlayer("P1", { x: 10, y: 10, prevX: 10, prevY: 10 });
   simulation.advanceToTick(1);
-  assert.equal(world.readRespawns()[0].committed, true);
-  assert.equal(world.readTile(5, 5, { tick: 1 }), "warning");
-  addPlayer(world, { id: "P1", x: 5, y: 6 });
-  simulation.advanceToTick(2);
-  assert.equal(world.readRespawns()[0].committed, true);
-  assert.equal(world.readTile(5, 5, { tick: 2 }), "warning");
-  simulation.advanceToTick(3);
-  assert.equal(world.readTerrainTile(5, 5), "crate");
-});
+  assert.equal(world.readTerrainTile(1, 1), "floor");
+  const revision = world.readChunkSnapshot(0, 0).revision;
 
-test("a bomb occupying a respawn cell delays the crate", () => {
-  const world = createTestWorld({ crates: [[5, 5]] });
-  world.destroyCrate(5, 5, 1);
-  world.setRespawnCommitted(5, 5, true);
-  world.addBomb({ id: 99, x: 5, y: 5, owner: "P1", fuse: 3, bornTick: 0, range: 1 });
-  const simulation = createGameSimulation({ world, initialTick: 0 });
-
-  simulation.advanceToTick(1);
-  assert.equal(world.readTerrainTile(5, 5), "floor");
-  assert.equal(world.readRespawns()[0].respawnTick, 2);
-  simulation.advanceToTick(2);
-  assert.equal(world.readTerrainTile(5, 5), "floor");
-  assert.equal(world.readRespawns()[0].respawnTick, 3);
+  simulation.advanceToTick(20);
+  assert.equal(world.readTerrainTile(1, 1), "floor");
+  assert.equal(world.readChunkSnapshot(0, 0).revision, revision);
 });
 
 test("late timer catch-up advances each missed bomb tick exactly once", () => {

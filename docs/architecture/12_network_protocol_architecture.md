@@ -88,7 +88,6 @@ seed identity는 cache 구분과 진단용이다. client가 seed로 tile을 생�
 - chunk key와 world origin
 - revision
 - compact tile payload
-- pending respawn/warning projection
 
 최초 구독, client cache miss 또는 revision gap 복구 때만 전송한다.
 
@@ -97,7 +96,6 @@ seed identity는 cache 구분과 진단용이다. client가 seed로 tile을 생�
 - chunk key
 - `fromRevision`, `revision`
 - changed cell index와 새 tile
-- respawn schedule projection add/update/remove
 
 client의 current revision이 `fromRevision`과 다르면 delta를 억지로 적용하지 않고
 `chunk_resync`를 요청한다.
@@ -182,7 +180,7 @@ client 좌표는 요청 결과가 아니며 서버가 현재 canonical 위치에
 - Gateway는 chunk subscriber와 entity interest를 기준으로 필요한 client에게만
   전송한다.
 - 일반 player 이동은 entity delta와 input ack만 보낸다.
-- crate 파괴/재생성은 해당 chunk delta를 구독자에게만 보낸다.
+- crate 파괴는 해당 chunk delta를 구독자에게만 보낸다.
 - tick clock UI를 위해 빈 world state 전체를 broadcast하지 않는다. 필요한
   clock metadata는 작은 heartbeat로 보정한다.
 
