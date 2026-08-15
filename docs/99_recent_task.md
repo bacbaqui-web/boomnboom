@@ -355,7 +355,7 @@ framework는 가져오지 않는다.
 - 현재 검증: root build/client 65건, server 63건, lint, tsc, syntax와 diff-check PASS
 - GitHub `main`: `4cfeaab` push 완료
 - Oracle: V2/V3 병행 server-first 배포, public V2/V3 smoke PASS
-- Sites: version 43 공개 배포 완료
+- Sites: version 44 공개 배포 완료, 최종 Edge console application error 0
 - Edge: 독립 탭 2개 동시 입장, 이동, bomb과 400px responsive QA PASS
 - Oracle soak: V3 2 connections, 608초, RSS 최대 85,557,248B,
   backlog/queue/backpressure/rate reject 모두 0

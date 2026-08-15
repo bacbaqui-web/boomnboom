@@ -381,10 +381,11 @@ Rollback: resume 비활성, current new-session reconnect
 - GitHub `main` commit `4cfeaab` push 완료
 - Oracle에 V2/V3 server-first 배포 후 public V2 join/input과 V3
   join/input/bomb/same-player resume PASS
-- Sites version 43을 배포해 공개 client 기본값을 V3로 전환
+- Sites version 44를 배포해 공개 client 기본값을 V3로 전환하고 SVG favicon 명시
 - Microsoft Edge 독립 탭 2개에서 `EDGE-A`, `EDGE-B` 동시 입장, 실제 이동과
   3초 bomb 표시 PASS
 - Edge responsive device emulation 400px에서 board, controls와 bomb button 표시 PASS
+- 최종 새로고침 뒤 Edge console application error 0
 - 실제 V3 연결 2개를 유지한 608초 soak에서 RSS 최대 85,557,248B,
   fixed backlog 0, command queue 0, backpressure 0, rate reject 0
 - 128MiB 제한 대비 종료 시 48,660,480B 여유
