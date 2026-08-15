@@ -80,6 +80,14 @@ function staticPosition(entity: { x: number; y: number }, inset: number, tileSiz
   };
 }
 
+function cellPosition(entity: { x: number; y: number }, tileSize: number) {
+  return {
+    ...staticPosition(entity, 0, tileSize),
+    width: tileSize,
+    height: tileSize,
+  };
+}
+
 export const EntityLayer = memo(function EntityLayer({
   store,
   tileSize,
@@ -108,7 +116,7 @@ export const EntityLayer = memo(function EntityLayer({
         <span
           key={flame.id}
           className="flame worldEntity eventFlame"
-          style={staticPosition(flame, 0.5, tileSize)}
+          style={cellPosition(flame, tileSize)}
         >
           ✦
         </span>
@@ -178,7 +186,7 @@ export const EntityLayer = memo(function EntityLayer({
           <span
             key={`flame:${entity.id}`}
             className="flame worldEntity"
-            style={staticPosition(entity, 0.5, tileSize)}
+            style={cellPosition(entity, tileSize)}
           >
             ✦
           </span>

@@ -229,7 +229,7 @@ header {
 .item-bomb { border-radius: 50%; background: #ffd43b; color: #111; }
 .item-shield { background: #8eefff; color: #2476b3; }
 .item-flame { background: #ffab4f; }
-.flame { z-index: 14; color: #fff05d; font-size: 42px; line-height: 1; text-shadow: 0 0 5px #ff342e, 0 0 12px #ff342e; }
+.flame { z-index: 14; display: grid; place-items: center; color: #fff05d; font-size: 42px; line-height: 1; text-shadow: 0 0 5px #ff342e, 0 0 12px #ff342e; }
 
 .enemyPointer { position: absolute; z-index: 22; width: 32px; height: 32px; display: grid; place-items: center; transform: translate(-50%, -50%); pointer-events: none; }
 .enemyPointer i { position: absolute; width: 28px; height: 28px; display: grid; place-items: center; color: #ff5267; font-size: 25px; font-style: normal; line-height: 1; text-shadow: 0 2px #7b1531, 0 0 5px white; }
