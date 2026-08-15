@@ -1,8 +1,7 @@
 # Source Map
 
-> 현재 source 기준: client 기본값은 Protocol V3이며 `?protocol=2`가 V2 rollback이다.
-> local server source는 V2/V3를 명시적으로 병행한다. 아직 Oracle server와 공개
-> Sites에는 이번 Sprint를 배포하지 않았다.
+> 현재 production 기준: Sites client 기본값은 Protocol V3이며 `?protocol=2`가
+> V2 rollback이다. Oracle server는 V2/V3를 명시적으로 병행한다.
 >
 > 영구 목표 설계는 `docs/architecture/10_world_architecture.md`부터
 > `docs/architecture/14_persistence_lifecycle_architecture.md`까지를 따른다.
@@ -346,10 +345,11 @@ serializer를 제거했다.
 | materialized shared chunk | absolute-coordinate generator와 revision 구현 완료 |
 | chunk revision/snapshot/delta | V2 server/client delta/resync 구현, viewer tile matrix 제거 |
 | server simulation boundary | gameplay/tick은 Simulation, AI는 read-only Controller로 분리 완료 |
-| Protocol V3 prediction/authority | 기본 V3와 V2 rollback client 구현, 배포 전 검증 완료 |
+| Protocol V3 prediction/authority | 기본 V3와 V2 rollback client 공개 배포 완료 |
 | client chunk/entity store | revision 검증 external Store 구현 완료 |
 | terrain/entity/camera layer | fixed chunk / entity / rAF camera로 분리 완료 |
 | bounded lifecycle metrics | base-only cold trim, health count와 production 10분 soak PASS |
-| behavior regression tests | server 25건 + client/store/socket/camera/input/prediction/SSR 검증 |
+| behavior regression tests | server 63건 + root build/client 65건 검증 |
 
-배포·운영 관찰과 V2 cleanup 결정은 `docs/98_sprint_plan.md`의 7단계에서 완료한다.
+7단계 배포와 10분 운영 관찰을 완료했다. V2는 첫 V3 release의 즉시 rollback을 위해
+유지하며, 더 긴 live traffic 관찰 뒤 별도 cleanup Sprint에서 제거 여부를 판단한다.

@@ -20,8 +20,9 @@ full world rollback, shooter식 lag compensation, generic netcode framework와 �
 input delay는 사용하지 않는다.
 
 이번 Task에서 canonical Architecture와 새 Sprint 계획을 실제 제품 코드로 구현했다.
-현재 1~6단계와 7단계 배포 전 검증을 완료했으며 Oracle server와 공개 Sites 배포를
-앞두고 있다.
+1~7단계 구현, server-first 배포, 실제 Edge 2-client QA와 10분 이상 운영 관찰까지
+완료했다. 공개 client는 기본 Protocol V3이며 `?protocol=2`를 즉시 rollback으로
+유지한다.
 
 ## 2. 현재 설계의 문제점
 
@@ -343,13 +344,19 @@ framework는 가져오지 않는다.
 - 최종 책임 구조와 Protocol V3 계약: 완료
 - canonical Architecture 갱신: 완료
 - active Sprint 계획 작성: 완료
-- 제품 구현: 6/7단계 완료, 7단계 배포 전 검증 완료
+- 제품 구현: 7/7단계 완료
 - 1단계 Shared Movement Core: PASS
 - 2단계 V3 Server Fixed Simulation과 V2 병행: PASS
 - 3단계 V3 Local Prediction/Replay/Correction: PASS
 - 4단계 Remote Snapshot Interpolation: PASS
 - 5단계 Bomb/Explosion V3: PASS
 - 6단계 Resume/Late Join/Network Hardening: PASS
-- 7단계 기본 V3/V2 rollback 전환과 local 실제 two-client smoke: PASS
+- 7단계 기본 V3/V2 rollback 전환, 배포·Edge QA·운영 관찰: PASS
 - 현재 검증: root build/client 65건, server 63건, lint, tsc, syntax와 diff-check PASS
-- commit/push/deploy: 수행하지 않음
+- GitHub `main`: `4cfeaab` push 완료
+- Oracle: V2/V3 병행 server-first 배포, public V2/V3 smoke PASS
+- Sites: version 43 공개 배포 완료
+- Edge: 독립 탭 2개 동시 입장, 이동, bomb과 400px responsive QA PASS
+- Oracle soak: V3 2 connections, 608초, RSS 최대 85,557,248B,
+  backlog/queue/backpressure/rate reject 모두 0
+- cleanup 결정: V2는 첫 V3 release rollback으로 유지, 별도 Sprint에서 제거 재평가

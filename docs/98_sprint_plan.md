@@ -2,16 +2,16 @@
 
 ## 상태
 
-- Sprint 진행 중
+- Sprint 완료
 - 1단계 Shared Movement Core: PASS
 - 2단계 V3 Server Fixed Simulation: PASS
 - 3단계 V3 Local Prediction: PASS
 - 4단계 Remote Snapshot Interpolation: PASS
 - 5단계 Bomb/Explosion V3: PASS
 - 6단계 Resume/Late Join/Hardening: PASS
-- 7단계 배포·관찰·Cleanup 결정: 배포 전 검증 완료
+- 7단계 배포·관찰·Cleanup 결정: PASS
 - 현재 source: 기본 Protocol V3, `?protocol=2` rollback
-- 현재 production: Protocol V2, 서버 우선 배포 대기
+- 현재 production: 기본 Protocol V3, `?protocol=2` rollback
 - 목표: 30Hz fixed-point movement, owner prediction/replay, remote interpolation
 
 ## 1. Sprint 목적
@@ -348,7 +348,7 @@ Rollback: resume 비활성, current new-session reconnect
 
 ### 7단계 — 배포, 관찰과 Cleanup 결정
 
-상태: **배포 전 검증 PASS**
+상태: **PASS**
 
 순서:
 
@@ -375,6 +375,21 @@ Rollback: resume 비활성, current new-session reconnect
 - root build/client 65건, server 63건, lint, tsc, syntax와 diff-check PASS
 - 모든 source/test 파일 500줄 미만, production 최대 controller 372줄
 - Oracle 배포 manifest에 `server/`와 sibling `shared/` 동시 배치 요구를 명시
+
+배포·관찰 결과:
+
+- GitHub `main` commit `4cfeaab` push 완료
+- Oracle에 V2/V3 server-first 배포 후 public V2 join/input과 V3
+  join/input/bomb/same-player resume PASS
+- Sites version 43을 배포해 공개 client 기본값을 V3로 전환
+- Microsoft Edge 독립 탭 2개에서 `EDGE-A`, `EDGE-B` 동시 입장, 실제 이동과
+  3초 bomb 표시 PASS
+- Edge responsive device emulation 400px에서 board, controls와 bomb button 표시 PASS
+- 실제 V3 연결 2개를 유지한 608초 soak에서 RSS 최대 85,557,248B,
+  fixed backlog 0, command queue 0, backpressure 0, rate reject 0
+- 128MiB 제한 대비 종료 시 48,660,480B 여유
+- soak 중 V2 traffic 0을 확인했지만 첫 V3 release rollback을 위해 V2는 유지
+- 별도 cleanup Sprint에서 더 긴 live 관찰 뒤 V2 제거 여부 재평가
 
 ## 9. Network Test Matrix
 
