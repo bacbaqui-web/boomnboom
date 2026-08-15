@@ -27,3 +27,16 @@ test("a new target continues from the current visual position and teleport snaps
   camera.setTarget(20, -5, 160, { teleport: true });
   assert.deepEqual(camera.sample(160), { x: 20, y: -5 });
 });
+
+test("a 30Hz local preview is filled smoothly at 60Hz and 120Hz", () => {
+  const render = new PositionInterpolator(1000 / 30);
+  render.setTarget(0.0625, 0, 0, { teleport: true });
+  render.setTarget(0.1875, 0, 0);
+
+  const at120Hz = render.sample(1000 / 120).x;
+  const at60Hz = render.sample(1000 / 60).x;
+  const at30Hz = render.sample(1000 / 30).x;
+  assert.ok(at120Hz > 0.0625 && at120Hz < at60Hz);
+  assert.ok(at60Hz > at120Hz && at60Hz < at30Hz);
+  assert.equal(at30Hz, 0.1875);
+});

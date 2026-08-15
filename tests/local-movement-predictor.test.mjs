@@ -33,6 +33,23 @@ test("keydown predicts exactly one shared step in-frame and scheduler cannot dup
   assert.equal(predictor.advanceTo(2, timeline.pending, openWorld).position.x, 0.1875);
 });
 
+test("render preview fills the next fixed tick without mutating prediction", () => {
+  const predictor = new LocalMovementPredictor();
+  const timeline = new CommandTimeline();
+  predictor.reset(owner());
+  const command = timeline.prepareDirection("right", 1);
+  timeline.commit(command);
+  predictor.advanceTo(1, timeline.pending, openWorld);
+
+  assert.deepEqual(predictor.position, { x: 0.0625, y: 0 });
+  assert.deepEqual(predictor.previewNext(timeline.pending, openWorld).position, {
+    x: 0.1875,
+    y: 0,
+  });
+  assert.deepEqual(predictor.position, { x: 0.0625, y: 0 });
+  assert.equal(predictor.predictedTick, 1);
+});
+
 test("owner reconciliation drops ACKed input, replays all pending ticks, and rejects reorder", () => {
   const predictor = new LocalMovementPredictor();
   const timeline = new CommandTimeline();

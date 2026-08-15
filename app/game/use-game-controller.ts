@@ -14,6 +14,7 @@ import { LocalMovementPredictor } from "./local-movement-predictor";
 import { MovementPrediction } from "./movement-prediction";
 import { resolveNetworkProtocol } from "./network-protocol";
 import { PendingBombPresenter, type PendingBombVisual } from "./pending-bomb-presenter";
+import { PositionInterpolator } from "./position-interpolator";
 import type {
   Action,
   BombEntity,
@@ -45,6 +46,7 @@ export function useGameController() {
   const clockSyncRef = useRef(new ClockSync());
   const commandTimelineRef = useRef(new CommandTimeline());
   const localPredictorRef = useRef(new LocalMovementPredictor());
+  const localRenderInterpolatorRef = useRef(new PositionInterpolator(1000 / 30));
   const correctionSmootherRef = useRef(new CorrectionSmoother());
   const remoteSnapshotBufferRef = useRef(new RemoteSnapshotBuffer());
   const pendingBombPresenterRef = useRef(new PendingBombPresenter());
@@ -73,7 +75,10 @@ export function useGameController() {
     sample(now: number) {
       const predicted = localPredictorRef.current.position;
       return predicted
-        ? correctionSmootherRef.current.sample(predicted, now)
+        ? correctionSmootherRef.current.sample(
+            localRenderInterpolatorRef.current.sample(now),
+            now,
+          )
         : { x: 0, y: 0 };
     },
   }), []);
@@ -90,6 +95,7 @@ export function useGameController() {
   const resetV3Runtime = useCallback(() => {
     commandTimelineRef.current.reset();
     localPredictorRef.current.clear();
+    localRenderInterpolatorRef.current = new PositionInterpolator(1000 / 30);
     correctionSmootherRef.current.reset();
     remoteSnapshotBufferRef.current.clear();
     pendingBombPresenterRef.current.reset();
@@ -97,6 +103,22 @@ export function useGameController() {
     setPendingBombs([]);
     setExplosionFlames([]);
     explosionSignatureRef.current = "";
+  }, []);
+
+  const updateLocalRenderTarget = useCallback((now: number, teleport = false) => {
+    const predictor = localPredictorRef.current;
+    const current = predictor.position;
+    if (!current) return null;
+    const interpolator = localRenderInterpolatorRef.current;
+    if (teleport) {
+      interpolator.setTarget(current.x, current.y, now, { teleport: true });
+    }
+    const preview = predictor.previewNext(
+      commandTimelineRef.current.pending,
+      collisionReaderRef.current,
+    ).position ?? current;
+    interpolator.setTarget(preview.x, preview.y, now);
+    return { current, preview };
   }, []);
 
   const refreshPendingBombs = useCallback(() => {
@@ -151,7 +173,10 @@ export function useGameController() {
     const now = performance.now();
     const previousPosition = predictor.position;
     const previousRender = previousPosition
-      ? correctionSmootherRef.current.sample(previousPosition, now)
+      ? correctionSmootherRef.current.sample(
+          localRenderInterpolatorRef.current.sample(now),
+          now,
+        )
       : null;
     const lifecycleReset =
       predictor.lifeId === null ||
@@ -161,6 +186,7 @@ export function useGameController() {
       timeline.reset();
       predictor.reset(owner);
       correctionSmootherRef.current.reset();
+      updateLocalRenderTarget(now, true);
       return;
     }
     timeline.acknowledge(owner.lastProcessedCommandSeq);
@@ -170,11 +196,23 @@ export function useGameController() {
       collisionReaderRef.current,
     );
     if (!result.applied || !result.position || !previousRender) return;
-    correctionSmootherRef.current.reconcile(previousRender, result.position, now, {
-      forceSnap: result.forceSnap,
-      collisionCrossing: result.collisionCrossing,
-    });
-  }, []);
+    const corrected = previousPosition && (
+      previousPosition.x !== result.position.x ||
+      previousPosition.y !== result.position.y
+    );
+    updateLocalRenderTarget(now, Boolean(corrected));
+    if (corrected) {
+      correctionSmootherRef.current.reconcile(
+        previousRender,
+        localRenderInterpolatorRef.current.sample(now),
+        now,
+        {
+          forceSnap: result.forceSnap,
+          collisionCrossing: result.collisionCrossing,
+        },
+      );
+    }
+  }, [updateLocalRenderTarget]);
 
   useEffect(() => {
     const socket = new GameSocket({
@@ -216,15 +254,16 @@ export function useGameController() {
     const timer = setInterval(() => {
       const predictor = localPredictorRef.current;
       if (!predictor.position) return;
-      predictor.advanceTo(
+      const result = predictor.advanceTo(
         clockSyncRef.current.predictionTargetTick(Date.now()),
         commandTimelineRef.current.pending,
         collisionReaderRef.current,
       );
+      if (result.replayTicks > 0) updateLocalRenderTarget(performance.now());
       refreshExplosionFlames();
     }, 1000 / 30);
     return () => clearInterval(timer);
-  }, [joined, networkProtocol, refreshExplosionFlames, snapshot.initialized]);
+  }, [joined, networkProtocol, refreshExplosionFlames, snapshot.initialized, updateLocalRenderTarget]);
 
   useEffect(() => {
     if (snapshot.metadata && joined) audioRef.current?.sync(snapshot.metadata, snapshot);
@@ -270,11 +309,12 @@ export function useGameController() {
     const command = commandTimelineRef.current.prepareAction(action, targetTick);
     if (!command || !socketRef.current?.sendV3Input(command)) return false;
     if (!commandTimelineRef.current.commit(command)) return false;
-    predictor.advanceTo(
+    const movement = predictor.advanceTo(
       targetTick,
       commandTimelineRef.current.pending,
       collisionReaderRef.current,
     );
+    if (movement.replayTicks > 0) updateLocalRenderTarget(performance.now());
     if (action === "bomb") {
       const bombCell = predictor.bombCell;
       if (bombCell) {
@@ -283,7 +323,7 @@ export function useGameController() {
       }
     }
     return true;
-  }, [refreshPendingBombs]);
+  }, [refreshPendingBombs, updateLocalRenderTarget]);
 
   const sendAction = useCallback((action: Action) => {
     if (networkProtocol === 3) {
@@ -299,11 +339,12 @@ export function useGameController() {
       const command = commandTimelineRef.current.prepareDirection(direction, targetTick);
       if (!command || !socketRef.current?.sendV3Input(command)) return;
       if (!commandTimelineRef.current.commit(command)) return;
-      predictor.advanceTo(
+      const movement = predictor.advanceTo(
         targetTick,
         commandTimelineRef.current.pending,
         collisionReaderRef.current,
       );
+      if (movement.replayTicks > 0) updateLocalRenderTarget(performance.now());
       return;
     }
     const seq = socketRef.current?.sendInput(action) ?? -1;
@@ -311,7 +352,7 @@ export function useGameController() {
       const target = predictionRef.current.enqueue(seq, action as MoveAction);
       showPredictionTarget(target);
     }
-  }, [networkProtocol, sendV3ActionCommand, showPredictionTarget]);
+  }, [networkProtocol, sendV3ActionCommand, showPredictionTarget, updateLocalRenderTarget]);
   const input = useGameInput(
     sendAction,
     joined && snapshot.initialized && snapshot.connection === "online" && Boolean(localPlayer?.alive),

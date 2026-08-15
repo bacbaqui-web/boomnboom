@@ -9,6 +9,10 @@ test("client composes the authoritative WebSocket world from focused modules", a
   const terrain = await readFile(new URL("../app/game/TerrainLayer.tsx", import.meta.url), "utf8");
   const entities = await readFile(new URL("../app/game/EntityLayer.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const controller = await readFile(
+    new URL("../app/game/use-game-controller.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(socket, /wss:\/\/insight\.magamiscom\.ing\/boom-ws/);
   assert.match(socket, /protocol:\s*2/);
   assert.match(socket, /type:\s*"input"/);
@@ -16,6 +20,8 @@ test("client composes the authoritative WebSocket world from focused modules", a
   assert.match(viewport, /requestAnimationFrame/);
   assert.match(viewport, /cancelAnimationFrame/);
   assert.match(viewport, /transformAt/);
+  assert.match(controller, /new PositionInterpolator\(1000 \/ 30\)/);
+  assert.match(controller, /predictor\.previewNext/);
   assert.match(terrain, /data-revision/);
   assert.match(entities, /staticPosition\(entity, 0, tileSize\)/);
   assert.match(entities, /style=\{cellPosition\((?:flame|entity), tileSize\)\}/);

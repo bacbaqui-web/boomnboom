@@ -44,6 +44,23 @@ function tilePosition(state: LocalMovementState): Position {
   };
 }
 
+function directionAtTick(
+  initial: V3Direction,
+  tick: number,
+  pending: readonly PendingCommand[],
+) {
+  let direction = initial;
+  for (const command of pending) {
+    if (
+      command.type === "input_state" &&
+      !isNetTickAfter(command.localApplyTick, tick)
+    ) {
+      direction = command.direction;
+    }
+  }
+  return direction;
+}
+
 export class LocalMovementPredictor {
   #state: LocalMovementState | null = null;
   #predictedTick = 0;
@@ -83,14 +100,7 @@ export class LocalMovementPredictor {
     let collisionCrossing = false;
     while (isNetTickAfter(targetTick, this.#predictedTick) && steps < this.#maxReplayTicks) {
       const tick = (this.#predictedTick + 1) >>> 0;
-      for (const command of pending) {
-        if (
-          command.type === "input_state" &&
-          !isNetTickAfter(command.localApplyTick, tick)
-        ) {
-          direction = command.direction;
-        }
-      }
+      direction = directionAtTick(direction, tick, pending);
       const result = stepMovement(this.#state, { tick, direction }, collision);
       this.#state = result.state as LocalMovementState;
       this.#predictedTick = tick;
@@ -99,6 +109,17 @@ export class LocalMovementPredictor {
     }
     this.#lastReplayTicks = steps;
     return { position: this.position, replayTicks: steps, collisionCrossing };
+  }
+
+  previewNext(pending: readonly PendingCommand[], collision: CollisionReader) {
+    if (!this.#state) return { position: null, collisionCrossing: false };
+    const tick = (this.#predictedTick + 1) >>> 0;
+    const direction = directionAtTick(this.#state.desiredDirection, tick, pending);
+    const result = stepMovement(this.#state, { tick, direction }, collision);
+    return {
+      position: tilePosition(result.state as LocalMovementState),
+      collisionCrossing: result.contacts.length > 0,
+    };
   }
 
   reconcile(

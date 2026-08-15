@@ -82,7 +82,11 @@ local predictor는 `AuthoritativeState + PendingCommands`로 predicted state를 
 1. predicted tick의 input state 선택
 2. shared Movement Core 한 번 실행
 3. predicted state와 tick 저장
-4. camera target에 predicted position 제공
+4. 같은 코어로 다음 1 tick을 mutation 없이 미리 계산
+5. 현재 predicted position에서 안전한 preview position까지 rAF로 33.33ms 보간
+
+preview는 render target일 뿐 predicted state, command ACK와 bomb cell을 변경하지 않는다.
+충돌 reader도 실제 prediction과 동일하므로 벽을 가로질러 미리 그리지 않는다.
 
 ### Owner snapshot 수신
 

@@ -70,7 +70,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 ### Runtime과 Controller
 
 - `movement-prediction.ts`: pending input을 한 칸 앞 visual target으로 제한하고 ack/session에 수렴
-- `position-interpolator.ts`: camera와 remote player가 공유하는 시간 기반 위치 보간
+- `position-interpolator.ts`: camera/remote 위치와 V3 local 30Hz preview 사이의 시간 기반 보간
 - `camera-runtime.ts`: visual world position을 중앙 camera transform으로 투영
 - `player-animation.ts`: 대기 500ms와 이동 10px jump의 pose·duration 계약
 - `input-runtime.ts`, `use-game-input.ts`: keyboard/pointer 145ms hold, stop/bomb와 cleanup
@@ -79,7 +79,8 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `clock-sync.ts`: V3 server tick, RTT/jitter와 bounded future command lead
 - `input-sampler.ts`: V3 key state 변경을 repeat timer 없이 즉시 direction state로 변환
 - `command-timeline.ts`: 전송 성공한 V3 command sequence와 bounded pending queue
-- `local-movement-predictor.ts`: shared movement fixed tick, owner restore와 pending replay
+- `local-movement-predictor.ts`: shared movement fixed tick, owner restore/pending replay와
+  state를 변경하지 않는 다음 1-tick render preview
 - `correction-smoother.ts`: simulation과 분리된 render-only offset 감쇠/snap
 - `protocol-v3.ts`: V3 client envelope parse, fixed entity projection과 typed command
 - `remote-snapshot-buffer.ts`: 원격 player별 bounded absolute history, 보간/외삽/freeze

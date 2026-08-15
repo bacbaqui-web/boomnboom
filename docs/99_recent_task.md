@@ -1,14 +1,16 @@
 # BOOMnBOOM 최근 작업 보고서
 
-## 0. 최신 Task — 불필요한 안내 UI 제거
+## 0. 최신 Task — 30Hz 판정과 고주사율 화면 이동 분리
 
-게임 화면을 단순하게 만들기 위해 플레이 중 계속 노출되던 두 안내 요소를 제거했다.
+서버 권한과 client prediction은 기존 30Hz fixed tick을 유지하면서, 로컬 캐릭터가
+60Hz/120Hz 화면에서 같은 좌표를 여러 frame 반복해 뚝뚝 끊겨 보이는 문제를 고쳤다.
 
-- 로컬 캐릭터 오른쪽 위의 이동 방향, 폭탄과 대기 행동 아이콘을 제거했다.
-- Controller의 `queuedAction` 표시 전용 상태와 전달 prop도 함께 제거했다.
-- 상단의 `LIVE WORLD / 접속 즉시 같은 맵에 스폰` 문구를 제거했다.
-- 1초 진행 게이지는 기존 위치의 중앙에 유지했다.
-- 닉네임, 방어막, 연결 상태와 실제 입력·서버 판정은 변경하지 않았다.
+- Local Predictor가 현재 state를 바꾸지 않고 다음 1 tick의 안전한 위치를 계산한다.
+- 화면은 현재 predicted 위치부터 preview 위치까지 33.33ms 동안 rAF로 보간한다.
+- preview도 shared Movement Core와 같은 collision reader를 사용해 벽을 가로지르지 않는다.
+- authoritative restore와 pending replay가 실제 위치를 바꾼 경우에만 render 기준을
+  다시 잡고 기존 Correction Smoother로 짧게 수렴한다.
+- 서버 tick, command sequence, 폭탄 설치 칸과 canonical player 위치는 변경하지 않았다.
 
 ---
 
