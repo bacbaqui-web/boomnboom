@@ -1,4 +1,4 @@
-/** Sites worker for the BOOMnBOOM V2 web client. */
+/** Sites worker for the BOOMnBOOM protocol-switching web client. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 

@@ -19,6 +19,10 @@ export default function Home() {
       entitySnapshot={game.entitySnapshot}
       localPlayer={game.localPlayer}
       localVisualPosition={game.localVisualPosition}
+      localPositionSource={game.localPositionSource}
+      remotePositionSource={game.remotePositionSource}
+      pendingBombs={game.pendingBombs}
+      explosionFlames={game.explosionFlames}
       queuedAction={game.queuedAction}
     >
       {game.joined && game.localPlayer && !game.localPlayer.alive ? (

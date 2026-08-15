@@ -9,6 +9,9 @@ import { playPlayerJump } from "./player-animation";
 import { PlayerAvatar } from "./PlayerAvatar";
 import type { Position } from "./position-interpolator";
 import type { Action, PlayerEntity } from "./protocol";
+import type { RemotePositionSource } from "./remote-snapshot-buffer";
+import type { PendingBombVisual } from "./pending-bomb-presenter";
+import type { ExplosionFlameVisual } from "./explosion-event-presenter";
 import { TerrainLayer } from "./TerrainLayer";
 import type { ClientWorldStore, EntitySnapshot, WorldSnapshot } from "./world-store";
 
@@ -18,6 +21,10 @@ export function WorldViewport({
   entitySnapshot,
   localPlayer,
   localVisualPosition,
+  localPositionSource,
+  remotePositionSource,
+  pendingBombs,
+  explosionFlames,
   queuedAction,
   children,
 }: {
@@ -26,6 +33,10 @@ export function WorldViewport({
   entitySnapshot: EntitySnapshot;
   localPlayer: PlayerEntity | undefined;
   localVisualPosition: Position | null;
+  localPositionSource: { sample(now: number): Position } | null;
+  remotePositionSource: RemotePositionSource | null;
+  pendingBombs: readonly PendingBombVisual[];
+  explosionFlames: readonly ExplosionFlameVisual[];
   queuedAction: Action;
   children?: React.ReactNode;
 }) {
@@ -51,7 +62,7 @@ export function WorldViewport({
   }, [visibleWidth]);
 
   useLayoutEffect(() => {
-    if (!localPlayer || !localVisualPosition) return;
+    if (localPositionSource || !localPlayer || !localVisualPosition) return;
     const previous = previousPlayerRef.current;
     const distance = previous
       ? Math.hypot(localVisualPosition.x - previous.x, localVisualPosition.y - previous.y)
@@ -71,7 +82,7 @@ export function WorldViewport({
       y: localVisualPosition.y,
       alive: localPlayer.alive,
     };
-  }, [localPlayer, localVisualPosition]);
+  }, [localPlayer, localPositionSource, localVisualPosition]);
 
   useEffect(() => {
     let frame = 0;
@@ -79,12 +90,19 @@ export function WorldViewport({
       const board = boardRef.current;
       const root = rootRef.current;
       if (board && root && tileSize > 0) {
-        root.style.transform = cameraRef.current.transformAt(
-          now,
-          board.clientWidth,
-          board.clientHeight,
-          tileSize,
-        );
+        root.style.transform = localPositionSource
+          ? CameraRuntime.transformFor(
+              localPositionSource.sample(now),
+              board.clientWidth,
+              board.clientHeight,
+              tileSize,
+            )
+          : cameraRef.current.transformAt(
+              now,
+              board.clientWidth,
+              board.clientHeight,
+              tileSize,
+            );
       }
       frame = requestAnimationFrame(paint);
     };
@@ -93,7 +111,7 @@ export function WorldViewport({
       cancelAnimationFrame(frame);
       localJumpRef.current?.cancel();
     };
-  }, [tileSize]);
+  }, [localPositionSource, tileSize]);
 
   const localBomb = findLocalBomb(entitySnapshot.entities, localPlayer);
   return (
@@ -106,7 +124,14 @@ export function WorldViewport({
         {tileSize > 0 ? (
           <>
             <TerrainLayer store={store} chunkKeys={snapshot.chunkKeys} tileSize={tileSize} />
-            <EntityLayer store={store} tileSize={tileSize} localPlayer={localPlayer} />
+            <EntityLayer
+              store={store}
+              tileSize={tileSize}
+              localPlayer={localPlayer}
+              remotePositionSource={remotePositionSource}
+              pendingBombs={pendingBombs}
+              explosionFlames={explosionFlames}
+            />
           </>
         ) : null}
       </div>

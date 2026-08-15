@@ -46,10 +46,14 @@
 
 ## 5. 이동과 게임 판정
 
-- authoritative 플레이어 위치와 폭탄 위치는 정수 칸 좌표다.
-- 키를 누르는 동안 이동 intent를 처리하고, 유효한 이동은 인접 칸 하나를
-  canonical 결과로 만든다.
-- 키를 놓았다고 이미 승인된 이동이 원래 칸으로 되돌아가지 않는다.
+- authoritative 플레이어 위치와 속도는 fixed-point sub-tile 값이고 wall, crate,
+  bomb와 flame은 정수 tile cell을 기준으로 판정한다.
+- 서버와 local prediction은 같은 fixed-step movement function을 사용한다.
+- client는 position이나 delta time을 결과로 보내지 않고 sequence, target tick과
+  input state만 intent로 보낸다.
+- key down을 일부러 지연하지 않는다. local input은 다음 predicted tick에 적용하고,
+  server command buffer만 RTT와 jitter 여유를 흡수한다.
+- 키를 놓았다고 이미 승인된 이동이 원래 위치로 되돌아가지 않는다.
 - 폭탄은 설치 command가 처리되는 시점의 authoritative 플레이어 칸에 생긴다.
 - 폭발 피해는 폭발이 실행되는 순간의 플레이어 칸으로 판정한다. 이전 fuse
   순간의 위치로 피해를 예약하지 않는다.
@@ -62,8 +66,9 @@
 
 ## 6. 서버 시뮬레이션과 시간
 
-- 이동 intent 처리와 1초 박자 시뮬레이션은 서로 다른 clock 책임이다.
-- 폭탄 fuse, 폭발과 불꽃 수명은 서버 시간과 world tick이 authority다.
+- 이동, bomb와 damage는 하나의 고정 server simulation tick에서 순서대로 확정한다.
+- 1초 world/BGM beat는 fixed simulation tick에서 파생되는 별도 projection이다.
+- 폭탄 fuse, 폭발과 불꽃 수명은 exact server tick이 authority다.
 - BGM은 게임 판정을 일으키는 clock이 아니라 같은 world timeline을 표현하는
   클라이언트 Runtime이다.
 - AI도 사람과 동일한 World Owner command와 충돌 규칙을 사용한다.
@@ -79,6 +84,9 @@
   다시 요청한다.
 - 입력에는 client sequence가 있고 서버 결과에는 authoritative sequence 또는
   revision이 있어 stale 메시지를 구분할 수 있어야 한다.
+- local player snapshot은 server가 마지막으로 처리한 input sequence를 포함한다.
+- moving entity update는 독립적으로 적용 가능한 absolute state sample이어야 하며
+  remote client는 server tick별 snapshot history를 보간한다.
 - protocol version은 명시하며 호환되지 않는 전환은 단계적으로 배포한다.
 
 ## 8. 클라이언트 Runtime과 렌더링
@@ -87,7 +95,9 @@
   아니다.
 - 지형, 움직이는 entity, 카메라와 HUD를 별도 렌더링 책임으로 둔다.
 - 지형은 chunk revision이 바뀔 때만 갱신한다.
-- entity의 authoritative 칸과 화면용 보간 좌표를 구분한다.
+- authoritative/predicted movement state와 화면용 correction offset을 구분한다.
+- local player만 prediction/replay하고 remote player는 과거 server snapshot 사이를
+  보간한다.
 - 로컬 플레이어를 화면 중앙에 고정하고 카메라가 월드를 움직이는 것은
   projection이며 서버 상태를 바꾸지 않는다.
 - `requestAnimationFrame`은 보간과 transform만 수행하며 React canonical
@@ -107,6 +117,8 @@
   retention 또는 mutation journal 계약을 지킨다.
 - D1의 구형 `game_rooms` state는 새 Oracle World Owner의 canonical 저장소가
   아니다.
+- 짧은 network disconnect는 player lease와 opaque resume token으로 복구하되,
+  server process restart를 넘는 영속 identity로 사용하지 않는다.
 
 ## 10. 보존 계약
 

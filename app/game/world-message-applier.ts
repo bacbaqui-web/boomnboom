@@ -12,6 +12,7 @@ import {
   updateEntitySnapshot,
   updateWorldSnapshot,
 } from "./world-state.ts";
+import { isNetTickAfter } from "../../shared/net-tick.mjs";
 
 export type ApplyResult =
   | { applied: true }
@@ -135,6 +136,9 @@ export function applyWorldMessage(
       entityRevision: 0,
       ackClientSeq: -1,
       lastError: "",
+      serverTick: numberField(message, "serverTick"),
+      v3OwnerSnapshotSeq: null,
+      v3EntitySnapshotSeq: null,
     });
     updateEntitySnapshot(state, []);
     return applied({ changedChunks: removedChunks, entitiesChanged: true });
@@ -238,6 +242,69 @@ export function applyWorldMessage(
     });
     updateEntitySnapshot(state, enemiesArray(message.enemies));
     return applied({ changedChunks, entitiesChanged: true });
+  }
+
+  if (message.type === "v3_owner_snapshot") {
+    const snapshotSeq = numberField(message, "snapshotSeq");
+    const previousSeq = state.snapshot.v3OwnerSnapshotSeq;
+    if (previousSeq !== null && !isNetTickAfter(snapshotSeq, previousSeq)) {
+      return ignored({ applied: false, reason: "stale" });
+    }
+    const player = message.player as PlayerEntity | undefined;
+    if (!player || player.kind !== "player") {
+      return ignored({ applied: false, reason: "invalid" });
+    }
+    state.entities.set(entityKey(player), player);
+    updateWorldSnapshot(state, {
+      serverTime: message.serverTime,
+      serverTick: numberField(message, "serverTick"),
+      v3OwnerSnapshotSeq: snapshotSeq,
+    });
+    updateEntitySnapshot(state);
+    return applied({ entitiesChanged: true });
+  }
+
+  if (message.type === "v3_entity_snapshot") {
+    const snapshotSeq = numberField(message, "snapshotSeq");
+    const previousSeq = state.snapshot.v3EntitySnapshotSeq;
+    if (previousSeq !== null && !isNetTickAfter(snapshotSeq, previousSeq)) {
+      return ignored({ applied: false, reason: "stale" });
+    }
+    const localPlayerId = state.snapshot.localPlayerId;
+    const players = entityArray(message.players).filter(
+      (entity): entity is PlayerEntity => entity.kind === "player",
+    );
+    const remotePlayers = players.filter((player) => player.id !== localPlayerId);
+    const nonPlayers = [
+      ...entityArray(message.bombs),
+      ...entityArray(message.items),
+      ...entityArray(message.flames),
+    ];
+    const receivedIds = new Set(remotePlayers.map((player) => player.id));
+    for (const [key, entity] of state.entities) {
+      if (
+        entity.kind === "player" &&
+        entity.id !== localPlayerId &&
+        !receivedIds.has(entity.id)
+      ) {
+        state.entities.delete(key);
+      }
+    }
+    for (const player of remotePlayers) state.entities.set(entityKey(player), player);
+    for (const [key, entity] of state.entities) {
+      if (entity.kind !== "player") state.entities.delete(key);
+    }
+    for (const entity of nonPlayers) state.entities.set(entityKey(entity), entity);
+    state.initializing = false;
+    updateWorldSnapshot(state, {
+      serverTime: message.serverTime,
+      serverTick: numberField(message, "serverTick"),
+      initialized: true,
+      entityRevision: snapshotSeq,
+      v3EntitySnapshotSeq: snapshotSeq,
+    });
+    updateEntitySnapshot(state);
+    return applied({ entitiesChanged: true });
   }
 
   if (message.type === "entity_delta") {

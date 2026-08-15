@@ -21,17 +21,25 @@ export type PlayerEntity = {
   nickname: string;
   joined: boolean;
   alive: boolean;
+  px?: number;
+  py?: number;
+  vx?: number;
+  vy?: number;
+  lifeId?: number;
+  teleport?: boolean;
 };
 
 export type BombEntity = {
   kind: "bomb";
-  id: number;
+  id: string | number;
   x: number;
   y: number;
   owner: string;
   fuse: number;
   bornTick: number;
   range: number;
+  spawnTick?: number;
+  explodeTick?: number | null;
 };
 
 export type ItemEntity = {
@@ -47,6 +55,9 @@ export type FlameEntity = {
   id: string;
   x: number;
   y: number;
+  eventSeq?: number;
+  startTick?: number;
+  expireTick?: number;
 };
 
 export type WorldEntity = PlayerEntity | BombEntity | ItemEntity | FlameEntity;
@@ -92,8 +103,8 @@ export function entityKey(entity: WorldEntity) {
   return `${entity.kind}:${entity.id}`;
 }
 
-export function withProtocolQuery(url: string) {
+export function withProtocolQuery(url: string, protocol: 2 | 3 = PROTOCOL_VERSION) {
   const parsed = new URL(url);
-  parsed.searchParams.set("protocol", String(PROTOCOL_VERSION));
+  parsed.searchParams.set("protocol", String(protocol));
   return parsed.toString();
 }

@@ -3,11 +3,22 @@
 import { memo, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { playPlayerJump } from "./player-animation";
 import { PlayerAvatar } from "./PlayerAvatar";
+import type { PendingBombVisual } from "./pending-bomb-presenter";
+import type { ExplosionFlameVisual } from "./explosion-event-presenter";
 import { PositionInterpolator } from "./position-interpolator";
 import type { PlayerEntity, WorldEntity } from "./protocol";
+import type { RemotePositionSource } from "./remote-snapshot-buffer";
 import type { ClientWorldStore } from "./world-store";
 
-function AnimatedPlayer({ player, tileSize }: { player: PlayerEntity; tileSize: number }) {
+function AnimatedPlayer({
+  player,
+  tileSize,
+  remotePositionSource,
+}: {
+  player: PlayerEntity;
+  tileSize: number;
+  remotePositionSource: RemotePositionSource | null;
+}) {
   const elementRef = useRef<HTMLSpanElement | null>(null);
   const avatarRef = useRef<HTMLSpanElement | null>(null);
   const jumpRef = useRef<Animation | null>(null);
@@ -15,6 +26,7 @@ function AnimatedPlayer({ player, tileSize }: { player: PlayerEntity; tileSize: 
   const previousRef = useRef({ x: player.x, y: player.y });
 
   useLayoutEffect(() => {
+    if (remotePositionSource) return;
     const previous = previousRef.current;
     const distance = Math.hypot(player.x - previous.x, player.y - previous.y);
     const teleport = distance > 2;
@@ -25,12 +37,12 @@ function AnimatedPlayer({ player, tileSize }: { player: PlayerEntity; tileSize: 
       jumpRef.current?.cancel();
     }
     previousRef.current = { x: player.x, y: player.y };
-  }, [player.x, player.y]);
+  }, [player.x, player.y, remotePositionSource]);
 
   useEffect(() => {
     let frame = 0;
     const paint = (now: number) => {
-      const visual = motionRef.current.sample(now);
+      const visual = remotePositionSource?.sample(player.id, now) ?? motionRef.current.sample(now);
       if (elementRef.current) {
         elementRef.current.style.transform = `translate3d(${(visual.x + 0.14) * tileSize}px, ${(visual.y + 0.14) * tileSize}px, 0)`;
       }
@@ -41,7 +53,7 @@ function AnimatedPlayer({ player, tileSize }: { player: PlayerEntity; tileSize: 
       cancelAnimationFrame(frame);
       jumpRef.current?.cancel();
     };
-  }, [tileSize]);
+  }, [player.id, remotePositionSource, tileSize]);
 
   return (
     <span
@@ -72,10 +84,16 @@ export const EntityLayer = memo(function EntityLayer({
   store,
   tileSize,
   localPlayer,
+  remotePositionSource,
+  pendingBombs,
+  explosionFlames,
 }: {
   store: ClientWorldStore;
   tileSize: number;
   localPlayer: PlayerEntity | undefined;
+  remotePositionSource: RemotePositionSource | null;
+  pendingBombs: readonly PendingBombVisual[];
+  explosionFlames: readonly ExplosionFlameVisual[];
 }) {
   const snapshot = useSyncExternalStore(
     store.subscribeEntities,
@@ -84,10 +102,38 @@ export const EntityLayer = memo(function EntityLayer({
   );
   return (
     <div className="entityLayer">
+      {explosionFlames.map((flame) => (
+        <span
+          key={flame.id}
+          className="flame worldEntity eventFlame"
+          style={staticPosition(flame, 0.5, tileSize)}
+        >
+          ✦
+        </span>
+      ))}
+      {pendingBombs.map((bomb) => (
+        <span
+          key={`pending-bomb:${bomb.commandSeq}`}
+          className="bomb worldEntity pendingBomb"
+          style={{
+            ...staticPosition(bomb, 0.175, tileSize),
+            width: tileSize * 0.65,
+            height: tileSize * 0.65,
+            opacity: 0.65,
+          }}
+        >
+          <span>✦</span><i>…</i>
+        </span>
+      ))}
       {snapshot.entities.map((entity: WorldEntity) => {
         if (entity.kind === "player") {
           return entity.id === localPlayer?.id || !entity.alive ? null : (
-            <AnimatedPlayer key={`player:${entity.id}`} player={entity} tileSize={tileSize} />
+            <AnimatedPlayer
+              key={`player:${entity.id}`}
+              player={entity}
+              tileSize={tileSize}
+              remotePositionSource={remotePositionSource}
+            />
           );
         }
         if (entity.kind === "bomb") {

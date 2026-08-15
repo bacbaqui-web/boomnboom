@@ -51,11 +51,16 @@ process lifecycle, `simulation-scheduler.mjs`가 timer, `health-handler.mjs`가 
 
 ## 5. Session lifecycle
 
-- socket open은 아직 joined player가 아닌 connection session을 만든다.
-- 검증된 nickname join 뒤 player entity와 interest subscription을 만든다.
-- reconnect는 새 session이며 이전 socket 권한을 재사용하지 않는다.
-- disconnect player 제거 정책과 재접속 identity 보존은 현재처럼 즉시 제거를
-  기본으로 유지한다.
+- socket connection과 player entity 수명을 분리한다.
+- 최초 join은 player lease와 추측 불가능한 128-bit resume token을 만들고 token은
+  log, URL과 public health에 남기지 않는다.
+- disconnect 시 movement input을 즉시 neutral로 바꾸고 player는 기본 10초 grace
+  동안 world에 남아 bomb/flame damage를 계속 받을 수 있다.
+- grace 안의 `resume`은 같은 player entity를 새 connection에 연결하고 token을
+  회전한다. 이전 socket은 더 이상 권한을 갖지 않는다.
+- grace가 끝나면 player, interest와 token을 제거한다.
+- reconnect client는 pre-disconnect pending input을 재실행하지 않고 full
+  authoritative movement snapshot에서 prediction을 다시 시작한다.
 - AI entity는 사람 connection과 독립적으로 World Owner가 소유한다.
 - shutdown에서 모든 session subscription과 socket을 정리한다.
 
@@ -104,11 +109,14 @@ Oracle disk/database persistence는 이번 Sprint의 필수 조건이 아니다.
 
 ## 9. 배포와 protocol compatibility
 
-- V2 server/client 전환과 10분 V1 traffic 0 관찰을 마쳐 source는 V2-only다.
-- 명시적 V2가 아닌 upgrade는 player/session 생성 전에 거절한다.
+- 현재 production은 V2-only이고 다음 Sprint에서 V3 server를 V2와 함께 먼저
+  배포한다.
+- V3 client 공개 전환과 production 관찰이 끝날 때까지 V2 path를 유지한다.
+- V3 traffic이 안정적이고 V2 traffic이 0인 것을 확인한 뒤 별도 cleanup Task에서
+  V2를 제거한다.
 - server unit/service 파일은 새 entry path와 환경 변수를 정확히 반영한다.
 - 배포 전 기존 service file과 nginx config를 백업/rollback 단위로 둔다.
-- V2-only server 배포 실패 시 직전 dual-protocol server artifact로 rollback한다.
+- V3 server 배포 실패 시 현재 V2-only artifact로 rollback한다.
 
 ## 10. Health와 readiness
 
@@ -140,6 +148,7 @@ Architecture로 합의한 뒤 새 Sprint에서 구현한다.
 - base-only chunk eviction 뒤 동일 terrain 복원
 - pinned mutation 미손실
 - restart 뒤 명시된 유지/초기화 정책
-- V2 query/subprotocol upgrade와 unsupported protocol 무누수 거절
+- V2/V3 전환 기간의 query/subprotocol과 unsupported protocol 무누수 거절
+- disconnect grace, token rotation, resume와 grace expiry
 - service/nginx syntax와 실제 WebSocket upgrade
 - health metrics 상한 관찰

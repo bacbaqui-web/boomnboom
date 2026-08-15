@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo } from "react";
 import { InputRuntime } from "./input-runtime";
+import { InputSampler } from "./input-sampler";
 import type { Action, MoveAction } from "./protocol";
 
 const keyDirections: Record<string, MoveAction> = {
@@ -15,8 +16,20 @@ const keyDirections: Record<string, MoveAction> = {
   d: "right",
 };
 
-export function useGameInput(send: (action: Action) => void, enabled: boolean) {
-  const runtime = useMemo(() => new InputRuntime(send), [send]);
+export function useGameInput(
+  send: (action: Action) => void,
+  enabled: boolean,
+  mode: "v2" | "v3" = "v2",
+) {
+  const runtime = useMemo(
+    () => mode === "v3"
+      ? new InputSampler(
+          (direction) => send(direction === "neutral" ? "stop" : direction),
+          () => send("bomb"),
+        )
+      : new InputRuntime(send),
+    [mode, send],
+  );
 
   const startMoving = useCallback((direction: MoveAction) => {
     runtime.start(direction);

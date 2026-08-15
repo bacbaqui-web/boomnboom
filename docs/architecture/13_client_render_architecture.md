@@ -1,152 +1,230 @@
-# Client Render Architecture
+# Client Prediction and Render Architecture
 
-## 1. 목적
+## 1. 목적과 현재 차이
 
-이 문서는 서버가 확정한 월드를 브라우저가 넓게 받아두고 viewport만 잘라
-부드럽게 표시하는 Runtime 구조를 정의한다.
+이 문서는 V3 client가 local player를 즉시 predict하고 remote player를 server
+snapshot history로 보간하는 Runtime 계약을 정의한다. 현재 production의 one-cell
+prediction과 latest-target linear interpolation은 Sprint에서 단계적으로 교체한다.
 
-## 2. 구성
+## 2. 최소 Runtime 구성
 
 ```text
-Game Page Composition Root
+Game Controller
   ├─ Game Socket
-  ├─ Client World Store
-  ├─ Input Controller
+  ├─ World Store
+  ├─ Clock Sync
+  ├─ Input Sampler
+  ├─ Command Timeline
+  ├─ Local Predictor
+  ├─ Correction Smoother
+  ├─ Remote Snapshot Buffer
+  ├─ Pending Bomb Presenter
   ├─ Camera Runtime
-  ├─ Audio Runtime
-  └─ World View
-       ├─ Terrain Layer
-       ├─ Entity Layer
-       ├─ Local Player Layer
-       └─ HUD / Overlay
+  └─ Audio Runtime
 ```
 
-Page는 이 책임을 조립하고 공개 view props를 연결한다. socket parse, world cache,
-입력 timer, camera animation과 모든 JSX를 다시 한 파일에 모으지 않는다.
+작은 helper마다 class를 만들지 않는다. 위 이름은 독립 상태나 독립 test가 필요한
+주된 책임 경계다.
 
-## 3. Client World Store
+## 3. 의존성 규칙
 
-World Store는 서버 데이터를 읽기 쉽게 보관하는 Runtime cache다.
-
-- world metadata와 clock sync
-- `chunkKey → { revision, tiles }`
-- `entityId → authoritative entity snapshot`
-- local player ID와 last acknowledged input sequence
-- connection/initialization 상태
-
-Store는 server message를 적용하는 command만 공개한다. React component는 내부 Map을
-직접 바꾸지 않는다. 같은 world ID가 아니거나 revision이 맞지 않는 delta는
-적용하지 않는다.
-
-현재 구현은 `world-state.ts`가 Runtime shape, `world-message-applier.ts`가 message
-적용, `world-selectors.ts`가 read projection, `world-store.ts`가 subscription façade를
-담당한다. Store façade 밖에서 이 state를 canonical 원본으로 취급하지 않는다.
-
-## 4. Preload와 viewport
-
-- 초기 화면을 열기 전에 visible 범위를 덮는 chunk snapshot을 확보한다.
-- 기본 cache는 local player 중심 반경 2청크다.
-- viewport는 cache의 일부인 기본 15×11 tile을 CSS overflow로 자른다.
-- player가 cache 내부를 이동할 때 terrain DOM을 다시 만들지 않고 world transform만
-  바꾼다.
-- 다음 interest chunk가 아직 없으면 기존 edge를 임의 tile로 채우지 않는다.
-  안전한 loading edge를 표시하고 요청을 재시도한다.
-
-## 5. Terrain Layer
-
-- chunk component key는 `worldId + chunkKey`다.
-- tile rendering input은 해당 chunk snapshot과 revision뿐이다.
-- player, camera position, world tick과 BGM progress는 terrain props가 아니다.
-- floor pattern은 절대 world coordinate로 결정해 카메라 이동 때 모양이 바뀌지
+- Input Sampler는 DOM input을 direction/action으로 바꾸기만 한다.
+- Command Timeline은 sequence, target tick과 pending command를 소유한다.
+- Local Predictor는 shared Movement Core와 collision reader만 사용한다.
+- Correction Smoother는 simulation을 바꾸지 않고 render offset만 계산한다.
+- Remote Snapshot Buffer는 server samples와 Clock Sync만 사용한다.
+- Pending Bomb Presenter는 action result와 world snapshot을 사용하고 Movement Core를
+  mutation하지 않는다.
+- React component는 socket, replay queue와 snapshot ring buffer를 직접 소유하지
   않는다.
-- wall/crate 스타일은 캐릭터 상대 위치에 따른 동적 음영을 만들지 않는다.
-- chunk delta는 해당 chunk와 cell만 갱신한다.
 
-React DOM으로 먼저 계약을 검증한다. 성능 측정 없이 Canvas/WebGL 전환을 이번
-refactor에 추가하지 않는다.
+Prediction, Bomb와 Interpolation 사이에 generic event bus를 두지 않는다. controller가
+명시적인 method call과 plain result를 조립한다.
 
-## 6. Entity Layer
+## 4. Input Sampler와 짧은 Buffer
 
-- player, AI, bomb, item과 flame은 절대 world coordinate로 배치한다.
-- server snapshot은 authoritative target이고 화면용 visual position은 별도다.
-- entity update가 오면 이전 visual position에서 새 target까지 보간한다.
-- camera와 remote player가 공유하는 순수 보간은 `position-interpolator.ts`에 두고,
-  camera transform은 `camera-runtime.ts`만 담당한다.
-- player의 좌표 이동 anchor와 캐릭터 변형 body를 분리해 위치 transform과
-  squash/jump transform이 서로 덮어쓰지 않게 한다.
-- 대기 body는 바닥 중앙을 기준으로 500ms마다 `102%×98% → 98%×102%`를
-  반복한다.
-- 인접 칸 이동 body는 출발 `105%×90%`, 최고점 `90%×105%`와 바닥 위 10px,
-  착지 `105%×90%` pose를 사용한다.
-- teleport/respawn은 인접 칸 jump animation을 실행하지 않는다.
-- bomb는 player보다 높은 명시적 layer에 표시한다.
-- offscreen enemy pointer는 viewport projection이며 server entity를 바꾸지 않는다.
+key down을 30~50ms `setTimeout`으로 지연하지 않는다. 실제 효과는 network jitter
+흡수가 아니라 local input latency 증가이기 때문이다.
 
-## 7. Local player와 Camera Runtime
+채택하는 buffer는 세 종류로 제한한다.
 
-- local player 표시는 viewport 중앙 anchor에 둔다.
-- Camera Runtime은 local authoritative target과 현재 visual position을 소유한다.
-- 매 `requestAnimationFrame`에 time-based interpolation으로 visual position을
-  계산하고 world root의 `translate3d`만 바꾼다.
-- 타일 크기는 viewport layout에서 한 번 계산하고 이동마다 퍼센트 격자를
-  재계산하지 않는다.
-- 한 칸 이동 보간은 input cadence보다 조금 길게 겹치고, 새 target을 현재 visual에서
-  다시 잡아 연속 입력 사이에 정지 frame이 생기지 않게 한다.
-- 새 target이 오면 현재 visual position을 시작점으로 삼아 끊김을 누적하지 않는다.
-- teleport/respawn처럼 큰 차이만 snap 또는 별도 짧은 transition으로 처리한다.
+1. frame latch: raw input을 다음 30Hz predicted tick까지 최대 33ms 보관
+2. server command slack: 미래 target tick에 command를 queue해 jitter 흡수
+3. turn grace: 너무 일찍 누른 코너 방향을 Movement State에 2~3 tick만 보존
 
-서버 위치는 정수 칸에 정확히 맞고, 화면은 그 정수 target 사이를 연속적으로
-움직인다. 키를 놓으면 마지막 승인 target까지 보간을 완료한다.
+첫 이동 animation과 visual anticipation은 keydown frame에 바로 시작할 수 있지만
+canonical/predicted displacement는 fixed tick에서만 바뀐다.
 
-## 8. Input Controller
+## 5. Command Timeline
 
-- keyboard와 pointer를 동일한 movement intent로 정규화한다.
-- key down에서 방향을 시작하고 hold cadence로 sequence를 보낸다.
-- key up, blur와 pointer cancel에서 stop한다.
-- bomb input은 현재 서버 위치를 추측해 DOM에 확정하지 않고 즉시 intent를 보낸다.
-- client prediction을 사용하더라도 한 칸 target을 넘지 않고 ack/correction에
-  수렴한다.
-- input timer는 component unmount와 reconnect에서 반드시 정리한다.
+Command Timeline은 다음만 소유한다.
 
-## 9. Audio Runtime
+```text
+nextCommandSeq
+predictedTick
+currentInputState
+pendingCommands[]
+lastAckedCommandSeq
+```
 
-- BGM file, Audio element, volume과 playback correction은 Audio Runtime이 소유한다.
-- server world clock metadata로 expected track position을 계산한다.
-- 작은 drift는 제한된 playback rate 보정, 큰 drift와 최초 입장은 seek를 사용한다.
-- autoplay 제한 때문에 사용자의 입장 action 이후 재생을 시작한다.
-- 음소거/음량 UI는 게임 simulation을 멈추지 않는다.
+- direction change와 neutral을 즉시 command로 만든다.
+- bomb/respawn edge를 coalesce하지 않는다.
+- socket send가 실제 성공한 command만 pending queue에 넣는다.
+- queue는 target tick과 sequence 순서다.
+- reconnect, new lifeId와 full reset에서 queue를 비운다.
 
-## 10. React update 경계
+## 6. Local Predictor
 
-- connection, overlay, 능력치와 chunk/entity snapshot 변경은 React Store 구독으로
-  갱신할 수 있다.
-- rAF 보간 위치는 DOM transform 또는 좁은 animation store에서 처리한다.
-- world 전체 JSON을 `setState`해 모든 tile을 다시 reconciliation하지 않는다.
-- selector는 변경된 chunk/entity만 구독하도록 한다.
-- `startTransition`은 전체 snapshot 전송을 해결하는 수단으로 사용하지 않는다.
+local predictor는 `AuthoritativeState + PendingCommands`로 predicted state를 만든다.
 
-## 11. 실패와 재연결
+### 일반 tick
 
-- socket disconnect 시 마지막 frame을 유지하고 재연결 상태를 표시한다.
-- reconnect `world_init`이 오면 world ID와 revisions를 비교해 cache를 재사용하거나
-  폐기한다.
-- 사망 overlay와 respawn command는 월드 렌더링 Runtime과 분리한다.
-- initial chunks가 준비되지 않은 상태를 playable로 표시하지 않는다.
+1. predicted tick의 input state 선택
+2. shared Movement Core 한 번 실행
+3. predicted state와 tick 저장
+4. camera target에 predicted position 제공
 
-## 12. 검증 계약
+### Owner snapshot 수신
 
-- player 이동 중 terrain component render count 증가 없음
-- floor pattern이 왕복 이동 뒤 동일
-- viewport 밖에 최소 preload 범위 존재
-- 연속 key hold에서 camera frame 간 큰 jump 없음
-- key release 뒤 원래 칸으로 복귀하지 않고 승인 target까지 완료
-- respawn teleport와 일반 이동 분리
-- 대기 squash와 인접 칸 jump가 player 좌표·camera transform을 바꾸지 않음
-- chunk delta가 해당 chunk만 갱신
-- entity revision gap/stale update 처리
-- reconnect 때 잘못된 world cache 폐기
-- keyboard와 pointer input cleanup
-- muted BGM과 game clock 독립
+1. stale snapshot 폐기
+2. `lastProcessedCommandSeq` 이하 pending command 제거
+3. authoritative movement state를 즉시 적용
+4. snapshot server tick 이후 현재 predicted tick까지 pending input replay
+5. replay 전 render position과 replay 후 predicted position 차이 계산
+6. Correction Smoother에 visual error 전달
 
-Browser QA는 최소 두 창에서 같은 지형, 이동, 폭탄과 crate delta를 확인하고
-Performance panel 또는 render counter로 terrain 재렌더링을 확인한다.
+local predictor는 remote player, bomb fuse, React state와 Audio를 replay하지 않는다.
+300ms RTT에서도 replay 대상은 local movement 약 10~12 tick 정도로 bounded한다.
+
+## 7. Render-only Smooth Reconciliation
+
+```text
+renderPosition = predictedPosition + correctionOffset
+```
+
+simulation position은 owner snapshot과 replay 결과로 즉시 수정한다. correction
+offset만 rAF에서 0으로 감쇠한다.
+
+초기 기준:
+
+| replay 뒤 위치 오차 | visual 처리 |
+|---|---|
+| `0~0.10 tile` | 약 80ms 감쇠 |
+| `0.10~0.50 tile` | clear path에서 120~180ms 감쇠 |
+| `0.50 tile 초과` | snap |
+| collision을 가로지름 | snap |
+| new lifeId, respawn, reconnect, teleport | snap |
+
+error가 생겼다고 authoritative collision state를 천천히 움직이지 않는다. correction
+duration, error distance, cause와 snap count를 metric/debug overlay에서 볼 수 있어야
+한다.
+
+## 8. Remote Snapshot Buffer
+
+remote player별 bounded ring buffer를 둔다.
+
+```text
+RemoteSample
+  snapshotSeq
+  serverTick
+  px, py, vx, vy
+  lifeId
+  teleport
+```
+
+```text
+renderServerTime = ClockSync.estimatedServerTime(now)
+  - interpolationDelay
+```
+
+- 기본 delay 100ms
+- jitter에 따라 80~150ms 사이를 급격하지 않게 조정
+- 두 known sample 사이에서 server tick 비율로 보간
+- 다음 sample이 없으면 최대 100ms만 velocity extrapolation
+- 이후 마지막 안전 위치에서 freeze
+- lifeId 변경 또는 teleport flag는 즉시 snap
+- flag가 없을 때만 `distance > maxSpeed * dt + 0.25 tile`을 fallback으로 사용
+
+remote interpolation은 latest arrival에서 target으로 새 easing을 시작하지 않는다.
+
+## 9. World Store와 Snapshot 적용
+
+- terrain chunk는 기존 revision/snapshot/delta 계약을 유지한다.
+- entity network state는 World Store에 absolute sample로 적용한다.
+- World Store는 latest authoritative state cache이며 snapshot history와 predicted local
+  state를 canonical Map에 섞지 않는다.
+- `snapshotSeq`, `eventSeq`, chunk revision과 lifeId stale 검사를 각각 수행한다.
+- moving entity sample 때문에 terrain subscriber를 갱신하지 않는다.
+
+## 10. Pending Bomb Presentation
+
+Bomb Presenter는 다음 작은 state machine만 가진다.
+
+```text
+pending(commandSeq, predictedCell)
+  → confirmed(bombId, cell, explodeTick)
+  → removed
+  → rejected(reason)
+```
+
+- keydown frame에 pending visual과 placement animation을 시작한다.
+- pending bomb는 반투명 또는 구분 가능한 표현이며 collision을 만들지 않는다.
+- action result success에서 confirmed entity로 연결한다.
+- reject는 약 50~80ms 안에 visual만 제거한다.
+- authoritative bomb snapshot이 먼저 오면 command sequence 또는 bomb ID로 합친다.
+- reconnect에서는 pending bomb를 버리고 server snapshot만 사용한다.
+
+## 11. Camera와 Player Animation
+
+- local player는 viewport 중앙 anchor를 유지하고 camera가 predicted movement를 따라간다.
+- camera transform과 player body squash/jump transform을 다른 DOM layer가 소유한다.
+- body animation은 movement state를 변경하지 않는다.
+- V3 continuous movement 전환 뒤 기존 매 tile jump가 조작을 방해하면 별도 visual
+  tuning Task에서 stride/bob animation으로 교체한다. Network Sprint에서 art를
+  동시에 재설계하지 않는다.
+
+## 12. Clock Sync
+
+Clock Sync는 ping/snapshot sample로 다음을 제공한다.
+
+- estimated server time/tick
+- smoothed RTT와 jitter
+- command lead tick
+- remote interpolation delay
+
+Audio와 network가 각각 server offset을 따로 계산하지 않는다. Audio Runtime은 같은
+Clock Sync 결과를 읽되 playback correction만 소유한다.
+
+## 13. Reconnect와 Late Join
+
+- disconnect 시 마지막 frame을 유지하고 reconnect UI를 표시한다.
+- resume 성공 전에는 새 command를 pending queue에 넣지 않는다.
+- resume full snapshot에서 command queue, prediction history와 correction offset을
+  초기화한다.
+- 같은 player를 resume해도 새 `lifeId` 또는 teleport flag가 있으면 snap한다.
+- late join은 baseline chunks와 entity snapshot이 끝나기 전 playable 상태가 아니다.
+
+## 14. 삭제할 현재 설계
+
+V3 전환과 같은 rollback 단위에서 다음 current runtime을 제거한다.
+
+- 145ms interval이 인접 칸 command를 반복 전송하는 `InputRuntime`
+- pending 첫 move 하나만 보는 one-cell `MovementPrediction`
+- remote latest target마다 새 135ms easing을 시작하는 위치 보간
+- distance `> 2`만으로 teleport를 추정하는 규칙
+- input ACK마다 React entity snapshot을 불필요하게 복제하는 경로
+
+기존 V2 client가 사용하는 동안에는 제거하지 않는다.
+
+## 15. 검증 계약
+
+- keydown frame feedback과 다음 predicted tick 이동
+- command send 실패가 pending queue에 남지 않음
+- ACK 뒤 pending 전체 replay와 bounded history
+- 200/300ms RTT, 50ms jitter에서 correction distribution
+- small error smoothing과 collision/teleport snap
+- snapshot reorder, loss simulation, bounded extrapolation과 freeze
+- remote constant-speed render와 variable FPS
+- pending bomb confirm/reject/snapshot race
+- reconnect full reset과 late join readiness
+- terrain render count가 movement 때문에 증가하지 않음

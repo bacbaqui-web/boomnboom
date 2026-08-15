@@ -105,6 +105,10 @@ export class WorldOwner {
     };
   }
 
+  readChunkRevision(chunkX, chunkY) {
+    return this.#ensureChunk(chunkX, chunkY).revision;
+  }
+
   readMaterializedChunkKeys() {
     return [...this.#chunks.keys()];
   }
@@ -152,6 +156,36 @@ export class WorldOwner {
     const player = this.#players.get(id);
     if (!player) return false;
     Object.assign(player, changes);
+    return true;
+  }
+
+  commitPlayerMovement(
+    id,
+    movement,
+    { unitsPerTile = 1024, action = movement.desiredDirection, lifeId = 1 } = {},
+  ) {
+    const player = this.#players.get(id);
+    if (!player) return false;
+    for (const key of ["px", "py", "vx", "vy", "queuedTurnUntilTick"]) {
+      if (!Number.isSafeInteger(movement[key])) return false;
+    }
+    const x = Math.floor(movement.px / unitsPerTile);
+    const y = Math.floor(movement.py / unitsPerTile);
+    Object.assign(player, {
+      prevX: player.x,
+      prevY: player.y,
+      x,
+      y,
+      px: movement.px,
+      py: movement.py,
+      vx: movement.vx,
+      vy: movement.vy,
+      desiredDirection: movement.desiredDirection,
+      queuedTurn: movement.queuedTurn,
+      queuedTurnUntilTick: movement.queuedTurnUntilTick,
+      action,
+      lifeId,
+    });
     return true;
   }
 
@@ -206,6 +240,15 @@ export class WorldOwner {
 
   replaceFlames(flames) {
     this.#flames = flames.map(cloneEntity);
+  }
+
+  replaceFlamesForDomain(clockDomain, flames) {
+    const belongsToDomain = (flame) =>
+      (flame.clockDomain ?? "legacy") === clockDomain;
+    this.#flames = [
+      ...this.#flames.filter((flame) => !belongsToDomain(flame)),
+      ...flames.map(cloneEntity),
+    ];
   }
 
   readFlames() {

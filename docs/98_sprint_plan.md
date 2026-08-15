@@ -1,632 +1,418 @@
-# Server-Owned Shared World Refactor Sprint
+# Protocol V3 Predictive Movement Sprint
 
 ## 상태
 
-- Sprint 완료
-- 1단계 PASS — 현재 흐름 audit, Constitution과 Architecture 계약 작성
-- 2단계 PASS — World Owner와 materialized chunk core, V1 호환 전환
-- 3단계 PASS — Simulation/AI 분리와 gameplay regression 17건
-- 4단계 PASS — Protocol V2와 관심 영역 delta publication
-- 5단계 PASS — Client World Store와 layer/camera 전환
-- 6A PASS — caller 0 레거시 D1/starter 정리와 배포 readiness
-- 6B PASS — production soak, V1 제거, Sites v41와 V2-only Oracle 공개 검증
-- 7단계 PASS — 파일명과 실제 변경 책임 정렬, 동작 보존 구조 정리
-- 8단계 PASS — crate 자동 재생성과 warning projection 제거
-- 9단계 PASS — live flame 접촉 피해 판정 추가
-- 10단계 PASS — player idle squash와 인접 칸 jump animation
+- Sprint 진행 중
+- 1단계 Shared Movement Core: PASS
+- 2단계 V3 Server Fixed Simulation: PASS
+- 3단계 V3 Local Prediction: PASS
+- 4단계 Remote Snapshot Interpolation: PASS
+- 5단계 Bomb/Explosion V3: PASS
+- 6단계 Resume/Late Join/Hardening: PASS
+- 7단계 배포·관찰·Cleanup 결정: 배포 전 검증 완료
+- 현재 source: 기본 Protocol V3, `?protocol=2` rollback
+- 현재 production: Protocol V2, 서버 우선 배포 대기
+- 목표: 30Hz fixed-point movement, owner prediction/replay, remote interpolation
 
-## 기준
+## 1. Sprint 목적
 
-- `AGENTS.md`
-- `docs/01_rule.md`
-- `docs/architecture/10_world_architecture.md`
-- `docs/architecture/11_simulation_architecture.md`
-- `docs/architecture/12_network_protocol_architecture.md`
-- `docs/architecture/13_client_render_architecture.md`
-- `docs/architecture/14_persistence_lifecycle_architecture.md`
-- `docs/20_src_map.md`
+200~300ms RTT와 50ms jitter에서도 local player가 즉시 반응하고 remote player가
+일정한 속도로 보이게 만든다. server는 movement, bomb, collision, damage와 item의
+최종 권한을 유지한다.
 
-## Sprint 목적
+이 Sprint는 generic netcode engine을 만들지 않는다. BOOMnBOOM에 필요한 shared
+movement, command scheduling, owner replay, remote interpolation, bomb result와
+reconnect만 구현한다.
 
-viewer마다 주변 타일을 다시 계산해 전체 state로 보내는 구조를, Oracle 서버가
-확정된 shared chunk와 entity를 소유하고 client가 넓게 preload한 월드를 부드럽게
-보여주는 구조로 교체한다.
+## 2. 현재 기준선
 
-최종 구조에서 플레이어 이동은 전체 tile matrix 생성·전송·React 재렌더링을
-일으키지 않는다. server integer-grid 판정과 client visual interpolation을
-분리한다.
+- server movement: message 도착 시 140ms rate limit, 정수 인접 한 칸
+- client input: 145ms interval command
+- local prediction: 첫 pending input 하나만 한 칸 앞서 표시
+- local camera: latest target으로 175ms linear retarget
+- remote player: latest target으로 135ms linear retarget
+- bomb/fuse/flame: 1초 world tick
+- protocol: V2-only WebSocket, command sequence와 input ACK
+- reconnect: 1.5초 뒤 새 connection/player 생성
+- terrain: 16×16 chunk snapshot/delta/revision
+- public server: single Oracle Node process, 128MB limit
 
-## 현재 기준선
+시작 전에 현 production packet fixture, gameplay test와 browser video를 기준선으로
+보존한다.
 
-- client: `app/page.tsx` 단일 component, Protocol V1, 23×19 전체 state
-- server: `server/index.mjs` 단일 module, 9×9 procedural cache, module-level mutation
-- 이동: server 140ms rate limit, client 145ms hold input
-- AI: 500ms
-- world tick: 1000ms, bomb/폭발과 BGM clock
-- client test: build + SSR/source 문자열 test 2건
-- server gameplay/protocol test: 없음
-- 기존 audit 기준 build/test는 통과하며 lint에는 기존 오류 3건과 경고 1건이 있음
+## 3. Preserve 계약
 
-각 단계 시작 전에 기준선을 다시 실행하고 현재 작업 때문에 생긴 실패와 기존
-실패를 구분한다.
+- server authority와 World Owner 단일 mutation 경계
+- 공개 game URL과 Oracle WebSocket/health 경로
+- nickname join, death와 respawn
+- endless materialized world와 chunk revision/resync
+- wall, crate, bomb와 player collision
+- bomb power, range, shield와 AI item drop
+- 폭발 순간과 live flame 접촉 damage
+- 파괴된 crate 자동 재생성 없음
+- AI 6명과 화면 밖 적 방향 표시
+- BGM/world clock와 volume UI
+- local player 중앙 camera projection
 
-## Preserve 계약
+player-player collision은 이번 Sprint에서 gameplay rule을 바꾸지 않는다.
 
-- 공개 game URL과 Oracle `wss://insight.magamiscom.ing/boom-ws`
-- nickname 입력 뒤 shared world 참가
-- 사망 overlay와 다시 접속하기
-- 사람·AI, 폭탄, 폭탄 수/방어막/화력 item
-- authoritative grid collision과 bomb 설치 칸
-- 폭발 순간 위치 기준 피해
-- permanent wall과 destructible crate
-- 파괴된 crate는 live process 수명 동안 floor로 유지
-- offscreen enemy direction
-- world clock/BGM sync와 volume control
-- local player 중앙 projection과 keyboard/pointer 조작
-- Oracle 128MB 제한 안에서 bounded memory 목표
+## 4. 범위 밖과 삭제할 설계
 
-현재 bug를 Preserve하지 않는다. viewer별 지형 재계산, 청크 경계 빈 길, spawn
-상자 영구 삭제, 이동마다 전체 tile 전송과 camera 끊김은 해소 대상이다.
+### 범위 밖
 
-## 범위 밖
+- full world rollback과 shooter식 lag compensation
+- WebTransport/UDP, transport abstraction과 packet encryption 계층
+- binary protocol, compression과 generic schema framework
+- ECS, physics engine와 plugin/event bus
+- room/friend match, account와 persistent inventory
+- multi-process, sharding과 Oracle DB persistence
+- AI 전략, art와 UI redesign
 
-- 친구대전과 room code 재구현
-- 계정, 로그인, leaderboard와 영구 player inventory
-- world 전투 상태의 Oracle DB/disk persistence
-- gameplay balance, 새 AI 전략과 chain reaction 추가
-- Canvas/WebGL renderer 전환
-- 새 캐릭터 art, UI redesign와 BGM 교체
-- 다중 Oracle process/sharding
-- 측정 없는 binary protocol와 compression
+### V3 전환 뒤 삭제 후보
 
-## 목표 파일 Manifest
+- 145ms repeated step `InputRuntime`
+- one-cell-only `MovementPrediction`
+- latest-target 135/175ms position interpolator 사용 경로
+- client distance `> 2` teleport heuristic
+- input ACK마다 entity cache를 갱신하는 V2 owner correction 경로
+- production V2 traffic 0 확인 뒤 V2 movement protocol
 
-실제 구현 중 이름은 책임이 더 명확한 경우 조정할 수 있지만 Owner와 boundary는
-유지한다.
+## 5. 최종 책임과 목표 파일
+
+파일은 구현 중 20줄 helper를 무조건 분리하지 않는다. 독립 상태, 독립 test 또는
+서로 다른 변경 이유가 있을 때만 나눈다.
+
+### Shared
+
+| 목표 파일 | 단일 책임 |
+|---|---|
+| `shared/net-tick.mjs` | wrap-safe tick/sequence 비교와 lead window |
+| `shared/movement-config.mjs` | fixed units, speed, acceleration과 turn grace 값 |
+| `shared/movement-step.mjs` | 한 fixed tick의 pure movement와 collision contact 계산 |
+
+`movement-step.mjs`는 plain collision reader interface를 받는다. client/server
+adapter를 shared package에 넣지 않는다.
 
 ### Server
 
-| 영역 | 목표 파일/책임 |
+| 목표 파일 | 단일 책임 |
 |---|---|
-| entry | `server/index.mjs`: main 호출만 하는 호환 entry |
-| composition | `server/src/main.mjs`: config, Owner, loop와 Gateway 조립 |
-| config | `server/src/config.mjs`: env parse와 validation |
-| world | `server/src/world/coordinates.mjs`: floorDiv, chunk/local 좌표 |
-| world | `server/src/world/chunk-generator.mjs`: deterministic base terrain |
-| world | `server/src/world/world-owner.mjs`: chunk/entity 단일 mutation boundary |
-| world | `server/src/world/spawn-finder.mjs`: 지형을 바꾸지 않는 spawn 검색 |
-| simulation | `server/src/simulation/game-simulation.mjs`: movement/bomb/tick transaction |
-| simulation | `server/src/simulation/explosion.mjs`: blast와 damage 계산 |
-| AI | `server/src/ai/bot-controller.mjs`: read snapshot → intent |
-| network | `server/src/network/protocol-v1.mjs`: 전환 기간 호환 serializer |
-| network | `server/src/network/protocol-v2.mjs`: schema와 serializers |
-| network | `server/src/network/websocket-gateway.mjs`: connection/message routing |
-| network | `server/src/network/{websocket-session,chunk-interest,entity-projector,world-publisher,backpressure-sender}.mjs` |
-| tests | `server/test/*.test.mjs`: world/simulation/protocol/lifecycle |
+| `server/src/simulation/fixed-step-loop.mjs` | 30Hz scheduling, bounded catch-up와 metrics |
+| `server/src/simulation/player-command-buffer.mjs` | sequence/target tick 검증과 per-player input state |
+| `server/src/simulation/player-movement-system.mjs` | shared core 실행과 World Owner movement commit |
+| `server/src/simulation/bomb-system.mjs` | placement, fuse와 owner pass-through lifecycle |
+| `server/src/simulation/explosion-system.mjs` | blast cells, damage와 flame result |
+| `server/src/network/protocol-v3.mjs` | V3 server schema validation/serialization |
+| `server/src/network/connection-registry.mjs` | socket, player lease와 resume token |
+| `server/src/network/entity-snapshot-publisher.mjs` | 15Hz absolute movement samples와 owner ACK |
+| `server/src/network/chunk-publisher.mjs` | 기존 chunk revision/snapshot/delta |
+| `server/src/network/websocket-gateway.mjs` | V2/V3 upgrade와 message routing 조립 |
+
+기존 `game-simulation.mjs`의 join, item과 death orchestration은 새 system이 실제로
+분리될 때만 줄인다. 이름만 바꾸는 이동은 하지 않는다.
 
 ### Client
 
-| 영역 | 목표 파일/책임 |
+| 목표 파일 | 단일 책임 |
 |---|---|
-| page | `app/page.tsx`: composition과 shell만 담당 |
-| protocol | `app/game/protocol.ts`: V2 message type/validation |
-| network | `app/game/game-socket.ts`: connect/reconnect/send/subscription |
-| state | `app/game/world-state.ts`, `world-message-applier.ts`, `world-selectors.ts`, `world-store.ts` |
-| controller | `app/game/use-game-controller.ts`: store/socket/input/audio 조립 |
-| input | `app/game/use-game-input.ts`: keyboard/pointer intent와 cleanup |
-| camera | `app/game/position-interpolator.ts`, `camera-runtime.ts`: 보간과 camera projection |
-| audio | `app/game/audio-runtime.ts`: BGM clock sync와 volume |
-| render | `app/game/WorldViewport.tsx`: viewport와 layer 조립 |
-| render | `app/game/TerrainLayer.tsx`: revision 기반 chunk/tile |
-| render | `app/game/EntityLayer.tsx`: player/bomb/item/flame projection |
-| UI | `app/game/GameHeader.tsx`, `WorldTickHud.tsx`, `GameLegend.tsx`, `JoinOverlay.tsx`, `DeathOverlay.tsx`, `GameControls.tsx`, `PlayerStatus.tsx` |
-| style | `app/globals.css` 또는 책임별 CSS: 사용 중인 style만 명확히 유지 |
-| tests | `tests/`: store/protocol/render contract + 기존 SSR |
-
-파일을 필요 이상 잘게 나누지 않는다. 한 파일이 한 책임 안에서 충분히 작으면
-추가 분할하지 않는다.
-
-## Rollback 단위
-
-| 단위 | 변경 | rollback 결과 |
-|---|---|---|
-| R1 | 규칙/Architecture/Sprint 문서 | 기존 코드와 동작 그대로 |
-| R2 | World core + V1 adapter | 기존 `server/index.mjs` V1 구현으로 복귀 |
-| R3 | Simulation/AI modules | R2의 World read/command와 기존 규칙 adapter로 복귀 |
-| R4 | Protocol V2 server | V2 비활성, V1 client 계속 사용 |
-| R5 | V2 client/render path | 공개 client를 V1 path로 복귀, V2 server 호환 유지 |
-| R6A | 구형 code cleanup | 삭제 전 파일/설정 단위 복원 |
-| R6B | Oracle server deploy | 이전 server directory/service binary로 rollback |
-| R6C | 공개 web deploy | 직전 Sites deployment로 rollback |
+| `app/game/clock-sync.ts` | server time/tick, RTT, jitter와 lead estimate |
+| `app/game/input-sampler.ts` | keyboard/pointer를 direction/action state로 정규화 |
+| `app/game/command-timeline.ts` | command seq/target tick/pending queue |
+| `app/game/local-movement-predictor.ts` | shared core tick, ACK restore와 pending replay |
+| `app/game/correction-smoother.ts` | render-only position offset 감쇠/snap |
+| `app/game/remote-snapshot-buffer.ts` | entity별 history, interpolation/extrapolation |
+| `app/game/pending-bomb-presenter.ts` | pending/confirm/reject visual state |
+| `app/game/protocol-v3.ts` | client V3 parser와 typed messages |
+| `app/game/game-socket.ts` | V2/V3 connection, send와 resume transport |
 
-R2~R5는 가능한 한 feature/protocol boundary로 전환 가능하게 유지한다. 영구적인
-dual implementation을 만들지는 않는다.
+World Store는 authoritative chunk/entity cache만 유지한다. prediction history와
+remote ring buffer를 World Store Map에 합치지 않는다.
 
----
+## 6. Protocol V3 최소 메시지
 
-## 1단계 — 계약과 현재 흐름 확정
-
-### 목적
+```text
+Client → Server
+  join / resume / ready
+  input_state(commandSeq, targetTick, direction)
+  action_command(commandSeq, targetTick, bomb|respawn)
+  chunk_resync / ping
 
-대규모 변경 전에 데이터 소유권, Preserve 결과, 목표 protocol과 실제 현재 경로를
-고정한다.
+Server → Client
+  hello / world_init
+  owner_snapshot(snapshotSeq, serverTick, lastProcessedCommandSeq, player)
+  entity_snapshot(snapshotSeq, serverTick, absolute entity samples)
+  action_result(commandSeq, accepted, bomb metadata)
+  world_event(eventSeq, eventTick, kind, payload)
+  chunk_snapshot / chunk_delta / interest_update
+```
 
-### 작업 내용
+moving entity는 absolute state sample을 사용하고 baseline delta chain을 만들지 않는다.
+청크는 현재 revision delta/resync를 유지한다.
 
-- UMZIQ 문서 체계를 BOOMnBOOM 책임에 맞게 작성
-- 전체 source/config/deployment/test inventory와 caller audit
-- World Owner, Simulation, Protocol, Client Render, Lifecycle 계약 작성
-- 6단계 Manifest, 위험, rollback과 완료 기준 확정
+## 7. 입력 Buffer 결정
 
-### 검증
+### 채택
 
-- 모든 문서 link와 파일 존재 확인
-- `docs/20_src_map.md`와 실제 import/caller 대조
-- `git diff --check`
-- 코드 파일 변경 0건
+- raw input → 다음 local predicted tick: 0~33ms frame latch
+- future `targetTick` server command buffer: one-way delay + 1~3 jitter slack tick
+- 코너에서 너무 일찍 누른 방향: shared Movement State의 2~3 tick turn grace
 
-### 완료 조건
+### 기각
 
-- canonical owner와 runtime 경계가 하나의 해석을 가짐
-- V1 현재 흐름과 V2 전환 순서 기록
-- 단계별 독립 rollback 가능
-- 구현 전 Preserve/non-goal 합의 가능
+- keydown 뒤 30~50ms 동안 local movement를 일부러 시작하지 않는 timer
 
----
+기각 이유는 local response만 늦추고 RTT, packet loss와 server correction을 줄이지
+못하기 때문이다. server command slack이 같은 jitter 흡수 효과를 추가 local lag
+없이 제공한다.
 
-## 2단계 — World Owner와 materialized chunk core
+## 8. 단계별 실행
 
-### 목적
-
-접속자 화면과 무관한 shared world 원본을 만들고, 같은 좌표의 타일을 한 번
-확정해 모든 viewer가 공유하게 한다.
-
-### 작업 내용
-
-- coordinate/chunk helper와 deterministic generator 추출
-- 16×16 WorldChunk, revision과 World Owner 도입
-- 경계 이웃을 고려하는 crate generation으로 9×9 경계 길 제거
-- 지형을 삭제하지 않는 spawn search
-- entity registry와 chunk/entity indexes를 Owner 안으로 이동
-- active/preload/retention materialization과 base-only LRU/TTL
-- 기존 V1 `state` serializer가 World Owner read model을 사용하게 연결
+### 1단계 — Shared Movement Core
 
-### 위험
+상태: **PASS**
 
-- 음수 좌표 chunk 계산 오류
-- generation version 변경으로 기존 화면의 지형 변화
-- spawn 후보 부족과 무한 검색
-- mutation 있는 chunk eviction
-- R2에서 V1 결과 shape가 달라 공개 client가 깨짐
+작업:
 
-### 자동 검증
+- fixed-point coordinate와 movement config
+- acceleration/deceleration, sweep collision와 turn grace pure core
+- current grid collision adapter fixture
+- server/client golden tick test
 
-- coordinate round-trip와 음수 좌표
-- generation determinism/order independence
-- 경계 상자 밀도와 인위적 빈 선 0
-- 두 viewer의 같은 coordinate/tile/revision
-- materialize 1회와 base-only eviction 복원
-- spawn이 tile mutation을 만들지 않음
-- 기존 V1 fixture shape
+완료 조건:
 
-### 완료 조건
+- 같은 initial state/input/collision fixture가 Node와 client test에서 byte-equivalent
+  movement state 생성
+- production path 변경 0
+- 음수 좌표와 collision 관통 0
 
-- `stateFor(viewer)`가 procedural tile generator를 직접 호출하지 않음
-- World Owner 밖 canonical Map/Set mutation 0
-- viewer movement만으로 chunk revision 변화 0
-- V1 client로 현재 gameplay 가능
-- R2 독립 rollback 가능
+Rollback: 새 shared files와 tests만 제거
 
-### 결과
+결과:
 
-- 16×16 WorldChunk, revision과 private entity registry 구현
-- 음수 좌표와 절대좌표 기반 경계 비의존 generator 구현
-- spawn terrain mutation 제거
-- player 주변 반경 2 preload와 base-only cold trim 구현
-- viewer origin을 V1 adapter Runtime으로 격리하고 기존 23×19 shape 유지
-- server world/V1 test 6/6 및 임시 포트 WebSocket smoke 통과
-- gameplay 규칙/clock 분리는 계획대로 3단계에 유지
+- `shared/net-tick.mjs`, `movement-config.mjs`, `movement-step.mjs` 구현
+- client/server가 같은 golden fixture를 byte-equivalent하게 재생
+- 30Hz fixed-point 가감속, 축별 AABB sweep, 음수 좌표, 고속 중간 셀 충돌,
+  방향 반전, turn grace와 uint32 tick wrap 테스트 통과
+- production `app/`, `server/src/` 변경 0
+- root build/client 28건, server 26건, lint, tsc와 diff-check 통과
 
----
+### 2단계 — V3 Server Fixed Simulation
 
-## 3단계 — Simulation/AI 경계와 regression test
+상태: **PASS**
 
-### 목적
+작업:
 
-socket/timer에서 게임 규칙 mutation을 분리하고 현재 gameplay와 수정 대상 버그를
-테스트로 고정한다.
+- fixed-step loop와 bounded catch-up
+- command buffer/target tick window
+- movement system과 World Owner commit
+- V3 schema, owner/entity absolute snapshot
+- V2 server behavior 동시 유지
 
-### 작업 내용
-
-- movement, bomb, explosion, damage와 item을 Simulation command로 이동
-- world beat loop와 real-time input cadence 분리
-- mutation batch 원자 commit과 changed chunk/entity event 생성
-- AI를 read snapshot → intent controller로 이동
-- crate 파괴를 canonical chunk mutation으로 반영
-- 폭발 실행 순간 위치로 damage 판정
-- health에 simulation/chunk 기본 metrics 추가
-
-### 위험
+완료 조건:
 
-- tick catch-up에서 중복 explosion
-- AI respawn/item ordering 변화
-- crate 파괴 뒤 청크 revision 불일치
-- timer와 socket callback concurrency에서 partial state 노출
+- V2 regression 전부 PASS
+- V3 simulated client가 30Hz movement/15Hz snapshot 수신
+- duplicate, late, future, missing command와 queue limit test
+- no-client 상태에서 불필요한 snapshot 0
 
-### 자동 검증
+Rollback: V3 route 비활성, current V2 path 유지
 
-- collision matrix와 input rate/sequence
-- bomb limit/place tile/fuse
-- 폭발 범위와 순간 위치 damage
-- shield, death, AI drop/respawn과 item collect
-- crate 파괴 뒤 이후 tick에도 floor 유지
-- late tick catch-up와 mutation batch 원자성
-- no-human AI idle work
-
-### 완료 조건
+결과:
 
-- Gateway와 timer가 canonical world를 직접 mutation하지 않음
-- current gameplay Preserve test 통과
-- 명시된 피해와 crate 파괴 regression 통과
-- server test script 실제 test files 실행
-- R3 독립 rollback 가능
-
-### 결과
+- 30Hz bounded fixed loop, target-tick command buffer와 World Owner movement commit 구현
+- 명시적 Protocol V3 join/ready/input과 15Hz absolute owner/entity snapshot 구현
+- V3 25청크 baseline, revision 복구, chunk delta와 경계 interest preload 구현
+- V2/V3 session/publisher를 분리해 기존 V2 packet 계약 유지
+- duplicate/stale/late-clamp/expired/future/queue limit/tick wrap와 no-client publication 0 검증
+- server 40건, root build/client 28건, lint, tsc, syntax와 diff-check 통과
 
-- join/respawn/movement/bomb/item/tick gameplay를 Game Simulation command로 이동
-- 폭발 cell 계산을 pure helper로 분리
-- AI를 read snapshot → intent Controller로 분리하고 shared action command 연결
-- V1 140ms cadence, AI 500ms, 1초 world tick과 bomb/item 수치 유지
-- 폭발 순간 위치, shield/death, AI drop/respawn과 tick catch-up 고정
-- crate 파괴와 chunk revision 계약 고정
-- server test 17/17 및 임시 V1 WebSocket smoke 통과
-- Protocol event/delta publication은 계획대로 4단계에 유지
-
----
+### 3단계 — V3 Local Prediction
 
-## 4단계 — Protocol V2와 delta publication
-
-### 목적
-
-최초 preload 이후 이동에서는 entity 변화만, 지형 변화에서는 해당 chunk delta만
-전송한다.
-
-### 작업 내용
+상태: **PASS**
 
-- V2 envelope/schema와 message validation
-- join → world_init → chunk/entity snapshot → ready 흐름
-- client sequence/input ack/correction
-- chunk revision, delta와 resync
-- entity revision과 interest-based snapshot/delta
-- player 중심 preload 반경 2와 subscriber index
-- backpressure와 compact health metrics
-- V1/V2 compatibility gateway 유지
-
-### 위험
-
-- revision gap 뒤 client/server divergence
-- interest 경계에서 entity 또는 chunk가 늦게 도착
-- V1/V2 session 분기 누락
-- slow client가 server memory를 압박
-
-### 자동 검증
-
-- malformed/schema/version rejection
-- init 순서와 preload completeness
-- 이동 packet의 tile matrix 0건
-- 최초 chunk snapshot 뒤 delta only
-- gap/resync, duplicate sequence와 stale entity 폐기
-- interest enter/leave와 two-client shared revision
-- bufferedAmount/backpressure policy
-
-### 완료 조건
-
-- 일반 이동의 tile serialization 0
-- 모든 chunk change에 monotonic revision
-- 같은 chunk 구독자가 같은 delta 수신
-- V1 공개 client 계속 동작
-- R4 독립 rollback 가능
-
-### 결과
-
-- query 또는 `boom-v2` subprotocol로 선택하는 V2 server와 V1 기본 분기 구현
-- `hello → world_init → 반경 2의 25청크 → entity_snapshot → ready` 순서 고정
-- clientSeq ack cache, stale/duplicate idempotency와 authoritative correction 구현
-- session별 chunk snapshot baseline에서 revision delta와 explicit resync 구현
-- player chunk 경계 이동 시 interest update 뒤 새 5청크를 entity delta보다 먼저 전송
-- entity revision/snapshot/delta와 1초 heartbeat를 전체 tile state와 분리
-- 같은 baseline의 same-chunk 구독자에게 동일 delta publication 구현
-- 512KiB outbound buffer 초과 slow client를 WebSocket 1013으로 정리
-- V2 일반 이동 packet의 tile matrix 0건과 V1 `welcome/state` 호환 확인
-- server test 26/26, root client test 2/2, 임시 V1/V2 실제 WebSocket smoke 통과
-- lint는 기존 client/D1 오류 3건과 경고 1건만 유지
-- V2 client World Store와 camera/render 전환은 계획대로 5단계에 유지
-
----
-
-## 5단계 — Client World Store와 부드러운 viewport
-
-### 목적
-
-넓게 preload된 fixed world 위에서 local player를 중앙에 두고 camera만 연속적으로
-움직이며, terrain을 이동마다 다시 그리지 않는다.
-
-### 작업 내용
-
-- Protocol V2 type, socket과 reconnect 분리
-- chunk/entity/revision World Store
-- input, Audio와 Camera Runtime 분리
-- Terrain/Entity/Local Player/HUD layer 분리
-- 절대 world coordinate 기반 고정 floor pattern
-- `translate3d` rAF camera와 entity target interpolation
-- key release 뒤 마지막 승인 칸까지 animation 완료
-- stale bounce/center-relative shadow와 사용하지 않는 animation 제거
-- V2 전환 뒤 `app/page.tsx`를 composition/shell로 축소
-
-### 위험
-
-- React subscription이 전체 terrain을 다시 렌더링
-- server ack보다 prediction이 앞서 rubber-banding
-- percentage grid와 transform rounding으로 한 칸 경계 끊김
-- reconnect cache와 다른 world ID 혼합
-- mobile pointer cancel에서 이동 timer 잔존
-
-### 자동/정적 검증
-
-- World Store snapshot/delta/revision tests
-- changed chunk selector만 notification
-- camera interpolation의 monotonic frame와 final tile alignment
-- key/pointer/blur/unmount cleanup
-- stale correction/reconnect cache tests
-- lint, build, 기존 SSR test와 `git diff --check`
-
-### Browser QA
-
-- 한 창에서 연속 이동과 key release 최종 칸
-- 타일 pattern/terrain이 왕복 이동 뒤 동일
-- 경계 접근 때 빈 화면 없이 preload
-- 두 창에서 같은 crate, bomb, explosion과 player 위치
-- terrain render counter가 이동 중 증가하지 않음
-- desktop keyboard와 mobile-size pointer controls
-
-### 완료 조건
-
-- page가 socket/store/camera/audio 내부 구현을 소유하지 않음
-- 이동 중 terrain DOM 재생성 0
-- frame 간 시각적 한 칸 jump 없음
-- server authoritative integer target에 정확히 정렬
-- V2 client gameplay Preserve
-- R5 독립 rollback 가능
-
-### 결과
-
-- 공개 web client를 Oracle `/boom-ws?protocol=2`와 `boom-v2` subprotocol로 전환
-- V2 hello/join/init/25청크/entity snapshot/ready와 clientSeq ack/correction 연결
-- World Store에 chunk/entity/revision cache, stale 폐기와 chunk gap resync 구현
-- reconnect world identity 비교와 initial authoritative snapshot revision 재검증
-- 25개 fixed chunk DOM을 preload하고 board overflow에서 15×11만 crop
-- chunk-key selector로 movement/entity/tick/BGM update의 Terrain 재생성 차단
-- 절대 world coordinate floor pattern과 wall/crate 동적 음영·과거 bounce 제거
-- local player 중앙 anchor, world root rAF `translate3d` camera 구현
-- local camera는 one-cell prediction + 175ms linear retarget, remote entity는 135ms 보간
-- keyboard/pointer hold, keyup/pointercancel/blur/unmount cleanup과 즉시 bomb intent 구현
-- nickname/death/reconnect, AI/bomb/item, enemy arrow와 BGM/volume UI 보존
-- `app/page.tsx`를 46줄 composition shell로 축소
-- client build/test 14/14, server regression 27/27, 새 파일 lint 오류/경고 0
-- 새 GameSocket+WorldStore의 임시 V2 server 25청크/join/input ack 연동 smoke 통과
-- 실제 브라우저 두 창/모바일에서 즉시 camera 이동과 terrain revision 고정을 확인
-
----
-
-## 6단계 — 구형 경로 정리, 전체 검증과 배포
-
-### 목적
-
-새 구조를 유일한 제품 경로로 만들고 로컬·Oracle·공개 웹에서 같은 결과를
-확인한다.
-
-### 작업 내용
-
-- V1 traffic 0 확인 뒤 V1 serializer/state shape 제거
-- `stateFor(viewer)`, viewer origin과 전체 tile broadcast 제거
-- unused D1 world/match/rooms, schema/migration/binding의 caller와 공개 사용 재확인
-- 승인된 unused path만 명시적 Manifest로 삭제
-- stale `multiplayer.css`, starter README/auth example과 1초 동시이동 metadata 정리
-- current source map과 recent task 동기화
-- Oracle server 파일 배포, service restart와 nginx 유지/검증
-- V2 공개 web 배포와 실제 2-client QA
-
-### 위험
-
-- 미확인 friend-room URL 삭제
-- D1 binding 제거로 Sites build config 실패
-- server/client 배포 순서 실패
-- Oracle 128MB 제한에서 retained/pinned chunk 증가
-- live rollback artifact 미확보
-
-### 전체 검증
-
-- server unit/integration/protocol/lifecycle tests
-- client tests, lint, production build
-- source/import/dead path audit와 `git diff --check`
-- server config start, graceful shutdown와 `/health`
-- nginx config syntax와 public WebSocket upgrade
-- two-client + AI gameplay, bomb/death/item/crate destruction
-- preload edge와 10분 이동 중 chunk/memory/traffic 관찰
-- BGM drift, mute/volume과 reconnect
-
-### 완료 조건
-
-- current product path 하나: V2 client ↔ Oracle V2 Gateway ↔ World Owner
-- viewer별 tile matrix 생성/전송 0
-- unused legacy path와 D1 binding은 확인된 범위에서만 제거
-- Oracle health 정상, 128MB 제한 내 bounded chunk state
-- 공개 URL 두 창에서 shared-world QA 통과
-- docs/20, 98, 99가 최종 코드와 일치
-- R6A/R6B/R6C rollback 경로 확인
-
-### 6A 결과
-
-- source/import/fetch caller를 재감사해 D1 world/match/rooms route, `db/`, `drizzle/`,
-  `examples/d1/`, Drizzle dependency/script와 Sites `DB` binding을 제거
-- caller 없는 `multiplayer.css`, `chatgpt-auth.ts`, 중복 starter `README 2.md`와 SVG
-  3개를 제거하고 제품 BGM/favicon/OG asset은 보존
-- `.openai/hosting.json`의 기존 `project_id`를 그대로 유지하고 Sites worker/build에서
-  D1 migration packaging만 제거
-- README와 layout metadata를 V2 실시간 공유 월드 기준으로 갱신
-- `/health`에 protocol별 connection, active/pinned/retained chunk, entity, outbound,
-  backpressure, scheduler와 RSS/heap/external byte metric을 추가
-- V1 server adapter는 Oracle server-first 배포와 공개 client rollback을 위해 유지
-- root lint/TypeScript/build/client 10/10, server 27/27와 diff/dead caller 검증 통과
-
-6A는 로컬 cleanup/readiness까지만 완료했다. Oracle 또는 Sites 배포, 공개 브라우저
-QA와 V1 제거는 6B에 남긴다.
-
-### 6B production soak와 V1 제거 결과
-
-- Sites v40과 dual-protocol Oracle server에서 10분 production soak PASS
-- RSS `85.6 → 87.3MB`, materialized chunk `59 → 62`, 종료 event-loop lag 4ms
-- 전 구간 `protocolV1=0`, backpressure disconnect 0을 확인
-- `protocol-v1.mjs`와 serializer test, Gateway의 V1 message/publication/session 분기 제거
-- 명시적 `?protocol=2` 또는 `boom-v2`만 수용하고 unversioned/Protocol 1은 player를
-  만들기 전에 426으로 거절
-- `hello.supportedProtocols=[2]`, health supported `[2]`와 unsupported reject metric 구현
-- health의 `protocolV1:0`, `protocols.v1:0`은 모니터링 전환용 tombstone으로 유지
-- 로컬 server regression 26건 기준으로 V2 init/delta/sequence와 무누수 거절 검증
-
-V2-only source는 GitHub와 Oracle에 배포했다. Oracle의 직전 dual-protocol server는
-`/home/ubuntu/boomnboom-server.backup-20260815-dual-v1-v2`로 보존했다. 공개 nginx
-경로에서 V2 25청크/init/input ack, unversioned 426, reject metric과 브라우저
-재연결·즉시 이동을 다시 확인했다. 공개 web client는 Sites v41이다.
+작업:
 
-## 7단계 — File Responsibility Cleanup
+- clock sync와 command target tick
+- input sampler/command timeline
+- local fixed prediction과 full pending replay
+- correction smoother와 debug metrics
 
-### 목적
-
-한 파일의 주된 변경 이유를 하나로 제한하고 파일명만 보고 역할을 예측할 수 있게
-한다. Protocol V2, gameplay, UI 결과와 배포 설정 값은 바꾸지 않는다.
+완료 조건:
 
-### 변경 Manifest
+- keydown frame visual feedback
+- 200/300ms RTT와 50ms jitter에서 정상 직선 correction 대부분 0.10 tile 이하
+- send 실패/reject/blocked/reconnect queue test
+- V2 client fallback 유지
 
-- server entry에서 config, timeline, scheduler, health와 composition lifecycle 분리
-- Gateway에서 backpressure, session, interest, entity projection과 publication 분리
-- `spawn.mjs`를 실제 역할에 맞는 `spawn-finder.mjs`로 변경
-- client Store에서 state shape, message apply와 selector 분리
-- 공통 위치 보간을 Camera Runtime에서 분리
-- Entity Layer에서 적 방향 표시와 local bomb selector 분리
-- Header/Tick HUD/Legend, Join/Death Overlay와 Player Status를 독립 UI 파일로 분리
-- hosting metadata plugin, nginx virtual-host config와 test 이름을 실제 책임에 맞춤
-- 중복 보고 파일 `docs/99_recent_task 2.md`는 이후 사용자 요청으로 삭제하고
-  `docs/99_recent_task.md`만 canonical 최근 보고로 사용
-
-### Preserve 계약
-
-- V2 init/25청크/ready, sequence ack, interest와 chunk/entity delta shape
-- 140ms 이동, 500ms AI, 1초 world tick과 BGM timeline
-- nickname/player respawn/폭탄/item/crate destruction과 shared World Owner 결과
-- public Sites project ID, Oracle port/service/nginx route와 128MB 제한
-
-### 결과
-
-- 500줄 이상 code file 0건
-- `server/index.mjs`는 `startServer()` 호출만 담당
-- `websocket-gateway.mjs` 522줄에서 223줄, `world-store.ts` 432줄에서 84줄로 축소
-- 새 production module과 test가 담당 대상 이름을 직접 드러냄
-- server 26건과 client unit/contract/SSR 검증에서 기존 제품 계약 유지
-
-## 8단계 — Crate Respawn Removal
-
-### 목적
-
-폭발로 파괴된 노란 상자를 다시 생성하는 기믹과 그 예고 장판을 제거한다.
-
-### 변경 Manifest
-
-- World Owner의 crate respawn schedule과 관련 command/read model 제거
-- Simulation의 warning commit, 지연과 crate 복구 tick 처리 제거
-- Protocol V2 chunk snapshot/delta에서 respawn projection 제거
-- Client Store/Terrain에서 warning state와 렌더링 제거
-- 파괴된 crate가 이후 world tick에도 floor로 유지되는 regression test 추가
-
-### Preserve 계약
-
-- 폭발 범위, 피해, wall 충돌과 crate 뒤 blast 중단
-- player/AI respawn과 AI 사망 item drop
-- chunk revision/snapshot/delta와 현재 프로세스 내 파괴 mutation 보존
-- 서버 재시작 시 terrain mutation을 초기화하는 기존 비영속 live-world 정책
-
-### 결과
-
-- crate 파괴 시 chunk tile을 floor로 한 번 변경하고 자동 복구하지 않음
-- warning tile, 예고 장판, respawn schedule과 network projection 0건
-- server 24/24, client build/unit/contract/SSR 18/18, lint와 TypeScript PASS
-
-## 9단계 — Live Flame Collision Damage
-
-### 목적
-
-폭발 순간을 피했더라도 화면에 남아 있는 불꽃 이펙트 칸으로 이동하면 서버가
-접촉 피해를 적용한다.
-
-### 변경 Manifest
-
-- 폭발 피해와 이동 중 flame 접촉 피해를 하나의 Simulation damage command로 통합
-- 이동 확정 뒤 live flame 좌표를 확인하고 생존한 경우에만 item 획득
-- shield, 사람 사망과 AI item drop/respawn 결과는 기존 규칙 유지
-- live flame 이동 피해 regression test 추가
-
-### 결과
-
-- 화면 animation이 아닌 World Owner의 flame entity 좌표로 접촉 판정
-- 사람은 사망 overlay 상태가 되고 shield가 있으면 1개를 소비해 생존
-- server 25/25 PASS
-
-## 10단계 — Player Squash and Jump Animation
-
-### 목적
-
-캐릭터가 대기할 때 바닥을 기준으로 호흡하듯 찌그러지고, 인접 칸 이동은 10px
-점프와 squash/stretch pose로 표현한다.
-
-### 변경 Manifest
-
-- 위치 anchor와 캐릭터 body를 분리해 이동과 scale transform 충돌 제거
-- local/remote player가 같은 `PlayerAvatar`와 jump pose 계약 사용
-- 대기 500ms에 `102%×98% ↔ 98%×102%` 반복
-- 이동 출발·착지 `105%×90%`, 최고점 `90%×105%`, 높이 10px 적용
-- teleport/respawn은 jump animation에서 제외
-
-### Preserve 계약
-
-- 서버 authoritative integer 위치와 client prediction/ack
-- local player 중앙 anchor와 world camera rAF 이동
-- remote player 위치 보간, nickname, shield와 local action cue
-- terrain render와 gameplay 판정에 animation 값 사용 금지
-
-### 결과
-
-- player 위치와 body animation이 독립 transform layer에서 합성됨
-- 요청한 idle/jump pose를 client contract test로 고정
-- client build/unit/contract/SSR 19/19, lint와 TypeScript PASS
-
-## Sprint 전체 완료 기준
-
-- 같은 world coordinate가 모든 client에서 같은 tile/chunk revision
-- player가 움직여도 tile matrix packet과 terrain rerender가 없음
-- viewport보다 넓은 chunk preload와 경계 전환 지연 없음
-- authoritative 위치는 integer tile, visual camera는 연속 transform
-- bomb/폭발/피해/item/player respawn/crate destruction 결과가 두 client에서 동일
-- World Owner 밖 canonical mutation 0
-- stale/duplicate/gap packet이 divergence를 만들지 않음
-- cold chunk 수와 outbound traffic이 명시된 상한 정책을 따름
-- 자동 검사와 실제 공개 2-client QA가 모두 통과
-
-## 작업 운영
-
-- 루트 에이전트가 각 단계 시작 전 이전 단계 diff와 test를 검토한다.
-- 단계 결과가 계약을 만족하지 않으면 다음 단계로 넘어가지 않고 같은 rollback
-  단위 안에서 수정·재검증한다.
-- 서브에이전트는 할당된 단계만 변경하고 deploy, Sprint 완료와 legacy 삭제 여부를
-  결정하지 않는다.
-- 각 단계 뒤 `docs/20_src_map.md`를 실제 코드에 맞게 갱신한다.
-- `docs/99_recent_task.md`는 루트 에이전트가 멈추는 시점의 최근 Task만 기록한다.
+Rollback: public client V2 mode로 전환
+
+결과:
+
+- V3 `?protocol=3` opt-in과 기본 V2 fallback을 병행
+- ClockSync, immediate InputSampler, bounded CommandTimeline, shared-core predictor와
+  render-only correction을 controller/viewport rAF에 연결
+- owner ACK restore 뒤 pending 전체 replay, lifecycle/reconnect/reject/send-failure reset 구현
+- World Store authoritative entity와 prediction runtime을 분리하고 owner/entity sequence 격리
+- 200/300ms RTT·50ms-class jitter에서 replay 16 tick 이하, 직선 correction 90% 이상
+  0.10 tile 이하 검증
+- root build/client 44건, server 40건, lint, tsc와 diff-check 통과
+
+### 4단계 — Remote Snapshot Interpolation
+
+상태: **PASS**
+
+작업:
+
+- remote entity별 bounded history
+- 100ms interpolation, max 100ms extrapolation와 freeze
+- jitter-adaptive 80~150ms delay
+- lifeId/teleport snap
+
+완료 조건:
+
+- 15Hz snapshot과 60/120Hz render에서 constant-speed motion
+- reorder/drop/stall simulation에서 backward movement와 unbounded extrapolation 0
+- terrain render count 증가 0
+
+Rollback: V2 latest-target renderer 재활성
+
+결과:
+
+- remote player 전용 entity별 absolute history(max 24)와 V3 rAF source 구현
+- 100ms 기본, jitter 기반 80~150ms interpolation delay와 render tick 단조 clamp
+- 100ms bounded extrapolation 후 freeze, lifeId/teleport/impossible-speed snap 구현
+- stale/duplicate/reorder/drop/removal cleanup과 local owner 제외
+- 15Hz snapshot→60/120Hz constant speed, history/extrapolation bound와 terrain notification 0 검증
+- root build/client 51건, server 40건, lint, tsc와 diff-check 통과
+
+### 5단계 — Bomb/Explosion V3
+
+상태: **PASS**
+
+작업:
+
+- pending bomb presenter
+- action result와 exact spawn/explode tick
+- bomb owner exit pass-through/re-entry collision
+- world event dedupe와 late event fast-forward
+
+완료 조건:
+
+- pending/confirm/reject/snapshot race test
+- two-client bomb cell/explode tick/flame/damage 일치
+- 300ms RTT에서 과거 위치 damage 0
+
+Rollback: pending visual 비활성, authoritative V2 bomb presentation 유지
+
+결과:
+
+- input/action 공용 sequence·targetTick queue와 30Hz 90-tick authoritative bomb 구현
+- fixed order `movement → respawn/bomb → explosion/live flame → publication` 확정
+- V2/V3 bomb·flame clock domain 격리, owner AABB exit pass-through와 re-entry block
+- exact eventTick blast/crate/shield/death, 현재 AABB damage, AI drop·safe respawn 구현
+- V3 item 3종 획득, lifeId respawn과 pre-life queue reset 구현
+- pending/accept/reject/snapshot race와 late explosion event fast-forward/dedupe 렌더 구현
+- 실제 two-client 동일 bomb/explode/event/flame/damage와 300ms급 과거 위치 damage 0 검증
+- root build/client 59건, server 56건, lint, tsc, diff-check와 파일 500줄 미만 통과
+
+### 6단계 — Resume, Late Join과 Network Hardening
+
+상태: **PASS**
+
+작업:
+
+- connection/player lease 분리, 10초 grace와 token rotation
+- resume full reset, late join baseline tick
+- backpressure 1013 resume
+- clock outlier, command lead와 correction metrics
+
+완료 조건:
+
+- old socket/expired token mutation 0
+- reconnect pending input replay 0, same player resume
+- late join current bomb/flame/item/player state 일치
+- 200/300ms RTT, 50ms jitter, transport stall과 reconnect scenario PASS
+
+Rollback: resume 비활성, current new-session reconnect
+
+결과:
+
+- V3 connection과 player lease 분리, provisional player 0과 10초 grace 구현
+- 128-bit memory-only token, same-player resume, rotation/old token·socket invalidation 구현
+- disconnect neutral/queue clear, resume sequence reset와 full baseline teleport 구현
+- late join/resume가 같은 baseline tick의 chunks/player/bomb/flame/item을 수신
+- 실제 WebSocket 1013 backpressure→same player resume, lease expiry와 rate limit 검증
+- client resume-first→reject 시 clean join, V2 handler 격리와 server restart clock reset 구현
+- health aggregate resume/queue/backpressure/rate/fixed metrics에 identity·token 비노출
+- root build/client 64건, server 63건, lint, tsc, diff-check와 파일 500줄 미만 통과
+
+### 7단계 — 배포, 관찰과 Cleanup 결정
+
+상태: **배포 전 검증 PASS**
+
+순서:
+
+1. full local validation
+2. Oracle dual V2/V3 server deploy
+3. V2 public client smoke
+4. V3 Sites client deploy
+5. actual two-browser desktop/mobile QA
+6. Oracle CPU/RSS/backpressure/correction 10분 이상 관찰
+7. V2 traffic 0 확인
+8. 별도 cleanup commit에서 V2 제거 여부 결정
+
+완료 조건:
+
+- public health, V2/V3 WebSocket와 real input PASS
+- RSS 128MB 제한 안, tick backlog와 queue가 bounded
+- rollback artifact와 previous Sites version 확인
+
+배포 전 결과:
+
+- 공개 client selector를 기본 V3, 오직 `?protocol=2`만 V2 rollback으로 고정
+- local 실제 V2 join/input과 V3 two-client join/input/bomb/resume PASS
+- Sites package helper와 deploy artifact 구성 검증 PASS
+- root build/client 65건, server 63건, lint, tsc, syntax와 diff-check PASS
+- 모든 source/test 파일 500줄 미만, production 최대 controller 372줄
+- Oracle 배포 manifest에 `server/`와 sibling `shared/` 동시 배치 요구를 명시
+
+## 9. Network Test Matrix
+
+| RTT | Jitter | Transport 상태 | 기대 결과 |
+|---:|---:|---|---|
+| 50ms | 0~10ms | 정상 | correction 거의 0 |
+| 200ms | 50ms | 정상 | local 즉시, remote smooth, bounded replay |
+| 300ms | 50ms | 정상 | no freeze, snap은 invalid collision/lifecycle만 |
+| 200ms | 50ms | 300ms stall | bounded extrapolation 후 freeze, reconnect 가능 |
+| 200ms | 50ms | snapshot drop harness | 다음 absolute sample로 회복 |
+| 임의 | 임의 | socket close | neutral input, 10초 내 resume |
+
+browser WebSocket에서 packet loss는 주로 TCP recovery stall로 나타난다. test harness의
+drop은 미래 transport와 stale snapshot 처리를 검증하기 위한 application simulation이다.
+
+## 10. Metrics
+
+- simulation duration, catch-up backlog와 skipped publication
+- command queue depth, late/clamped/rejected/duplicate command
+- RTT, jitter, command lead tick
+- prediction replay tick count
+- correction error histogram과 cause
+- smooth correction/snap count
+- interpolation buffer depth, extrapolation/freeze duration
+- action rejection과 event dedupe
+- resume success/expiry와 backpressure disconnect
+- outbound messages/bytes와 process RSS
+
+high-cardinality player ID와 secret token은 public health에 넣지 않는다.
+
+## 11. 전체 완료 기준
+
+- server authority를 우회하는 client coordinate/delta path 0
+- shared movement core 이외 movement formula 중복 0
+- 200ms RTT에서 immediate local response와 정상 이동 correction 대부분 0.10 tile 이하
+- 300ms RTT/50ms jitter에서 replay, queue와 memory bounded
+- remote movement가 snapshot/render cadence와 무관하게 일정
+- bomb/explosion/damage가 모든 client에서 같은 server tick 결과
+- reconnect/late join이 full authoritative state로 회복
+- V2 rollback 가능한 server-first/client-second 배포
+- root lint/tsc/build/client tests, server tests, diff-check와 actual browser QA PASS

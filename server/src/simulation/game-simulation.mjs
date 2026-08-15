@@ -166,7 +166,12 @@ export class GameSimulation {
   }
 
   #hasFlameAt(x, y) {
-    return this.#world.readFlames().some((flame) => flame.x === x && flame.y === y);
+    return this.#world
+      .readFlames()
+      .some(
+        (flame) =>
+          flame.clockDomain !== "v3" && flame.x === x && flame.y === y,
+      );
   }
 
   #movePlayer(playerId, action) {
@@ -242,7 +247,9 @@ export class GameSimulation {
   }
 
   #advanceBombs(tick) {
-    const bombsAtStart = this.#world.readBombs();
+    const bombsAtStart = this.#world
+      .readBombs()
+      .filter((bomb) => bomb.clockDomain !== "v3");
     const exploding = [];
     for (const bomb of bombsAtStart) {
       if (bomb.bornTick === tick) continue;
@@ -257,7 +264,7 @@ export class GameSimulation {
       hasCrate: (x, y) => this.#world.hasCrate(x, y),
     });
     const flames = [...blastCells.values()];
-    this.#world.replaceFlames(flames);
+    this.#world.replaceFlamesForDomain("legacy", flames);
 
     for (const cell of flames) {
       if (this.#world.hasCrate(cell.x, cell.y)) {

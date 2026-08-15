@@ -1,167 +1,214 @@
 # Simulation Architecture
 
-## 1. 목적
+## 1. 목적과 현재 차이
 
-이 문서는 서버가 입력, 이동, AI, 폭탄, 폭발, 피해와 아이템을
-어떤 clock과 순서로 확정하는지 정의한다.
+이 문서는 Protocol V3 Sprint의 목표 simulation을 정의한다. 현재 production은
+message 도착 시 140ms 간격으로 정수 한 칸을 이동하고 bomb를 1초 world tick에서
+처리한다. 전환 순서와 rollback은 `docs/98_sprint_plan.md`가 소유한다.
 
-## 2. 권한과 구성
+## 2. 권한과 최소 구성
 
 ```text
-WebSocket input / AI decision
-  → validated Intent
-  → Simulation command
-  → World Owner transaction
-  → World Mutation Batch
-  → Protocol events
+Validated Command
+  → Per-player Command Buffer
+  → Fixed Simulation Step
+  → World Owner Commit
+  → Snapshot / Action Result / World Event
 ```
 
-Simulation은 규칙을 계산하고 World Owner는 결과를 원자적으로 commit한다.
-Gateway timer와 socket callback이 canonical Map을 직접 바꾸지 않는다.
+- World Owner만 canonical player, bomb, flame, item과 tile을 변경한다.
+- Movement Core는 plain state와 collision reader를 받아 다음 state만 계산한다.
+- Command Buffer는 sequence와 target tick만 관리하고 gameplay를 계산하지 않는다.
+- Bomb System은 authoritative movement state를 읽지만 Prediction이나 Network를
+  import하지 않는다.
+- Publisher는 commit된 read model만 직렬화한다.
+
+generic command framework, ECS, event bus와 전체 world rollback은 만들지 않는다.
 
 ## 3. Clock
 
-두 종류의 시간을 분리한다.
+### Fixed simulation
 
-### Real-time input cadence
+- 목표 simulation rate: 30Hz
+- fixed delta: 33.33ms
+- movement, collision, item collect, bomb placement, fuse, explosion, flame damage와
+  death를 같은 단조 증가 `serverTick`에서 처리한다.
+- snapshot publication은 기본 15Hz로 두 simulation tick마다 실행한다.
+- AI decision은 더 낮은 cadence로 만들 수 있지만 결과는 사람과 같은 input state와
+  action command로 fixed step에 들어온다.
 
-- 사람 이동 intent는 서버 rate limit 기준 140ms 간격으로 최대 한 칸 처리한다.
-- AI decision 기본 주기는 500ms다.
-- 숫자는 현재 감각을 보존하는 초기값이며, 측정 없이 더 빠르게 바꾸지 않는다.
+### Catch-up
 
-### World beat tick
+timer가 늦으면 누락 tick을 순서대로 실행한다. 한 event-loop turn에서 실행할 tick을
+제한하고 남은 catch-up은 즉시 다음 turn에 이어서 처리해 socket을 장시간 막지
+않는다. gameplay tick을 큰 variable delta 하나로 합치거나 조용히 버리지 않는다.
 
-- 기본 `TICK_MS`는 1000ms다.
-- `WORLD_EPOCH_MS`에서 계산한 단조 증가 tick number가 authority다.
-- 폭탄 fuse, 폭발과 불꽃은 world tick에서 실행한다.
-- process timer가 늦게 깨어나도 현재 wall clock의 tick까지 따라잡고 중복 tick을
-  실행하지 않는다.
+### World beat와 BGM
 
-BGM은 이 clock을 들려주는 client projection이며 Audio 재생 위치가 server tick을
-변경하지 않는다.
+1초 beat, BGM 위치와 HUD는 `serverTick`에서 파생한다. Audio playback과 client wall
+clock은 simulation을 진행시키지 않는다.
 
-## 4. Intent
+## 4. Movement State
 
-클라이언트 intent는 다음 범주만 가진다.
+기준 단위는 `1 tile = 1024 movement units`다.
 
-- join
-- respawn
-- movement start/change/stop 또는 단일 movement step
-- place bomb
+```text
+MovementState
+  px, py                fixed-point position
+  vx, vy                fixed-point velocity per tick
+  desiredDirection      latest input state
+  queuedTurn            early corner-turn intent or null
+  queuedTurnUntilTick   bounded grace expiry
+  lifeId                join/respawn마다 증가
+```
 
-intent에는 session identity와 증가하는 client sequence가 포함된다. 서버는 schema,
-session, alive 상태, action 종류와 rate limit을 검증한다. 중복 또는 과거 sequence는
-결과를 다시 적용하지 않는다.
+tile cell, 음수 좌표, rounding과 경계 tie-break는 shared coordinate helper로만
+계산한다. client와 server가 서로 다른 `Math.round` 규칙을 갖지 않는다.
 
-## 5. 이동
+## 5. Shared Movement Core
 
-- authoritative 위치는 항상 정수 타일이다.
-- 유효한 방향 intent는 현재 좌표에서 상하좌우 인접 한 칸만 후보로 만든다.
-- wall, crate, bomb와 다른 blocking player를 같은 collision read model로
-  확인한다.
-- 성공한 이동만 player position revision을 증가시킨다.
-- 실패한 이동도 ack할 수 있지만 월드 mutation을 만들지 않는다.
-- 키를 놓는 것은 새 이동을 중단할 뿐 이미 성공한 칸 이동을 취소하지 않는다.
-- client가 보여주는 중간 pixel 위치는 판정에 사용하지 않는다.
-- 성공한 이동 칸에 live flame이 있으면 서버가 같은 피해 규칙을 즉시 적용하고,
-  생존해 그 칸에 남아 있을 때만 item을 획득한다.
+서버와 local prediction이 같은 pure function을 실행한다.
 
-동시에 같은 칸을 요구하는 경우 한 simulation batch 안의 안정적인 순서를
-사용한다. 최초 구현은 server receive order와 session sequence를 사용하되 결과를
-테스트로 고정한다. 향후 truly simultaneous movement가 필요하면 별도 규칙 변경
-Sprint에서 교체한다.
+```text
+stepMovement(state, inputState, collisionReader, movementConfig)
+  → { state, contacts }
+```
 
-## 6. 폭탄 설치
+Movement Core가 하는 일:
 
-- 설치는 유효한 command 처리 시점에 즉시 실행한다.
-- 위치는 command가 처리되는 순간의 authoritative player tile이다.
-- 같은 칸에 bomb가 없어야 한다.
-- owner의 active bomb 수가 power보다 작아야 한다.
-- bomb는 `id`, `ownerId`, `position`, `bornTick`, `explodeTick`, `range`를 가진다.
-- 설치와 player action projection은 한 mutation batch로 commit한다.
+- desired velocity 계산
+- fixed acceleration/deceleration 적용
+- old position에서 next position까지 axis-separated sweep collision
+- wall, crate, confirmed bomb와 player collision 처리
+- corridor center assist와 bounded queued turn 처리
+- canonical next movement state 반환
 
-## 7. World beat 처리 순서
+Movement Core가 하지 않는 일:
 
-한 tick에서 다음 순서를 고정한다.
+- socket, sequence, ACK와 snapshot 처리
+- React animation과 camera transform
+- bomb fuse, damage, item effect와 score 변경
+- World Owner Map mutation
 
-1. 현재 tick 계산과 누락 tick 확인
-2. 만료된 bomb 선택
-3. 폭발 범위 계산과 chain reaction 대상 확정
-4. crate 파괴 mutation 확정
-5. 폭발 순간의 authoritative player 위치로 피해 판정
-6. shield 소비 또는 사망 처리
-7. 사망 AI item drop과 respawn 위치 확정
-8. flame lifetime 갱신
-9. 하나의 mutation batch commit
-10. chunk/entity delta publication
+초기 tuning 기준:
 
-폭발 피해를 fuse 1 시점에 예약하지 않는다. 5번 시점에 폭발 칸에 없는 player는
-피해를 받지 않는다.
+- 최고속도 도달: 약 120ms
+- 정지 감속: 약 80~100ms
+- queued turn grace: 2~3 simulation tick
+- corridor turn 허용 범위: 중심선에서 약 0.15 tile
 
-## 8. 폭발 범위
+player-player blocking은 현재 gameplay를 보존한다. 이 동적 충돌은 stale remote state
+때문에 local misprediction을 만들 수 있으므로 correction metric으로 따로 관찰한다.
+측정 없이 non-blocking rule로 바꾸지 않는다.
 
-- bomb 칸을 포함한다.
-- 상하좌우로 range만큼 진행한다.
-- permanent wall 앞에서 중단하고 wall 칸은 flame에 포함하지 않는다.
-- crate 칸은 flame에 포함하고 그 뒤는 진행하지 않는다.
-- 같은 칸은 한 tick에서 한 번만 피해와 crate mutation을 만든다.
-- flame entity가 다음 world beat 전까지 남아 있는 동안 해당 칸으로 이동하면
-  접촉 피해를 받는다. 화면 animation이 아니라 서버 flame 좌표가 판정 기준이다.
-- chain reaction을 지원하면 flame에 닿은 bomb의 같은 tick 폭발을 명시적으로
-  queue에 추가한다. 지원 전에는 이 규칙을 구현한 것처럼 표시하지 않는다.
+## 6. Input Scheduling과 Buffer
 
-## 9. 사망, AI와 아이템
+### Local input
 
-- shield가 있으면 피해 한 번에 shield 1을 소비하고 살아남는다.
-- 사람은 사망 상태가 되고 명시적 respawn command 전까지 움직이지 않는다.
-- AI가 죽으면 사망 칸에 bomb, shield, flame 중 하나의 item을 생성한다.
-- item 종류 결정은 deterministic random source를 사용해 replay 가능한 결과를
-  만든다.
-- AI respawn도 World Owner의 spawn 계약을 사용한다.
-- player가 item 칸으로 이동을 commit할 때 item 획득과 능력치 변경을 같은
-  transaction으로 처리한다.
+key down을 30~50ms timer로 일부러 지연하지 않는다. browser frame에서 input state를
+latch하고 다음 local predicted tick에 적용하므로 추가 지연은 0~33ms다. button
+animation은 같은 frame에 시작할 수 있다.
 
-## 10. AI
+### Target tick
 
-- AI Controller는 World read snapshot으로 다음 intent만 결정한다.
-- AI는 player/entity Map, bomb Map과 tile을 직접 바꾸지 않는다.
-- 이동, 폭탄 수, 충돌, 피해와 item 규칙은 사람과 동일한 command path를 사용한다.
-- 사람이 없을 때 불필요한 pathfinding과 broadcast를 하지 않는다.
-- 최초 Sprint는 현재 nearest-human heuristic을 보존하고 AI 품질 개선은 범위
-  밖으로 둔다.
+client는 clock estimate로 command를 server의 미래 tick에 배치한다.
 
-## 11. Mutation Batch
+```text
+targetTick = estimatedServerTick
+  + ceil(estimatedOneWayDelay / fixedDelta)
+  + jitterSlackTicks
+```
 
-한 command 또는 world tick 결과는 다음 정보를 가진다.
+- 기본 jitter slack: 2 tick
+- 안정적인 연결: 1 tick까지 천천히 축소 가능
+- 큰 jitter: 최대 3 tick까지 확대 가능
+- server는 허용 가능한 과거/미래 window 밖 target tick을 clamp 또는 reject한다.
+- client가 보낸 delta time과 position은 사용하지 않는다.
 
-- changed chunks와 새 revisions
-- created/updated/removed entities
-- player-specific ack/correction
-- world tick/frame metadata
+local player는 즉시 미래 tick까지 predict하고 server는 command를 target tick까지
+queue한다. 따라서 server buffer가 jitter를 흡수하지만 local 조작은 늦지 않는다.
+Unity의 command slack과 같은 목적이며 별도 local key delay가 아니다.
 
-World Owner가 batch 전체를 commit한 뒤에만 Gateway가 publication을 시작한다.
-부분 commit 상태를 socket에 보이지 않는다.
+### Missing 또는 late command
 
-## 12. 장애와 복구
+- movement state change가 아직 없으면 마지막 valid movement state를 짧게 유지한다.
+- late movement command는 과거 world를 rewind하지 않고 다음 가능한 tick부터 적용한다.
+- bomb edge가 late해도 과거 위치에 설치하지 않고 다음 가능한 authoritative tick의
+  placement cell에서 검증한다.
+- late, clamped와 rejected command 수를 metrics로 남긴다.
 
-- malformed input은 연결 전체를 죽이지 않고 reject/ignore policy를 따른다.
-- 처리 중 예외가 난 mutation batch는 canonical state에 일부 적용되지 않아야 한다.
-- timer는 `unref`할 수 있지만 shutdown에서 중지하고 socket과 server를 순서대로
-  닫는다.
-- 과부하 때 tile snapshot을 반복 생성하지 않고 느린 client의 buffered amount를
-  관찰해 연결을 정리할 수 있다.
+## 7. Simulation Step 순서
 
-## 13. 검증 계약
+한 server tick의 순서를 고정한다.
 
-- 이동 성공/벽·상자·폭탄·player 충돌 실패
-- 중복 sequence가 이동을 두 번 적용하지 않음
-- key release가 성공한 이동을 되돌리지 않음
-- bomb가 command 순간 player tile에 설치됨
-- fuse 1 때 범위에 있었지만 폭발 순간 벗어난 player가 생존
-- wall/crate에서 blast가 정확히 중단
-- live flame 칸으로 이동한 player/AI에 피해 적용
-- shield 1회 소비
-- AI 사망 위치 item drop과 동일 command path respawn
-- 파괴된 crate가 이후 tick에도 floor로 유지
-- timer 지연 뒤 tick catch-up 및 중복 폭발 없음
-- mutation batch publication 전 원자 commit
+1. target tick까지 도착한 command를 player별 sequence 순서로 반영
+2. 사람과 AI Movement Core 실행
+3. movement collision과 authoritative position commit
+4. live flame 접촉 damage
+5. 생존 player item collect
+6. bomb action placement 검증과 commit
+7. fuse 만료와 chain candidate 계산
+8. explosion cells와 crate mutation 계산
+9. explosion damage, shield, death와 AI drop/respawn
+10. flame lifetime 갱신
+11. World Owner mutation batch commit
+12. action result, world event와 snapshot publication 후보 생성
+
+같은 tick의 결과는 socket callback 순서가 아니라 `(targetTick, playerId, commandSeq)`의
+안정적인 정렬 규칙으로 고정한다.
+
+## 8. Bomb Authority
+
+- bomb command는 movement와 같은 command sequence domain을 사용하지만 Bomb System이
+  별도로 처리한다.
+- placement cell은 command를 실행하는 tick의 authoritative player 중심에서 shared
+  cell helper로 결정한다.
+- alive, bomb limit, 동일 cell bomb와 tile 가능 여부를 server만 확정한다.
+- 성공 결과는 `bombId`, `cell`, `spawnTick`, `explodeTick`을 가진다.
+- owner가 bomb를 놓은 cell에서 빠져나갈 수 있도록 spawn 당시 겹친 player는 완전히
+  cell을 벗어날 때까지 해당 bomb collision만 통과한다. 이후 재진입은 차단한다.
+- pending bomb는 client visual이며 collision과 fuse를 만들지 않는다.
+
+폭발과 flame damage는 exact server tick 현재 위치로 판정한다. shooter식 rewind와
+과거 위치 damage를 사용하지 않는다.
+
+## 9. Correction을 위한 Server State
+
+local player snapshot은 최소 다음을 포함한다.
+
+```text
+serverTick
+lastProcessedCommandSeq
+px, py, vx, vy
+desiredDirection
+lifeId
+alive
+teleport
+```
+
+server는 매 input packet에 correction을 별도 전송하지 않고 15Hz owner snapshot에
+ACK state를 piggyback한다. bomb처럼 즉시 UI 결과가 필요한 edge action만 별도
+`action_result`를 보낸다.
+
+## 10. 과부하와 보안
+
+- player별 command queue 길이, command rate와 future lead를 제한한다.
+- duplicate/stale sequence는 idempotent하게 폐기하거나 이전 result를 재사용한다.
+- client clock은 target tick 제안에만 사용하고 server가 허용 window를 검증한다.
+- 최대 속도, acceleration, collision, bomb power와 damage는 client 값으로 바꾸지
+  않는다.
+- catch-up backlog, simulation duration, late command와 correction error를 health
+  또는 bounded metrics로 관찰한다.
+
+## 11. 검증 계약
+
+- shared movement fixture가 server/client에서 tick별 같은 fixed-point state 생성
+- acceleration, deceleration, reversal과 corridor turn
+- 음수 좌표, wall/crate/bomb/player sweep collision과 관통 0
+- 200/300ms RTT와 50ms jitter에서 target tick scheduling
+- late/missing/duplicate command와 bounded queue
+- ACK 뒤 pending input replay 결과와 authoritative 결과 일치
+- bomb placement cell, owner exit pass-through와 re-entry block
+- explosion 순간과 live flame 접촉 damage
+- tick catch-up 순서와 event-loop starvation 방지
+- 같은 tick command ordering 결정성

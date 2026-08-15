@@ -3,11 +3,16 @@ import {
   DEFAULT_MAX_BUFFERED_AMOUNT,
   sendWithBackpressure,
 } from "./backpressure-sender.mjs";
-import { serverMessage, validateV2ClientMessage } from "./protocol-v2.mjs";
+import {
+  serverMessage,
+  validateV2ClientMessage,
+} from "./protocol-v2.mjs";
 import {
   createWebSocketSession,
   rememberAcknowledgement,
 } from "./websocket-session.mjs";
+import { v3ServerMessage } from "./protocol-v3.mjs";
+import { createV3SessionFlow } from "./v3-session-flow.mjs";
 import { createWorldPublisher } from "./world-publisher.mjs";
 
 export function createWebSocketGateway({
@@ -22,9 +27,19 @@ export function createWebSocketGateway({
   worldId = "ENDLESS_WORLD_V2",
   preloadRadius = 2,
   maxBufferedAmount = DEFAULT_MAX_BUFFERED_AMOUNT,
+  commandBuffer = null,
+  movementSystem = null,
+  getV3Clock = null,
+  simulationTickRate = 30,
+  snapshotRate = 15,
+  v3LeaseMs = 10_000,
+  v3MaxMessagesPerSecond = 120,
+  readBufferedAmount = (socket) => socket.bufferedAmount,
+  v3RegistryOptions = {},
 }) {
   const wss = new WebSocketServer({ noServer: true });
-  const sessions = new Map();
+  const v2Sessions = new Map();
+  const v3Available = Boolean(commandBuffer && movementSystem && getV3Clock);
   let closed = false;
   const networkMetrics = {
     outboundMessages: 0,
@@ -42,11 +57,29 @@ export function createWebSocketGateway({
     return sendWithBackpressure(session.socket, message, {
       maxBufferedAmount,
       metrics: networkMetrics,
+      readBufferedAmount,
     });
   }
 
   function send(session, type, payload = {}) {
     return sendEnvelope(session, serverMessage(type, payload, clock()));
+  }
+
+  function v3Clock() {
+    const value = getV3Clock?.() ?? { tick: 0 };
+    return { tick: value.tick, serverTimeMs: Date.now() };
+  }
+
+  function sendV3(session, type, payload = {}, serverTick = v3Clock().tick) {
+    const worldClock = clock();
+    return sendEnvelope(
+      session,
+      v3ServerMessage(type, {
+        worldTick: worldClock.tick,
+        nextTickAt: worldClock.nextTickAt,
+        ...payload,
+      }, { tick: serverTick, serverTimeMs: Date.now() }),
+    );
   }
 
   function sendError(session, error, recoverable = true) {
@@ -55,7 +88,7 @@ export function createWebSocketGateway({
 
   const publisher = createWorldPublisher({
     world,
-    sessions,
+    sessions: v2Sessions,
     send,
     sendEnvelope,
     clock,
@@ -86,6 +119,29 @@ export function createWebSocketGateway({
     publisher.publish(options);
     simulation.markPublishedPositions();
   }
+
+  const v3Flow = v3Available
+    ? createV3SessionFlow({
+        world,
+        simulation,
+        commandBuffer,
+        movementSystem,
+        send: sendV3,
+        currentTick: () => v3Clock().tick,
+        publishWorld: publish,
+        worldId,
+        preloadRadius,
+        simulationTickRate,
+        snapshotRate,
+        tickMs,
+        worldEpochMs,
+        bgmDurationMs,
+        bgmSnareOffsetMs,
+        leaseMs: v3LeaseMs,
+        maxMessagesPerSecond: v3MaxMessagesPerSecond,
+        registryOptions: v3RegistryOptions,
+      })
+    : null;
 
   function processSequencedCommand(session, message) {
     const cached = session.acks.get(message.clientSeq);
@@ -173,23 +229,34 @@ export function createWebSocketGateway({
       .split(",")
       .map((value) => value.trim());
     const queryProtocol = url.searchParams.get("protocol");
-    const requestsV2 =
-      queryProtocol === "2" ||
-      (queryProtocol === null && requestedProtocols.includes("boom-v2"));
-    if (!requestsV2) {
+    let selectedProtocol = null;
+    if (queryProtocol === "2") selectedProtocol = 2;
+    else if (queryProtocol === "3" && v3Available) selectedProtocol = 3;
+    else if (queryProtocol === null && requestedProtocols.includes("boom-v3") && v3Available) {
+      selectedProtocol = 3;
+    } else if (queryProtocol === null && requestedProtocols.includes("boom-v2")) {
+      selectedProtocol = 2;
+    }
+    if (selectedProtocol === null) {
       networkMetrics.unsupportedProtocolRejects += 1;
       socket.end("HTTP/1.1 426 Upgrade Required\r\nConnection: close\r\n\r\n");
       return;
     }
+    request.boomProtocol = selectedProtocol;
     wss.handleUpgrade(request, socket, head, (webSocket) => {
       wss.emit("connection", webSocket, request);
     });
   });
 
-  wss.on("connection", (socket) => {
+  wss.on("connection", (socket, request) => {
+    const protocol = request.boomProtocol ?? 2;
+    if (protocol === 3) {
+      v3Flow.attach(socket);
+      return;
+    }
     const player = simulation.addPlayer();
-    const session = createWebSocketSession({ socket, playerId: player.id });
-    sessions.set(player.id, session);
+    const session = createWebSocketSession({ socket, playerId: player.id, protocol });
+    v2Sessions.set(player.id, session);
     send(session, "hello", {
       sessionId: player.id,
       supportedProtocols: [2],
@@ -198,7 +265,7 @@ export function createWebSocketGateway({
 
     socket.on("message", (raw) => handleMessage(session, raw));
     socket.on("close", () => {
-      sessions.delete(player.id);
+      v2Sessions.delete(player.id);
       simulation.removePlayer(player.id);
       if (!closed) publish();
     });
@@ -206,16 +273,28 @@ export function createWebSocketGateway({
 
   return {
     publish,
+    publishV3Snapshots(serverTick = v3Clock().tick) {
+      return v3Flow?.publishSnapshots(serverTick) ?? { chunkSessions: 0, entityMessages: 0 };
+    },
+    publishV3ActionResults(results, serverTick = v3Clock().tick) {
+      return v3Flow?.publishActionResults(results, serverTick) ?? 0;
+    },
+    publishV3WorldEvents(events, serverTick = v3Clock().tick) {
+      return v3Flow?.publishWorldEvents(events, serverTick) ?? 0;
+    },
     close() {
       closed = true;
+      v3Flow?.close();
       for (const client of wss.clients) client.terminate();
       wss.close();
     },
     readMetrics() {
       return {
-        connections: sessions.size,
-        v2: sessions.size,
+        connections: v2Sessions.size + (v3Flow?.readMetrics().v3 ?? 0),
+        v2: v2Sessions.size,
+        ...(v3Flow?.readMetrics() ?? { v3: 0, publishedSnapshots: 0 }),
         ...publisher.readMetrics(),
+        ...(commandBuffer?.readMetrics() ?? {}),
         ...networkMetrics,
       };
     },

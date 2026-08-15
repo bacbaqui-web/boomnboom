@@ -42,6 +42,9 @@ export type WorldSnapshot = {
   nextTickAt: number;
   ackClientSeq: number;
   lastError: string;
+  serverTick: number;
+  v3OwnerSnapshotSeq: number | null;
+  v3EntitySnapshotSeq: number | null;
 };
 
 export type EntitySnapshot = {
@@ -78,6 +81,9 @@ export function createWorldRuntimeState(): WorldRuntimeState {
       nextTickAt: 0,
       ackClientSeq: -1,
       lastError: "",
+      serverTick: 0,
+      v3OwnerSnapshotSeq: null,
+      v3EntitySnapshotSeq: null,
     },
     entitySnapshot: { revision: 0, entities: [], enemies: [] },
   };

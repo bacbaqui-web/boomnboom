@@ -49,9 +49,10 @@ Generator는 새 청크 후보를 계산하지만 registry에 직접 넣지 않�
 
 ### 좌표
 
-- authoritative 위치는 정수 `WorldCoordinate { x, y }`다.
-- 오른쪽은 `x + 1`, 아래는 `y + 1`이다.
-- 음수 좌표를 포함한다.
+- terrain과 bomb cell은 정수 `WorldCoordinate { x, y }`다.
+- player movement state는 fixed-point `MovementPosition { px, py, vx, vy }`다.
+- 기준 단위는 `1 tile = 1024 movement units`이며 오른쪽/아래가 양수다.
+- cell 변환, 음수 좌표와 경계 tie-break는 shared helper 하나가 소유한다.
 - 화면용 local 좌표는 client projection에서만 계산한다.
 
 ### 청크
@@ -145,6 +146,7 @@ WorldChunk
 좌표 조회 성능을 위해 다음 Runtime index를 둘 수 있다.
 
 - cell → blocking entity
+- moving player → overlapping collision cells
 - chunkKey → entity IDs
 - player → subscribed chunk keys
 - chunkKey → subscriber count

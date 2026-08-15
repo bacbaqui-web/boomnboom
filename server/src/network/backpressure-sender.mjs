@@ -5,10 +5,14 @@ export const DEFAULT_MAX_BUFFERED_AMOUNT = 512 * 1024;
 export function sendWithBackpressure(
   socket,
   message,
-  { maxBufferedAmount = DEFAULT_MAX_BUFFERED_AMOUNT, metrics = null } = {},
+  {
+    maxBufferedAmount = DEFAULT_MAX_BUFFERED_AMOUNT,
+    metrics = null,
+    readBufferedAmount = (target) => target.bufferedAmount,
+  } = {},
 ) {
   if (socket.readyState !== WebSocket.OPEN) return false;
-  if (socket.bufferedAmount > maxBufferedAmount) {
+  if (readBufferedAmount(socket) > maxBufferedAmount) {
     if (metrics) metrics.backpressureDisconnects += 1;
     socket.close(1013, "backpressure");
     return false;
