@@ -5,7 +5,7 @@ import { useState } from "react";
 export function JoinOverlay({ onJoin }: { onJoin: (nickname: string) => boolean }) {
   const [nickname, setNickname] = useState("");
   return (
-    <div className="gameOverlay">
+    <div className="gameOverlay joinOverlay">
       <form
         onSubmit={(event) => {
           event.preventDefault();

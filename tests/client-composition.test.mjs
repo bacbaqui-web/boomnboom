@@ -6,6 +6,7 @@ test("client composes the authoritative WebSocket world from focused modules", a
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const socket = await readFile(new URL("../app/game/game-socket.ts", import.meta.url), "utf8");
   const viewport = await readFile(new URL("../app/game/WorldViewport.tsx", import.meta.url), "utf8");
+  const joinOverlay = await readFile(new URL("../app/game/JoinOverlay.tsx", import.meta.url), "utf8");
   const terrain = await readFile(new URL("../app/game/TerrainLayer.tsx", import.meta.url), "utf8");
   const entities = await readFile(new URL("../app/game/EntityLayer.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
@@ -31,6 +32,8 @@ test("client composes the authoritative WebSocket world from focused modules", a
   assert.match(entities, /style=\{cellPosition\((?:flame|entity), tileSize\)\}/);
   assert.match(styles, /\.flame \{[^}]*display: grid;[^}]*place-items: center;/);
   assert.match(page, /WorldViewport/);
+  assert.match(joinOverlay, /gameOverlay joinOverlay/);
+  assert.match(styles, /\.gameOverlay\.joinOverlay\s*\{\s*position:\s*fixed;/);
   assert.match(page, /GameControls/);
   assert.match(page, /game\.joined \? "gameActive"/);
   assert.match(styles, /main\.gameActive \{[^}]*align-items: center;[^}]*justify-content: center;/);

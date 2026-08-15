@@ -1,21 +1,12 @@
 # BOOMnBOOM 최근 작업 보고서
 
-## 0. 최신 Task — 기본 3칸/초와 속도 아이템
+## 0. 최신 Task — 최초 입장창 화면 중앙 정렬
 
-- 새 player와 AI의 V3 기본 최고속도를 초당 3칸으로 낮췄다.
-- AI 사망 드롭 pool을 폭탄·방어막·화력·속도 4종으로 확장했다.
-- 속도 아이템은 server가 획득을 확정하며 `speedLevel`을 1 올린다. 1개당 최고속도가
-  초당 0.5칸씩 누적 증가하고 별도 상한은 두지 않는다.
-- server movement와 local prediction은 같은 fixed-point 설정을 사용한다. 칸 중심에
-  도착했을 때 남는 같은 방향 이동량을 다음 칸으로 넘겨 표시 속도와 실제 평균
-  속도가 어긋나지 않게 했다.
-- V3 owner/entity snapshot과 V2 rollback projection 모두 `speedLevel`을 전달한다.
-- 전환 중 구형 Oracle server가 `speedLevel`을 보내지 않으면 새 client가 기존 속도를
-  유지하므로 client-first 배포에서도 심한 위치 보정이 생기지 않는다.
-- HUD에는 현재 칸/초, 맵 아이템과 범례에는 초록색 `➤ 속도 +0.5`를 표시한다.
-- 검증: client build/test 81개, server test 74개, ESLint, TypeScript와 diff check가
-  통과했다. 실제 WebSocket join→속도 아이템 획득에서 `speedLevel 0→1`, 최고속도
-  `102→119 fixed-unit/tick`, 아이템 제거를 확인했다.
+- 게임 시작 전 닉네임 입장창에 전용 `joinOverlay` 표시 책임을 추가했다.
+- 입장창은 게임 보드 위치와 무관하게 viewport 전체를 기준으로 `position: fixed` 중앙
+  정렬한다.
+- 사망 뒤 재접속창은 기존 `position: absolute`를 유지해 게임판 중앙에 표시된다.
+- 게임 시작 뒤 board, controls와 legend의 중앙 배치는 변경하지 않았다.
 
 ---
 
