@@ -105,6 +105,16 @@ test("life, teleport, and impossible speed snap instead of interpolating", () =>
   }
 });
 
+test("a legacy AI one-cell update is interpolated during server rollout", () => {
+  const buffer = new RemoteSnapshotBuffer();
+  buffer.ingest(snapshot(0, 0, [player("BOT-1", 0, { isAI: true, vx: 0 })]), "LOCAL");
+  buffer.ingest(snapshot(1, 2, [
+    player("BOT-1", 2, { isAI: true, px: 1536, vx: 0 }),
+  ]), "LOCAL");
+
+  assert.deepEqual(buffer.sample("BOT-1", 1, 0), { x: 0.5, y: 0 });
+});
+
 test("remote runtime updates do not notify terrain chunk selectors", () => {
   const store = new ClientWorldStore();
   store.apply(projectV3StoreMessage({

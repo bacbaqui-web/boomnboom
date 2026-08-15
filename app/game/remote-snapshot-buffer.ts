@@ -15,6 +15,7 @@ type TimedRemoteSample = {
   velocity: Position;
   lifeId: number;
   teleport: boolean;
+  isAI: boolean;
 };
 
 function positionOf(sample: V3PlayerSample, unitsPerTile: number): Position {
@@ -103,6 +104,7 @@ export class RemoteSnapshotBuffer {
       velocity: velocityOf(sample, this.#unitsPerTile),
       lifeId: sample.lifeId,
       teleport: sample.teleport,
+      isAI: sample.isAI,
     };
     const index = history.findIndex((candidate) => candidate.timelineTick > timelineTick);
     if (index < 0) history.push(entry);
@@ -158,6 +160,7 @@ export class RemoteSnapshotBuffer {
       next.position.x - previous.position.x,
       next.position.y - previous.position.y,
     );
+    if (next.isAI && distance <= 1.01) return false;
     return distance > this.#maxSpeedTilesPerTick * elapsedTicks + 0.25;
   }
 

@@ -150,6 +150,8 @@ renderServerTime = ClockSync.estimatedServerTime(now)
 - 이후 마지막 안전 위치에서 freeze
 - lifeId 변경 또는 teleport flag는 즉시 snap
 - flag가 없을 때만 `distance > maxSpeed * dt + 0.25 tile`을 fallback으로 사용
+- server-first 전환 중 구형 AI가 보내는 정확한 직교 1칸 update만 예외적으로 보간한다.
+  lifeId/teleport와 1칸 초과 discontinuity는 계속 snap한다.
 
 remote interpolation은 latest arrival에서 target으로 새 easing을 시작하지 않는다.
 

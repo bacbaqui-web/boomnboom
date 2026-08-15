@@ -3,6 +3,8 @@
 ## 0. 최신 Task — 모든 플레이어 연속 이동, 칸 점프와 전투 효과음
 
 - 원격 사람 플레이어는 기존 V3 15Hz absolute snapshot history를 rAF에서 보간한다.
+- Oracle server 교체 전에도 화면이 끊기지 않도록 구형 AI의 정확한 직교 1칸 update는
+  remote snapshot buffer가 보간하며, respawn/teleport는 기존처럼 즉시 snap한다.
 - AI는 500ms마다 의사결정만 하고, 결정된 방향과 폭탄을 사람과 같은 30Hz Command
   Buffer와 Movement/Bomb System에서 처리한다. 구형 한 칸 즉시 이동은 product AI
   경로에서 사용하지 않는다.
