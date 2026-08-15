@@ -85,6 +85,8 @@ Movement Core가 하는 일:
 - old position에서 next position까지 axis-separated sweep collision
 - wall, crate, confirmed bomb와 player collision 처리
 - 목표 칸 도착 시 bounded queued direction change 처리
+- 이동 중 직교 입력이 교차점 중심에서 `0.3125 tile` 이내라면 가까운 중심으로
+  정렬한 뒤 열린 옆칸으로 전환하는 bounded corner assist
 - canonical next movement state 반환
 
 Movement Core가 하지 않는 일:
@@ -98,6 +100,7 @@ Movement Core가 하지 않는 일:
 
 - 최고속도 도달: 약 120ms
 - queued turn grace: 2~3 simulation tick
+- moving corner assist: 교차점 중심에서 최대 `320/1024 tile`, 정지 상태에는 미적용
 - 막힌 인접 칸은 목표로 확정하지 않음
 
 폭탄 설치는 현재 AABB가 가장 많이 겹친 칸이나 반올림한 칸이 아니라

@@ -1,30 +1,22 @@
 # BOOMnBOOM 최근 작업 보고서
 
-## 0. 최신 Task — 목표 칸 기반 중심선 이동
+## 0. 최신 Task — 이동 중 코너 보정
 
-사용자가 설명한 조작감은 자유 이동 뒤 가까운 칸으로 반올림하는 방식이 아니라
-`입력 순간 인접 칸을 목적지로 정하고 그 칸까지 완주하는 이동`이다.
+목표 칸 기반 중심선 이동은 유지하되, 이동 중 교차점 중심을 조금 지나친 직후
+직교 방향을 누르면 이전 교차점에서 자연스럽게 꺾을 수 있도록 bounded corner
+assist를 추가했다.
 
-이번 변경의 제품 계약은 다음과 같다.
+- 현재 진행 방향과 직교하는 입력에만 적용한다.
+- 캐릭터가 실제로 이동 중이고 가까운 칸 중심에서 `320/1024 tile` 이내일 때만
+  중심으로 정렬한 뒤 옆칸을 새 목표로 확정한다.
+- 정지 상태에서는 자동 보정하지 않는다.
+- 옆칸이 wall, crate, bomb 또는 player로 막혔으면 절대 통과하지 않는다.
+- 허용 범위 밖의 입력은 기존처럼 queue해 다음 중심에서 처리한다.
+- shared Movement Core 하나에 구현해 Oracle server authority와 client prediction이
+  같은 결과를 계산한다.
 
-- 오른쪽 입력을 누르면 오른쪽 인접 칸을 즉시 목표로 확정한다.
-- 캐릭터는 현재 칸 중심과 목표 칸 중심을 잇는 한 축의 선 위에서만 움직인다.
-- 이동 중 키를 놓아도 원래 칸으로 돌아가거나 가까운 칸을 다시 고르지 않고 이미
-  확정한 목표 칸 중심까지 이동한다.
-- 방향을 계속 누르면 도착 시 속도를 보존하고 다음 칸을 연속 목표로 잡는다.
-- 도중의 수직·반대 방향 입력은 현재 목표에 도착할 때까지 queue한 뒤 새 목표로 적용한다.
-- wall, crate, bomb, player 또는 다른 player의 예약 목표로 막힌 칸은 확정하지 않는다.
-- 이동 중 bomb은 플레이어의 현재 floor/반올림 칸이 아니라 확정 목표 칸에 설치한다.
-- 목표 칸은 V3 owner/entity snapshot에 포함해 server authority와 client
-  prediction/replay가 같은 결정을 유지한다.
-
-책임 경계는 유지했다. 목표 선택과 중심선 수식은 shared Movement Core, 동적 player
-예약은 server Player Movement System, canonical 목표 저장은 World Owner, bomb 설치 칸
-선택은 Bomb System, pending bomb 위치는 Local Movement Predictor가 각각 담당한다.
-
-현재 상태: 구현과 로컬 검증 완료. production build와 client 68건, server 66건,
-lint, tsc, 전체 MJS syntax와 diff-check가 통과했다. 모든 source/test 파일은 500줄
-미만이다. 아직 commit, push, Oracle/Sites 배포와 실제 브라우저 QA는 하지 않았다.
+검증 계약은 client/server golden 결과 일치, tick wrap queue, 허용 범위 안팎,
+막힌 옆칸과 정지 상태 미적용, World Owner canonical commit이다.
 
 ---
 

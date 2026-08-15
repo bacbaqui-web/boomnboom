@@ -80,6 +80,22 @@ test("movement system completes the committed destination after keyup", () => {
   );
 });
 
+test("movement system commits the same bounded moving corner assist as client prediction", () => {
+  const world = createFlatWorld([[2, -1]]);
+  addJoinedPlayer(world);
+  const system = createPlayerMovementSystem({ world });
+  system.initializePlayer("P1");
+  for (let tick = 1; tick <= 7; tick += 1) {
+    system.step(tick, new Map([["P1", { direction: "right" }]]));
+  }
+  system.step(8, new Map([["P1", { direction: "up" }]]));
+  const player = world.getPlayer("P1");
+  assert.deepEqual(
+    [player.px, player.py, player.vx, player.vy, player.targetCellX, player.targetCellY],
+    [1536, 448, 0, -64, 1, -1],
+  );
+});
+
 test("two players cannot commit the same destination cell", () => {
   const world = createFlatWorld();
   addJoinedPlayer(world, "P1");

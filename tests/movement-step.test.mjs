@@ -105,18 +105,68 @@ test("holding a direction chains the next cell without stopping at its center", 
 });
 
 test("a perpendicular direction queues until the committed cell is reached across tick wrap", () => {
-  let state = stepMovement(
-    initialState(),
-    { tick: 0xffff_fffc, direction: "right" },
+  let state = initialState({
+    px: 1024,
+    vx: 256,
+    desiredDirection: "right",
+    targetCellX: 1,
+    targetCellY: 0,
+  });
+  state = stepMovement(state, { tick: 0xffff_ffff, direction: "up" }, openWorld).state;
+  assert.equal(state.queuedTurn, "up");
+  assert.equal(state.queuedTurnUntilTick, 2);
+  state = stepMovement(state, { tick: 0, direction: "up" }, openWorld).state;
+  assert.deepEqual([state.px, state.py, state.targetCellX, state.targetCellY], [1536, 448, 1, -1]);
+  assert.equal(state.queuedTurn, null);
+});
+
+test("a moving player gets a bounded corner assist near the previous cell center", () => {
+  const sideWallAtNextCenter = {
+    isBlockedCell: (cellX, cellY) => cellX === 2 && cellY === -1,
+  };
+  const state = initialState({
+    px: 1792,
+    vx: 256,
+    desiredDirection: "right",
+    targetCellX: 2,
+    targetCellY: 0,
+  });
+  const result = stepMovement(
+    state,
+    { tick: 8, direction: "up" },
+    sideWallAtNextCenter,
+  ).state;
+
+  assert.deepEqual(
+    [result.px, result.py, result.vx, result.vy, result.targetCellX, result.targetCellY],
+    [1536, 448, 0, -64, 1, -1],
+  );
+});
+
+test("corner assist never crosses a blocked side cell and never activates from rest", () => {
+  const moving = initialState({
+    px: 1792,
+    vx: 256,
+    desiredDirection: "right",
+    targetCellX: 2,
+    targetCellY: 0,
+  });
+  const blockedSide = {
+    isBlockedCell: (cellX, cellY) => cellX === 1 && cellY === -1,
+  };
+  const blocked = stepMovement(moving, { tick: 8, direction: "up" }, blockedSide).state;
+  assert.equal(blocked.py, 512);
+  assert.equal(blocked.targetCellX, 2);
+  assert.equal(blocked.queuedTurn, "up");
+
+  const resting = stepMovement(
+    { ...moving, vx: 0 },
+    { tick: 8, direction: "up" },
     openWorld,
   ).state;
-  state = stepMovement(state, { tick: 0xffff_fffd, direction: "up" }, openWorld).state;
-  assert.equal(state.queuedTurn, "up");
-  for (const tick of [0xffff_fffe, 0xffff_ffff, 0, 1]) {
-    state = stepMovement(state, { tick, direction: "up" }, openWorld).state;
-  }
-  assert.deepEqual([state.px, state.py, state.targetCellX, state.targetCellY], [1536, 512, 1, -1]);
-  assert.equal(state.queuedTurn, null);
+  assert.equal(resting.py, 512);
+  assert.equal(resting.targetCellX, 2);
+  assert.equal(resting.queuedTurn, "up");
 });
 
 test("a held reverse direction runs only after the committed cell is reached", () => {

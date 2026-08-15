@@ -93,6 +93,12 @@ function directionAxis(direction) {
   return null;
 }
 
+function isPerpendicular(left, right) {
+  const leftAxis = directionAxis(left);
+  const rightAxis = directionAxis(right);
+  return leftAxis !== null && rightAxis !== null && leftAxis !== rightAxis;
+}
+
 function moveTowards(value, target, amount) {
   if (value < target) return Math.min(value + amount, target);
   if (value > target) return Math.max(value - amount, target);
@@ -238,6 +244,35 @@ function commitAdjacentTarget(state, direction, collisionReader, config, { prese
   };
 }
 
+function cornerAssistedTarget(state, direction, travelDirection, collisionReader, config) {
+  if (!isPerpendicular(direction, travelDirection)) return null;
+  const travelAxis = directionAxis(travelDirection);
+  const isMoving = travelAxis === "x" ? state.vx !== 0 : state.vy !== 0;
+  if (!isMoving) return null;
+
+  const centerX = cellCenter(state.px, config.unitsPerTile);
+  const centerY = cellCenter(state.py, config.unitsPerTile);
+  const distanceFromCenter = travelAxis === "x"
+    ? Math.abs(state.px - centerX)
+    : Math.abs(state.py - centerY);
+  if (distanceFromCenter > config.turnCenterTolerance) return null;
+
+  const aligned = {
+    ...state,
+    px: centerX,
+    py: centerY,
+    vx: 0,
+    vy: 0,
+    targetCellX: null,
+    targetCellY: null,
+  };
+  const vector = DIRECTION_VECTOR[direction];
+  const cellX = floorDiv(centerX, config.unitsPerTile);
+  const cellY = floorDiv(centerY, config.unitsPerTile);
+  if (collisionReader.isBlockedCell(cellX + vector.x, cellY + vector.y)) return null;
+  return commitAdjacentTarget(aligned, direction, collisionReader, config);
+}
+
 function resolveIntent(state, input, collisionReader, config) {
   const tick = input.tick;
   let next = normalizedState(state);
@@ -252,6 +287,14 @@ function resolveIntent(state, input, collisionReader, config) {
       input.direction !== "neutral" &&
       input.direction !== committedDirection
     ) {
+      const assisted = cornerAssistedTarget(
+        next,
+        input.direction,
+        committedDirection,
+        collisionReader,
+        config,
+      );
+      if (assisted) return assisted;
       next.queuedTurn = input.direction;
       next.queuedTurnUntilTick = addNetTicks(tick, config.turnGraceTicks);
     }
