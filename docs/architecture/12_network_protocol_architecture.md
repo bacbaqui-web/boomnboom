@@ -19,6 +19,18 @@ WebSocket Gateway는 다음만 담당한다.
 Gateway는 tile을 생성하고 충돌, 폭발과 AI 판정을 수행하지 않는다. viewer별 카메라
 원점과 viewport tile matrix도 만들지 않는다.
 
+현재 구현에서는 Gateway 내부 책임을 다음 파일 경계로 분리한다.
+
+- `websocket-gateway.mjs`: upgrade, connection과 client message routing
+- `websocket-session.mjs`: connection별 sequence/ack/subscription Runtime
+- `chunk-interest.mjs`: player 위치에서 interest chunk 계산
+- `entity-projector.mjs`: canonical entity의 network projection과 diff
+- `world-publisher.mjs`: snapshot/delta/heartbeat publication
+- `backpressure-sender.mjs`: socket 전송 제한과 전송량 metric
+
+이 helper들은 World Owner를 mutation하지 않으며 Gateway가 protocol session을
+조립하는 내부 경계다.
+
 ## 3. Version과 envelope
 
 모든 V2 메시지는 다음 공통 필드를 가진다.

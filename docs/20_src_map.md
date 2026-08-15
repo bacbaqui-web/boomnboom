@@ -17,9 +17,10 @@ Browser
       → wss://insight.magamiscom.ing/boom-ws
           → nginx /boom-ws
           → Oracle 127.0.0.1:3300
-          → server/index.mjs
-              → world timer / AI timer / composition
-              → WebSocket Gateway의 V2 session
+          → server/index.mjs → src/main.mjs
+              → Simulation Scheduler의 world/AI timer
+              → WebSocket Gateway의 V2 connection/message routing
+              → World Publisher의 interest/snapshot/delta publication
               → Game Simulation command
               → World Owner mutation/read
               → V2: 25 chunk preload 뒤 chunk/entity/enemy delta
@@ -34,7 +35,7 @@ Browser
 
 ### `app/page.tsx`
 
-- `useGameController` 결과를 화면 component에 전달하는 46줄 composition shell
+- `useGameController` 결과를 화면 component에 전달하는 52줄 composition shell
 - protocol parse, socket, cache, timer, Audio와 rAF 구현을 소유하지 않음
 
 ### `app/game/protocol.ts`, `game-socket.ts`
@@ -44,18 +45,19 @@ Browser
 - ack/correction, chunk gap resync, disconnect 뒤 1.5초 reconnect
 - reconnect world metadata와 initial authoritative revision을 Store에서 재검증
 
-### `app/game/world-store.ts`
+### Client World Store
 
-- world clock/metadata, `chunkKey → revision/tiles/respawns`, entity와 enemy cache
-- stale chunk/entity/ack 폐기와 fromRevision gap result
-- world identity가 다르면 cache 폐기, 같은 world도 reconnect initial snapshot으로 검증
-- global, entity와 chunk-key별 external-store subscription
+- `world-state.ts`: world clock/metadata, chunk/entity cache의 Runtime state shape
+- `world-message-applier.ts`: snapshot/delta/stale/gap/reconnect message 적용
+- `world-selectors.ts`: 진입 가능한 cell과 known chunk revision 조회
+- `world-store.ts`: global/entity/chunk-key external-store subscription façade
 - chunk delta는 해당 chunk listener만 깨우고 movement/tick은 terrain input을 바꾸지 않음
 
 ### Runtime과 Controller
 
 - `movement-prediction.ts`: pending input을 한 칸 앞 visual target으로 제한하고 ack/session에 수렴
-- `camera-runtime.ts`: current visual에서 새 integer target으로 175ms linear retarget, respawn snap
+- `position-interpolator.ts`: camera와 remote player가 공유하는 시간 기반 위치 보간
+- `camera-runtime.ts`: visual world position을 중앙 camera transform으로 투영
 - `input-runtime.ts`, `use-game-input.ts`: keyboard/pointer 145ms hold, stop/bomb와 cleanup
 - `audio-runtime.ts`: BGM Audio, server clock seek/drift와 4단계 volume
 - `use-game-controller.ts`: Store/Socket/Input/Audio와 nickname/respawn UI state 조립
@@ -63,9 +65,12 @@ Browser
 ### Render와 UI
 
 - `TerrainLayer.tsx`: 25청크 fixed DOM, chunk revision selector와 절대좌표 floor pattern
-- `EntityLayer.tsx`: remote player rAF 보간, bomb/item/flame와 enemy arrow
+- `EntityLayer.tsx`: remote player rAF 보간과 bomb/item/flame 렌더링
+- `EnemyPointers.tsx`, `entity-selectors.ts`: 화면 밖 적 방향과 local bomb 조회
 - `WorldViewport.tsx`: 15×11 overflow crop, local player 중앙 anchor와 rAF `translate3d`
-- `GameHud.tsx`, `GameOverlay.tsx`, `GameControls.tsx`: HUD/입장·사망/조작 UI
+- `GameHeader.tsx`, `WorldTickHud.tsx`, `GameLegend.tsx`: 연결·박자·범례 UI
+- `JoinOverlay.tsx`, `DeathOverlay.tsx`: 입장과 사망 후 재접속 UI
+- `GameControls.tsx`, `PlayerStatus.tsx`: 조작 입력과 플레이어 상태 UI
 
 ### `app/globals.css`
 
@@ -83,15 +88,15 @@ Browser
 
 ### `server/index.mjs`
 
-- config와 world/BGM clock 계산
-- World Owner, Simulation, AI Controller와 V2 Gateway 조립
-- 1초 world timer와 500ms AI timer
-- HTTP `/health`, timer publication과 shutdown
-- health에 V2 connection, protocol reject, chunk/entity, network, scheduler와 process
-  memory를 노출
+- `src/main.mjs`의 `startServer()`만 호출하는 process entry
 
-socket session, schema와 interest는 소유하지 않고 게임 규칙과 canonical mutation도
-소유하지 않는다.
+### Server Runtime
+
+- `src/config.mjs`: 환경 변수와 고정 gameplay/runtime 설정 해석
+- `src/world-timeline.mjs`: epoch와 tick 간 순수 wall-clock 변환
+- `src/simulation-scheduler.mjs`: 1초 world timer와 500ms AI timer의 시작·정지
+- `src/health-handler.mjs`: `/health` payload와 tick readiness 계산
+- `src/main.mjs`: World Owner, Simulation, AI, Scheduler, Gateway와 HTTP lifecycle 조립
 
 ### `server/src/simulation/game-simulation.mjs`
 
@@ -136,7 +141,7 @@ socket session, schema와 interest는 소유하지 않고 게임 규칙과 canon
 - player 주변 반경 2청크 materialize와 base-only cold chunk trim
 - 외부에는 Map과 mutable canonical object를 반환하지 않음
 
-### `server/src/world/spawn.mjs`
+### `server/src/world/spawn-finder.mjs`
 
 - 현재 terrain, player와 bomb read snapshot에서 안전한 floor 검색
 - spawn 때문에 crate나 wall을 삭제하지 않음
@@ -151,14 +156,16 @@ socket session, schema와 interest는 소유하지 않고 게임 규칙과 canon
 
 - `?protocol=2` 또는 `boom-v2` subprotocol을 명시한 session만 수용
 - unversioned/Protocol 1 upgrade는 player를 만들기 전에 426으로 거절
-- V2 `hello → world_init → 25 chunk_snapshot → entity_snapshot → ready` 순서
-- clientSeq ack cache, stale/duplicate idempotency와 authoritative correction
-- player 중심 반경 2 interest, 경계 이동 전 snapshot preload와 entity projection
-- session별 chunk baseline에서 `fromRevision → revision` delta/resync
-- entity revision/snapshot/delta와 heartbeat
-- 512KiB bufferedAmount 초과 connection을 1013으로 정리
-- outbound message/byte, subscription과 backpressure disconnect 누적 metric 소유
-- unsupported protocol upgrade reject 누적 metric 소유
+- connection 생성·종료, V2 message routing과 sequenced command 처리
+- unsupported protocol upgrade reject와 network metric 조립
+
+### Network helper
+
+- `websocket-session.mjs`: session/interest/revision/ack Runtime state 생성과 ack 제한
+- `chunk-interest.mjs`: player 중심 반경 2 chunk-key 집합 계산
+- `entity-projector.mjs`: World entity의 network projection, grouping과 delta 계산
+- `world-publisher.mjs`: init/interest/chunk/entity snapshot·delta와 heartbeat publication
+- `backpressure-sender.mjs`: 512KiB 초과 connection 1013 종료와 byte/message metric
 
 ### 현재 지형 흐름
 
@@ -220,7 +227,7 @@ serializer를 제거했다.
 - `package.json`: vinext dev/build/start, lint, build 기반 test
 - `vite.config.ts`: vinext, Sites packaging과 Cloudflare worker 구성
 - `worker/index.ts`: vinext request handler와 image optimization
-- `build/sites-vite-plugin.ts`: hosting metadata만 `dist/.openai`에 복사
+- `build/hosting-metadata-plugin.ts`: hosting metadata만 `dist/.openai`에 복사
 - `.openai/hosting.json`: 기존 Sites `project_id`와 R2 설정만 보존, D1 binding 없음
 - `vite.config.ts`, `worker/index.ts`: D1 없는 Sites worker와 optional R2 구성
 - `next.config.ts`, `postcss.config.mjs`: Next/Tailwind 설정
@@ -235,28 +242,27 @@ serializer를 제거했다.
 - `server/package.json`: `ws` dependency와 Node start/test script
 - `server/boomnboom.service`: `/home/ubuntu/boomnboom-server/index.mjs`, port 3300,
   128MB memory limit
-- `server/insight-widget.nginx`: `/boom-ws` WebSocket proxy와 `/boom-health` health
+- `server/insight-magamiscom-ing.nginx`: 해당 host의 `/boom-ws`와 `/boom-health`
   proxy
 
 `server/package.json`의 test script는 `server/test/*.test.mjs`를 실행한다.
 
 ## 8. 현재 검증
 
-- `tests/rendered-html.test.mjs`: production worker SSR shell과 V2 composition/runtime
-  source contract 2건
-- `tests/world-store.test.mjs`: snapshot/delta/gap/stale, chunk selector와 reconnect 4건
-- `tests/camera-runtime.test.mjs`: linear monotonic/final target와 retarget/teleport 2건
+- `tests/rendered-html.test.mjs`, `client-composition.test.mjs`: SSR shell과 client 조립 계약
+- `tests/world-store.test.mjs`: snapshot/delta/gap/stale, chunk notification과 reconnect
+- `tests/world-selectors.test.mjs`: terrain/entity 기반 client cell 진입 조회
+- `tests/position-interpolator.test.mjs`, `camera-runtime.test.mjs`: 위치 보간과 camera transform
 - `tests/movement-prediction.test.mjs`: 즉시 target, ack, 연속 입력, reject와 session reset 5건
 - `tests/game-socket.test.mjs`: 닫힌 socket 전송 실패 sequence가 prediction에 안 들어가는지 검증
 - `tests/input-runtime.test.mjs`: movement hold/stop/bomb/unmount cleanup 2건
-- `server/test/world-core.test.mjs`: 음수 좌표, 결정성, 청크 경계, materialize once,
-  shared revision과 spawn non-mutation
+- `server/test/coordinates.test.mjs`, `chunk-generator.test.mjs`: 음수 좌표와 결정적 경계 생성
+- `server/test/world-owner.test.mjs`, `spawn-finder.test.mjs`: canonical revision/metric과 spawn non-mutation
 - `server/test/game-simulation.test.mjs`: 이동 cadence/collision/item, 폭탄,
   폭발 순간 damage, shield/death/AI drop·respawn, warning/respawn과 tick catch-up
 - `server/test/bot-controller.test.mjs`: no-human idle, read snapshot intent와 shared
   Simulation command
-- `server/test/protocol-v2.test.mjs`: schema/malformed/version, chunk delta와
-  bufferedAmount backpressure
+- `server/test/protocol-v2.test.mjs`, `backpressure-sender.test.mjs`: protocol과 전송 제한
 - `server/test/websocket-gateway.test.mjs`: 25청크 init 순서, 이동 tiles 0,
   sequence idempotency, shared delta/resync, interest, V2 query/subprotocol과 구형
   upgrade 무누수 거절

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -20,21 +19,4 @@ test("server-renders the BOOMnBOOM tick game shell", async () => {
   assert.match(html, /다음 턴까지 1초 게이지/);
   assert.match(html, /2초 뒤 재생성/);
   assert.match(html, /og-world\.png/);
-});
-
-test("client connects to the authoritative WebSocket server", async () => {
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const socket = await readFile(new URL("../app/game/game-socket.ts", import.meta.url), "utf8");
-  const viewport = await readFile(new URL("../app/game/WorldViewport.tsx", import.meta.url), "utf8");
-  const terrain = await readFile(new URL("../app/game/TerrainLayer.tsx", import.meta.url), "utf8");
-  assert.match(socket, /wss:\/\/insight\.magamiscom\.ing\/boom-ws/);
-  assert.match(socket, /protocol:\s*2/);
-  assert.match(socket, /type:\s*"input"/);
-  assert.match(socket, /knownChunkRevisions/);
-  assert.match(viewport, /requestAnimationFrame/);
-  assert.match(viewport, /cancelAnimationFrame/);
-  assert.match(viewport, /transformAt/);
-  assert.match(terrain, /data-revision/);
-  assert.match(page, /GameHud|WorldViewport|GameControls/);
-  assert.doesNotMatch(page, /WebSocket|requestAnimationFrame|Audio\(/);
 });

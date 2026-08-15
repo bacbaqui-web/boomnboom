@@ -10,6 +10,7 @@
 - 5단계 PASS — Client World Store와 layer/camera 전환
 - 6A PASS — caller 0 레거시 D1/starter 정리와 배포 readiness
 - 6B PASS — production soak, V1 제거, Sites v41와 V2-only Oracle 공개 검증
+- 7단계 PASS — 파일명과 실제 변경 책임 정렬, 동작 보존 구조 정리
 
 ## 기준
 
@@ -91,13 +92,14 @@ viewer마다 주변 타일을 다시 계산해 전체 state로 보내는 구조�
 | world | `server/src/world/coordinates.mjs`: floorDiv, chunk/local 좌표 |
 | world | `server/src/world/chunk-generator.mjs`: deterministic base terrain |
 | world | `server/src/world/world-owner.mjs`: chunk/entity 단일 mutation boundary |
-| world | `server/src/world/spawn.mjs`: 지형을 바꾸지 않는 spawn 검색 |
+| world | `server/src/world/spawn-finder.mjs`: 지형을 바꾸지 않는 spawn 검색 |
 | simulation | `server/src/simulation/game-simulation.mjs`: movement/bomb/tick transaction |
 | simulation | `server/src/simulation/explosion.mjs`: blast와 damage 계산 |
 | AI | `server/src/ai/bot-controller.mjs`: read snapshot → intent |
 | network | `server/src/network/protocol-v1.mjs`: 전환 기간 호환 serializer |
 | network | `server/src/network/protocol-v2.mjs`: schema와 serializers |
-| network | `server/src/network/websocket-gateway.mjs`: session/interest/publication |
+| network | `server/src/network/websocket-gateway.mjs`: connection/message routing |
+| network | `server/src/network/{websocket-session,chunk-interest,entity-projector,world-publisher,backpressure-sender}.mjs` |
 | tests | `server/test/*.test.mjs`: world/simulation/protocol/lifecycle |
 
 ### Client
@@ -107,15 +109,15 @@ viewer마다 주변 타일을 다시 계산해 전체 state로 보내는 구조�
 | page | `app/page.tsx`: composition과 shell만 담당 |
 | protocol | `app/game/protocol.ts`: V2 message type/validation |
 | network | `app/game/game-socket.ts`: connect/reconnect/send/subscription |
-| state | `app/game/world-store.ts`: chunk/entity/revision runtime cache |
+| state | `app/game/world-state.ts`, `world-message-applier.ts`, `world-selectors.ts`, `world-store.ts` |
 | controller | `app/game/use-game-controller.ts`: store/socket/input/audio 조립 |
 | input | `app/game/use-game-input.ts`: keyboard/pointer intent와 cleanup |
-| camera | `app/game/camera-runtime.ts`: target/visual position/rAF |
+| camera | `app/game/position-interpolator.ts`, `camera-runtime.ts`: 보간과 camera projection |
 | audio | `app/game/audio-runtime.ts`: BGM clock sync와 volume |
 | render | `app/game/WorldViewport.tsx`: viewport와 layer 조립 |
 | render | `app/game/TerrainLayer.tsx`: revision 기반 chunk/tile |
 | render | `app/game/EntityLayer.tsx`: player/bomb/item/flame projection |
-| UI | `app/game/GameHud.tsx`, `GameOverlay.tsx`, `GameControls.tsx` |
+| UI | `app/game/GameHeader.tsx`, `WorldTickHud.tsx`, `GameLegend.tsx`, `JoinOverlay.tsx`, `DeathOverlay.tsx`, `GameControls.tsx`, `PlayerStatus.tsx` |
 | style | `app/globals.css` 또는 책임별 CSS: 사용 중인 style만 명확히 유지 |
 | tests | `tests/`: store/protocol/render contract + 기존 SSR |
 
@@ -494,6 +496,40 @@ V2-only source는 GitHub와 Oracle에 배포했다. Oracle의 직전 dual-protoc
 `/home/ubuntu/boomnboom-server.backup-20260815-dual-v1-v2`로 보존했다. 공개 nginx
 경로에서 V2 25청크/init/input ack, unversioned 426, reject metric과 브라우저
 재연결·즉시 이동을 다시 확인했다. 공개 web client는 Sites v41이다.
+
+## 7단계 — File Responsibility Cleanup
+
+### 목적
+
+한 파일의 주된 변경 이유를 하나로 제한하고 파일명만 보고 역할을 예측할 수 있게
+한다. Protocol V2, gameplay, UI 결과와 배포 설정 값은 바꾸지 않는다.
+
+### 변경 Manifest
+
+- server entry에서 config, timeline, scheduler, health와 composition lifecycle 분리
+- Gateway에서 backpressure, session, interest, entity projection과 publication 분리
+- `spawn.mjs`를 실제 역할에 맞는 `spawn-finder.mjs`로 변경
+- client Store에서 state shape, message apply와 selector 분리
+- 공통 위치 보간을 Camera Runtime에서 분리
+- Entity Layer에서 적 방향 표시와 local bomb selector 분리
+- Header/Tick HUD/Legend, Join/Death Overlay와 Player Status를 독립 UI 파일로 분리
+- hosting metadata plugin, nginx virtual-host config와 test 이름을 실제 책임에 맞춤
+- 과거 사용자 파일 `docs/99_recent_task 2.md`는 범위 밖으로 보존
+
+### Preserve 계약
+
+- V2 init/25청크/ready, sequence ack, interest와 chunk/entity delta shape
+- 140ms 이동, 500ms AI, 1초 world tick과 BGM timeline
+- nickname/respawn/폭탄/item/crate warning과 shared World Owner 결과
+- public Sites project ID, Oracle port/service/nginx route와 128MB 제한
+
+### 결과
+
+- 500줄 이상 code file 0건
+- `server/index.mjs`는 `startServer()` 호출만 담당
+- `websocket-gateway.mjs` 522줄에서 223줄, `world-store.ts` 432줄에서 84줄로 축소
+- 새 production module과 test가 담당 대상 이름을 직접 드러냄
+- server 26건과 client unit/contract/SSR 검증에서 기존 제품 계약 유지
 
 ## Sprint 전체 완료 기준
 

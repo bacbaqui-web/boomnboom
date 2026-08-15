@@ -1,7 +1,7 @@
 import vinext from "vinext";
 import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
-import { sites } from "./build/sites-vite-plugin";
+import { hostingMetadataPlugin } from "./build/hosting-metadata-plugin";
 
 const { r2 } = hostingConfig;
 
@@ -37,7 +37,7 @@ export default defineConfig(async () => {
       : undefined,
     plugins: [
       vinext(),
-      sites(),
+      hostingMetadataPlugin(),
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         config: localBindingConfig,

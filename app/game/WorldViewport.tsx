@@ -2,10 +2,12 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CameraRuntime } from "./camera-runtime";
-import { EnemyPointers, EntityLayer, findLocalBomb } from "./EntityLayer";
+import { EnemyPointers } from "./EnemyPointers";
+import { EntityLayer } from "./EntityLayer";
+import { findLocalBomb } from "./entity-selectors";
+import type { Position } from "./position-interpolator";
 import type { Action, PlayerEntity } from "./protocol";
 import { TerrainLayer } from "./TerrainLayer";
-import type { Position } from "./camera-runtime";
 import type { ClientWorldStore, EntitySnapshot, WorldSnapshot } from "./world-store";
 
 const actionIcon: Record<Action, string> = {

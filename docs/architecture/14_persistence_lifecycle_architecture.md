@@ -35,6 +35,10 @@ shutdown signal
 World Owner와 timer를 module import 부작용으로 여러 번 만들지 않는다. main entry가
 한 instance를 조립한다.
 
+현재 `server/index.mjs`는 `startServer()`만 호출하고, `src/main.mjs`가 composition과
+process lifecycle, `simulation-scheduler.mjs`가 timer, `health-handler.mjs`가 readiness
+응답을 담당한다.
+
 ## 4. World lifecycle
 
 - 기본 live world는 Oracle process마다 하나다.

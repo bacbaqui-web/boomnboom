@@ -1,10 +1,14 @@
 "use client";
 
 import { GameControls } from "./game/GameControls";
-import { GameHeader, GameHud, GameLegend } from "./game/GameHud";
-import { DeathOverlay, JoinOverlay } from "./game/GameOverlay";
+import { DeathOverlay } from "./game/DeathOverlay";
+import { GameHeader } from "./game/GameHeader";
+import { GameLegend } from "./game/GameLegend";
+import { JoinOverlay } from "./game/JoinOverlay";
+import { PlayerStatus } from "./game/PlayerStatus";
 import { useGameController } from "./game/use-game-controller";
 import { WorldViewport } from "./game/WorldViewport";
+import { WorldTickHud } from "./game/WorldTickHud";
 
 export default function Home() {
   const game = useGameController();
@@ -32,14 +36,15 @@ export default function Home() {
     <main>
       <GameHeader status={game.snapshot.connection} />
       <section className="gameShell">
-        <GameHud snapshot={game.snapshot} />
+        <WorldTickHud snapshot={game.snapshot} />
         {board}
         <GameControls
-          player={game.localPlayer}
           startMoving={game.startMoving}
           stopMoving={game.stopMoving}
           bomb={game.bomb}
-        />
+        >
+          <PlayerStatus player={game.localPlayer} />
+        </GameControls>
         <GameLegend volumeLevel={game.volumeLevel} cycleVolume={game.cycleVolume} />
       </section>
     </main>

@@ -3,11 +3,11 @@ import { resolve } from "node:path";
 import type { Plugin } from "vite";
 
 // Packages the Sites project metadata after Vite finishes compiling.
-export function sites(): Plugin {
+export function hostingMetadataPlugin(): Plugin {
   let root = process.cwd();
 
   return {
-    name: "sites",
+    name: "sites-hosting-metadata",
     apply: "build",
     configResolved(config) {
       root = config.root;

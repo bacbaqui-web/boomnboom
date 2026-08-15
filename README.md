@@ -39,17 +39,17 @@ PORT=3300 npm start
 
 ```text
 Sites V2 Client
-  → Game Socket / Client World Store
+  → Game Socket / Client World Store façade
   → Oracle nginx /boom-ws
-  → WebSocket Gateway
+  → WebSocket Gateway / World Publisher
   → Game Simulation
   → World Owner
 ```
 
-- `app/game/`: V2 protocol, cache, input/camera/audio Runtime과 render layer
+- `app/game/`: V2 protocol, state/message/store, input/camera/audio Runtime과 render layer
 - `server/src/world/`: 결정적 16×16 청크와 canonical entity owner
 - `server/src/simulation/`: 이동, 폭탄, 폭발, 피해, item과 respawn 규칙
-- `server/src/network/`: 명시적 Protocol V2 snapshot/delta gateway
+- `server/src/network/`: V2 connection/session/projection/snapshot·delta publication
 - `docs/`: 제품 불변식, Architecture, source map과 현재 Sprint
 
 현재 실시간 월드는 Oracle 프로세스 메모리가 authority입니다. 서버 재시작 뒤 base

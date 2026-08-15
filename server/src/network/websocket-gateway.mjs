@@ -1,154 +1,14 @@
-import { WebSocket, WebSocketServer } from "ws";
-import { worldToChunk } from "../world/coordinates.mjs";
+import { WebSocketServer } from "ws";
 import {
-  chunkSnapshotPayload,
-  diffChunkSnapshots,
-  serverMessage,
-  validateV2ClientMessage,
-} from "./protocol-v2.mjs";
-
-const DEFAULT_MAX_BUFFERED_AMOUNT = 512 * 1024;
-
-export function sendWithBackpressure(
-  socket,
-  message,
-  { maxBufferedAmount = DEFAULT_MAX_BUFFERED_AMOUNT, metrics = null } = {},
-) {
-  if (socket.readyState !== WebSocket.OPEN) return false;
-  if (socket.bufferedAmount > maxBufferedAmount) {
-    if (metrics) metrics.backpressureDisconnects += 1;
-    socket.close(1013, "backpressure");
-    return false;
-  }
-  const serialized = typeof message === "string" ? message : JSON.stringify(message);
-  socket.send(serialized);
-  if (metrics) {
-    metrics.outboundMessages += 1;
-    metrics.outboundBytes += Buffer.byteLength(serialized);
-  }
-  return true;
-}
-
-function parseChunkKey(key) {
-  const [chunkX, chunkY] = key.split(",").map(Number);
-  return { chunkX, chunkY };
-}
-
-function interestForPlayer(player, chunkSize, radius) {
-  const center = worldToChunk(player.x, player.y, chunkSize);
-  const keys = new Set();
-  for (let chunkY = center.chunkY - radius; chunkY <= center.chunkY + radius; chunkY += 1) {
-    for (let chunkX = center.chunkX - radius; chunkX <= center.chunkX + radius; chunkX += 1) {
-      keys.add(`${chunkX},${chunkY}`);
-    }
-  }
-  return keys;
-}
-
-function playerEntity(player) {
-  return {
-    kind: "player",
-    id: player.id,
-    x: player.x,
-    y: player.y,
-    isAI: player.isAI,
-    action: player.action,
-    score: player.score,
-    power: player.power,
-    range: player.range,
-    shield: player.shield,
-    nickname: player.nickname,
-    joined: player.joined,
-    alive: player.alive,
-  };
-}
-
-function bombEntity(bomb) {
-  return { kind: "bomb", ...bomb };
-}
-
-function itemEntity(item) {
-  return { kind: "item", id: `${item.x},${item.y}`, ...item };
-}
-
-function flameEntity(flame) {
-  return { kind: "flame", id: `${flame.x},${flame.y}`, ...flame };
-}
-
-function entityKey(entity) {
-  return `${entity.kind}:${entity.id}`;
-}
-
-function entityChunkKey(entity, chunkSize) {
-  return worldToChunk(entity.x, entity.y, chunkSize).chunkKey;
-}
-
-function readEntityMap(world, chunkSize, interest = null, localPlayerId = null) {
-  const entities = [
-    ...world
-      .readPlayers()
-      .filter((player) => player.alive || player.id === localPlayerId)
-      .map(playerEntity),
-    ...world.readBombs().map(bombEntity),
-    ...world.readItems().map(itemEntity),
-    ...world.readFlames().map(flameEntity),
-  ];
-  return new Map(
-    entities
-      .filter(
-        (entity) =>
-          (entity.kind === "player" && entity.id === localPlayerId) ||
-          !interest ||
-          interest.has(entityChunkKey(entity, chunkSize)),
-      )
-      .map((entity) => [entityKey(entity), entity]),
-  );
-}
-
-function entityCollections(entityMap) {
-  const values = [...entityMap.values()];
-  return {
-    players: values.filter((entity) => entity.kind === "player"),
-    bombs: values.filter((entity) => entity.kind === "bomb"),
-    items: values.filter((entity) => entity.kind === "item"),
-    flames: values.filter((entity) => entity.kind === "flame"),
-  };
-}
-
-function enemySummaries(world, localPlayerId) {
-  const localPlayer = world.getPlayer(localPlayerId);
-  if (!localPlayer) return [];
-  return world
-    .readPlayers()
-    .filter((player) => player.id !== localPlayerId && player.alive)
-    .map((player) => ({
-      id: player.id,
-      dx: player.x - localPlayer.x,
-      dy: player.y - localPlayer.y,
-      distance: Math.abs(player.x - localPlayer.x) + Math.abs(player.y - localPlayer.y),
-      nickname: player.nickname,
-      isAI: player.isAI,
-    }));
-}
-
-function diffEntityMaps(before, after) {
-  const created = [];
-  const updated = [];
-  const removed = [];
-  for (const [key, entity] of after) {
-    const previous = before.get(key);
-    if (!previous) created.push(entity);
-    else if (JSON.stringify(previous) !== JSON.stringify(entity)) updated.push(entity);
-  }
-  for (const key of before.keys()) {
-    if (!after.has(key)) removed.push(key);
-  }
-  return { created, updated, removed };
-}
-
-function hasEntityChanges(diff) {
-  return diff.created.length > 0 || diff.updated.length > 0 || diff.removed.length > 0;
-}
+  DEFAULT_MAX_BUFFERED_AMOUNT,
+  sendWithBackpressure,
+} from "./backpressure-sender.mjs";
+import { serverMessage, validateV2ClientMessage } from "./protocol-v2.mjs";
+import {
+  createWebSocketSession,
+  rememberAcknowledgement,
+} from "./websocket-session.mjs";
+import { createWorldPublisher } from "./world-publisher.mjs";
 
 export function createWebSocketGateway({
   server,
@@ -165,9 +25,6 @@ export function createWebSocketGateway({
 }) {
   const wss = new WebSocketServer({ noServer: true });
   const sessions = new Map();
-  const chunkSize = world.metadata.chunkSize;
-  let entityRevision = 1;
-  let publishedEntities = readEntityMap(world, chunkSize);
   let closed = false;
   const networkMetrics = {
     outboundMessages: 0,
@@ -181,94 +38,34 @@ export function createWebSocketGateway({
     return { tick: value.tick, serverTime: Date.now(), nextTickAt: value.nextTickAt };
   }
 
-  function sendV2(session, type, payload = {}) {
-    const current = clock();
-    return sendWithBackpressure(
-      session.socket,
-      serverMessage(type, payload, current),
-      { maxBufferedAmount, metrics: networkMetrics },
-    );
+  function sendEnvelope(session, message) {
+    return sendWithBackpressure(session.socket, message, {
+      maxBufferedAmount,
+      metrics: networkMetrics,
+    });
+  }
+
+  function send(session, type, payload = {}) {
+    return sendEnvelope(session, serverMessage(type, payload, clock()));
   }
 
   function sendError(session, error, recoverable = true) {
-    sendV2(session, "error", { ...error, recoverable });
+    send(session, "error", { ...error, recoverable });
   }
 
-  function refreshEntityRevision() {
-    const current = readEntityMap(world, chunkSize);
-    if (hasEntityChanges(diffEntityMaps(publishedEntities, current))) entityRevision += 1;
-    publishedEntities = current;
-  }
-
-  function readChunk(key) {
-    const { chunkX, chunkY } = parseChunkKey(key);
-    return world.readChunkSnapshot(chunkX, chunkY);
-  }
-
-  function sendChunkSnapshot(session, key, reason = "initial") {
-    const snapshot = readChunk(key);
-    sendV2(session, "chunk_snapshot", {
-      ...chunkSnapshotPayload(snapshot, chunkSize),
-      reason,
-    });
-    session.knownChunkRevisions.set(key, snapshot.revision);
-    session.knownChunkSnapshots.set(key, snapshot);
-    return snapshot;
-  }
-
-  function syncInterest(session, { initial = false } = {}) {
-    const player = world.getPlayer(session.playerId);
-    if (!player) return;
-    const nextInterest = interestForPlayer(player, chunkSize, preloadRadius);
-    const added = [...nextInterest].filter((key) => !session.interest.has(key));
-    const removed = [...session.interest].filter((key) => !nextInterest.has(key));
-    if (!initial && (added.length > 0 || removed.length > 0)) {
-      sendV2(session, "interest_update", { added, removed });
-    }
-    session.interest = nextInterest;
-    for (const key of removed) {
-      session.knownChunkRevisions.delete(key);
-      session.knownChunkSnapshots.delete(key);
-    }
-    for (const key of added) sendChunkSnapshot(session, key, initial ? "initial" : "interest");
-  }
-
-  function initializeV2(session) {
-    refreshEntityRevision();
-    const player = world.getPlayer(session.playerId);
-    sendV2(session, "world_init", {
-      worldId,
-      seed: world.metadata.seed,
-      generatorVersion: world.metadata.generatorVersion,
-      chunkSize,
-      preloadRadius,
-      visibleWidth: 15,
-      visibleHeight: 11,
-      tickMs,
-      worldEpochMs,
-      bgmDurationMs,
-      bgmSnareOffsetMs,
-      nextTickAt: clock().nextTickAt,
-      entityRevision,
-      player: playerEntity(player),
-    });
-    syncInterest(session, { initial: true });
-    const entities = readEntityMap(world, chunkSize, session.interest, session.playerId);
-    sendV2(session, "entity_snapshot", {
-      entityRevision,
-      ...entityCollections(entities),
-      enemies: enemySummaries(world, session.playerId),
-    });
-    session.previousEntities = entities;
-    session.initialized = true;
-  }
-
-  function correctionFor(playerId) {
-    const player = world.getPlayer(playerId);
-    return player
-      ? { x: player.x, y: player.y, action: player.action, alive: player.alive }
-      : null;
-  }
+  const publisher = createWorldPublisher({
+    world,
+    sessions,
+    send,
+    sendEnvelope,
+    clock,
+    worldId,
+    preloadRadius,
+    tickMs,
+    worldEpochMs,
+    bgmDurationMs,
+    bgmSnareOffsetMs,
+  });
 
   function sendAck(session, clientSeq, result, duplicate = false) {
     const payload = {
@@ -277,94 +74,23 @@ export function createWebSocketGateway({
       changed: Boolean(result.changed),
       reason: result.reason ?? null,
       duplicate,
-      entityRevision,
-      correction: correctionFor(session.playerId),
+      entityRevision: publisher.entityRevision,
+      correction: publisher.correctionFor(session.playerId),
     };
-    sendV2(session, "input_ack", payload);
-    if (!duplicate) {
-      session.acks.set(clientSeq, payload);
-      if (session.acks.size > 32) session.acks.delete(session.acks.keys().next().value);
-    }
+    send(session, "input_ack", payload);
+    if (!duplicate) rememberAcknowledgement(session, clientSeq, payload);
   }
 
-  function publishChunkDeltas() {
-    const subscribedKeys = new Set();
-    for (const session of sessions.values()) {
-      if (!session.ready) continue;
-      for (const key of session.interest) subscribedKeys.add(key);
-    }
-    for (const key of subscribedKeys) {
-      const current = readChunk(key);
-      const messagesByRevision = new Map();
-      for (const session of sessions.values()) {
-        if (!session.ready || !session.interest.has(key)) continue;
-        const previous = session.knownChunkSnapshots.get(key);
-        if (!previous || session.knownChunkRevisions.get(key) !== previous.revision) {
-          sendChunkSnapshot(session, key, "server_resync");
-          continue;
-        }
-        if (previous.revision === current.revision) continue;
-        let message = messagesByRevision.get(previous.revision);
-        if (!message) {
-          message = serverMessage(
-            "chunk_delta",
-            diffChunkSnapshots(previous, current),
-            clock(),
-          );
-          messagesByRevision.set(previous.revision, message);
-        }
-        if (
-          sendWithBackpressure(session.socket, message, {
-            maxBufferedAmount,
-            metrics: networkMetrics,
-          })
-        ) {
-          session.knownChunkRevisions.set(key, current.revision);
-          session.knownChunkSnapshots.set(key, current);
-        }
-      }
-    }
-  }
-
-  function publishEntityDeltas() {
-    for (const session of sessions.values()) {
-      if (!session.ready) continue;
-      const entities = readEntityMap(world, chunkSize, session.interest, session.playerId);
-      const diff = diffEntityMaps(session.previousEntities, entities);
-      if (hasEntityChanges(diff)) {
-        sendV2(session, "entity_delta", { entityRevision, ...diff });
-        session.previousEntities = entities;
-      }
-      sendV2(session, "enemy_summary", {
-        entityRevision,
-        enemies: enemySummaries(world, session.playerId),
-      });
-    }
-  }
-
-  function publish({ refreshEntities = true, heartbeat = false } = {}) {
+  function publish(options) {
     if (closed) return;
-    if (refreshEntities) refreshEntityRevision();
-
-    for (const session of sessions.values()) {
-      if (session.ready) syncInterest(session);
-    }
-    publishChunkDeltas();
-    publishEntityDeltas();
-    if (heartbeat) {
-      for (const session of sessions.values()) {
-        if (session.ready) {
-          sendV2(session, "world_heartbeat", { nextTickAt: clock().nextTickAt, entityRevision });
-        }
-      }
-    }
+    publisher.publish(options);
     simulation.markPublishedPositions();
   }
 
   function processSequencedCommand(session, message) {
     const cached = session.acks.get(message.clientSeq);
     if (cached) {
-      sendV2(session, "input_ack", { ...cached, duplicate: true });
+      send(session, "input_ack", { ...cached, duplicate: true });
       return;
     }
     if (message.clientSeq <= session.lastClientSeq) {
@@ -383,18 +109,19 @@ export function createWebSocketGateway({
             session.playerId,
             message.action === "stop" ? "wait" : message.action,
           );
-    refreshEntityRevision();
+    publisher.refreshEntityRevision();
     sendAck(session, message.clientSeq, result);
     if (result.publish) publish({ refreshEntities: false });
   }
 
-  function handleV2Message(session, raw) {
+  function handleMessage(session, raw) {
     const parsed = validateV2ClientMessage(raw.toString());
     if (!parsed.ok) {
       sendError(session, parsed.error, parsed.error.code !== "unsupported_protocol");
       return;
     }
     const message = parsed.value;
+
     if (message.type === "join") {
       if (session.initialized) {
         sendError(session, { code: "already_joined", message: "이미 참가했습니다." });
@@ -405,29 +132,17 @@ export function createWebSocketGateway({
         sendError(session, { code: "join_rejected", message: "참가할 수 없습니다." });
         return;
       }
-      initializeV2(session);
+      publisher.initializeSession(session);
       publish({ refreshEntities: false });
       return;
     }
+
     if (!session.initialized) {
       sendError(session, { code: "join_required", message: "먼저 월드에 참가해주세요." });
       return;
     }
     if (message.type === "ready") {
-      for (const key of session.interest) {
-        const actual = readChunk(key);
-        const known = message.knownChunkRevisions[key];
-        if (known !== undefined && known !== actual.revision) {
-          sendChunkSnapshot(session, key, "ready_resync");
-        }
-      }
-      session.ready = true;
-      session.previousEntities = readEntityMap(
-        world,
-        chunkSize,
-        session.interest,
-        session.playerId,
-      );
+      publisher.markSessionReady(session, message.knownChunkRevisions);
       return;
     }
     if (message.type === "input" || message.type === "respawn") {
@@ -443,11 +158,11 @@ export function createWebSocketGateway({
         sendError(session, { code: "outside_interest", message: "구독하지 않은 청크입니다." });
         return;
       }
-      sendChunkSnapshot(session, message.chunkKey, "client_resync");
+      publisher.sendChunkSnapshot(session, message.chunkKey, "client_resync");
       return;
     }
     if (message.type === "ping") {
-      sendV2(session, "pong", { clientTime: message.clientTime });
+      send(session, "pong", { clientTime: message.clientTime });
     }
   }
 
@@ -466,33 +181,22 @@ export function createWebSocketGateway({
       socket.end("HTTP/1.1 426 Upgrade Required\r\nConnection: close\r\n\r\n");
       return;
     }
-    wss.handleUpgrade(request, socket, head, (webSocket) =>
-      wss.emit("connection", webSocket, request),
-    );
+    wss.handleUpgrade(request, socket, head, (webSocket) => {
+      wss.emit("connection", webSocket, request);
+    });
   });
 
   wss.on("connection", (socket) => {
     const player = simulation.addPlayer();
-    const session = {
-      socket,
-      playerId: player.id,
-      initialized: false,
-      ready: false,
-      interest: new Set(),
-      knownChunkRevisions: new Map(),
-      knownChunkSnapshots: new Map(),
-      previousEntities: new Map(),
-      lastClientSeq: -1,
-      acks: new Map(),
-    };
+    const session = createWebSocketSession({ socket, playerId: player.id });
     sessions.set(player.id, session);
-    sendV2(session, "hello", {
+    send(session, "hello", {
       sessionId: player.id,
       supportedProtocols: [2],
       tickMs,
     });
 
-    socket.on("message", (raw) => handleV2Message(session, raw));
+    socket.on("message", (raw) => handleMessage(session, raw));
     socket.on("close", () => {
       sessions.delete(player.id);
       simulation.removePlayer(player.id);
@@ -511,10 +215,7 @@ export function createWebSocketGateway({
       return {
         connections: sessions.size,
         v2: sessions.size,
-        entityRevision,
-        chunkSubscriptions: [...sessions.values()]
-          .filter((session) => session.ready)
-          .reduce((total, session) => total + session.interest.size, 0),
+        ...publisher.readMetrics(),
         ...networkMetrics,
       };
     },

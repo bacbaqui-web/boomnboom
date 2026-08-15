@@ -1,33 +1,3 @@
-import type { ConnectionStatus } from "./protocol";
-import type { WorldSnapshot } from "./world-store";
-
-export function GameHeader({ status }: { status: ConnectionStatus }) {
-  return (
-    <header>
-      <div className="brand">
-        <span className="logoBomb">●</span>
-        <div><b>BOOM <i>n</i> BOOM</b><small>부드럽게 움직이는 공유 월드 폭탄 대전</small></div>
-      </div>
-      <div className={`connection ${status}`}>
-        <span /> {status === "online" ? "서버 연결됨" : status === "connecting" ? "연결 중" : "재연결 중"}
-      </div>
-    </header>
-  );
-}
-
-export function GameHud({ snapshot }: { snapshot: WorldSnapshot }) {
-  return (
-    <div className="tickHud">
-      <div><small>LIVE WORLD</small><strong>접속 즉시 같은 맵에 스폰</strong></div>
-      <div
-        key={`meter-${snapshot.worldTick}`}
-        className="tickMeter"
-        aria-label="다음 턴까지 1초 게이지"
-      />
-    </div>
-  );
-}
-
 export function GameLegend({
   volumeLevel,
   cycleVolume,

@@ -1,5 +1,5 @@
 import type { MoveAction } from "./protocol.ts";
-import type { Position } from "./camera-runtime.ts";
+import type { Position } from "./position-interpolator.ts";
 
 const movement: Record<MoveAction, Position> = {
   up: { x: 0, y: -1 },

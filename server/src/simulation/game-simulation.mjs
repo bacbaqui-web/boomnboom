@@ -1,4 +1,4 @@
-import { findSpawn } from "../world/spawn.mjs";
+import { findSpawn } from "../world/spawn-finder.mjs";
 import { uniqueBlastCells } from "./explosion.mjs";
 
 const DIRECTIONS = {

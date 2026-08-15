@@ -38,6 +38,10 @@ Store는 server message를 적용하는 command만 공개한다. React component
 직접 바꾸지 않는다. 같은 world ID가 아니거나 revision이 맞지 않는 delta는
 적용하지 않는다.
 
+현재 구현은 `world-state.ts`가 Runtime shape, `world-message-applier.ts`가 message
+적용, `world-selectors.ts`가 read projection, `world-store.ts`가 subscription façade를
+담당한다. Store façade 밖에서 이 state를 canonical 원본으로 취급하지 않는다.
+
 ## 4. Preload와 viewport
 
 - 초기 화면을 열기 전에 visible 범위를 덮는 chunk snapshot을 확보한다.
@@ -66,6 +70,8 @@ refactor에 추가하지 않는다.
 - player, AI, bomb, item과 flame은 절대 world coordinate로 배치한다.
 - server snapshot은 authoritative target이고 화면용 visual position은 별도다.
 - entity update가 오면 이전 visual position에서 새 target까지 보간한다.
+- camera와 remote player가 공유하는 순수 보간은 `position-interpolator.ts`에 두고,
+  camera transform은 `camera-runtime.ts`만 담당한다.
 - bomb는 player보다 높은 명시적 layer에 표시한다.
 - offscreen enemy pointer는 viewport projection이며 server entity를 바꾸지 않는다.
 

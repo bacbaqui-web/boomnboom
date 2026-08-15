@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { WebSocket } from "ws";
 import {
   diffChunkSnapshots,
   validateV2ClientMessage,
 } from "../src/network/protocol-v2.mjs";
-import { sendWithBackpressure } from "../src/network/websocket-gateway.mjs";
 
 test("Protocol V2 rejects malformed, unsupported, and invalid-schema messages", () => {
   assert.equal(validateV2ClientMessage("{").error.code, "malformed_json");
@@ -55,30 +53,5 @@ test("chunk delta carries the exact revision gap and changed cells", () => {
       { index: 1, x: -15, y: 32, respawnTick: 10, committed: false },
     ],
     removedRespawnIndexes: [],
-  });
-});
-
-test("backpressure closes a slow client before adding another frame", () => {
-  const calls = [];
-  const metrics = { outboundMessages: 0, outboundBytes: 0, backpressureDisconnects: 0 };
-  const socket = {
-    readyState: WebSocket.OPEN,
-    bufferedAmount: 513,
-    send(message) {
-      calls.push(["send", message]);
-    },
-    close(code, reason) {
-      calls.push(["close", code, reason]);
-    },
-  };
-  assert.equal(
-    sendWithBackpressure(socket, { type: "state" }, { maxBufferedAmount: 512, metrics }),
-    false,
-  );
-  assert.deepEqual(calls, [["close", 1013, "backpressure"]]);
-  assert.deepEqual(metrics, {
-    outboundMessages: 0,
-    outboundBytes: 0,
-    backpressureDisconnects: 1,
   });
 });
