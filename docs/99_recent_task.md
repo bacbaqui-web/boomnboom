@@ -1,18 +1,23 @@
 # BOOMnBOOM 최근 작업 보고서
 
-## 0. 최신 Task — 상단 HUD 제거와 V3 적 방향 화살표 복구
+## 0. 최신 Task — 게임 시작 뒤 화면 중앙 정렬과 렉 구조 확인
 
-게임판보다 위에 있던 장식과 상태 HUD를 제거하고, Protocol V3 전환 뒤 비어 있던
-AI 방향 표시를 현재 player snapshot에서 다시 계산하도록 고쳤다.
+닉네임을 입력해 게임을 시작한 뒤 전체 게임 panel이 브라우저 viewport의 가로·세로
+중앙에 오도록 정렬했다. 접속 전에는 기존 상단 배치를 유지하고, 낮은 화면에서
+panel이 viewport보다 커질 때는 위쪽이 잘리지 않도록 상단 정렬로 안전하게 전환한다.
 
-- BOOMnBOOM 제목·설명과 서버 연결 상태 header를 제거했다.
-- 1초마다 채워지던 원형 tick meter와 짙은 파란 HUD 영역을 제거했다.
-- 게임 shell의 위쪽 여백을 없애 화면 최상단에서 바로 게임판이 시작된다.
-- V2 `enemy_summary`는 먼 적 정보로 보존하고 V3의 전체 player snapshot은 client에서
-  화면용 `dx`, `dy`, 거리로 투영한다.
-- AI 또는 다른 player가 화면 안에 들어오면 기존처럼 화살표를 숨기고, 화면 밖에
-  있을 때만 가장자리에 방향과 거리를 표시한다.
-- 서버 simulation, 월드 좌표와 네트워크 protocol은 변경하지 않았다.
+현재 이동 경로도 다시 확인했다.
+
+- keyboard 입력은 V3 Input Sampler가 즉시 local command로 만든다.
+- local predictor와 Oracle server는 같은 fixed movement를 초당 30 tick 실행한다.
+- local 화면은 다음 안전한 1 tick까지 rAF 보간하고, remote player는 15Hz server
+  snapshot history를 60/120Hz 화면에서 보간한다.
+- 가속은 64 fixed unit씩 증가해 4 tick, 약 133ms 뒤 최고속도에 도달한다.
+- 지형은 반경 2의 25개 16×16 chunk, 최대 6,400개 tile DOM을 미리 유지한다.
+
+따라서 남은 체감 렉은 왕복 통신을 기다려 생기는 입력 지연보다는 30Hz target 갱신의
+timer 흔들림, 133ms 가속감과 큰 terrain DOM layer의 frame 비용을 먼저 측정해야 한다.
+이번 Task에서는 원인을 섞지 않기 위해 movement 수치와 rendering 구조를 변경하지 않았다.
 
 ---
 

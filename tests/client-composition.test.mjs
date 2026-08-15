@@ -28,6 +28,8 @@ test("client composes the authoritative WebSocket world from focused modules", a
   assert.match(styles, /\.flame \{[^}]*display: grid;[^}]*place-items: center;/);
   assert.match(page, /WorldViewport/);
   assert.match(page, /GameControls/);
+  assert.match(page, /game\.joined \? "gameActive"/);
+  assert.match(styles, /main\.gameActive \{[^}]*align-items: center;[^}]*justify-content: center;/);
   assert.doesNotMatch(page, /GameHeader|WorldTickHud/);
   assert.match(viewport, /selectEnemySummaries/);
   assert.doesNotMatch(`${page}\n${viewport}\n${entities}\n${styles}`, /queuedAction|actionCue/);

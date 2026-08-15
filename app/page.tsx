@@ -34,7 +34,7 @@ export default function Home() {
   );
 
   return (
-    <main>
+    <main className={game.joined ? "gameActive" : undefined}>
       <section className="gameShell">
         {board}
         <GameControls

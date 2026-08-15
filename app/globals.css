@@ -17,6 +17,14 @@ body {
 }
 button { color: inherit; cursor: pointer; font: inherit; }
 main { min-height: 100vh; }
+main.gameActive {
+  min-height: 100svh;
+  padding: 12px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+main.gameActive .gameShell { margin: auto; }
 
 .gameShell {
   width: min(96vw, 920px);
@@ -209,4 +217,8 @@ main { min-height: 100vh; }
   .legend { gap: 7px; flex-wrap: wrap; }
   .legend span:nth-child(4) { display: none; }
   .volumeButton { margin-left: auto; }
+}
+
+@media (max-height: 820px) {
+  main.gameActive { align-items: flex-start; }
 }
