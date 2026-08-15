@@ -11,6 +11,21 @@ export const PLAYER_JUMP_KEYFRAMES: Keyframe[] = [
   { offset: 1, transform: "translateY(0px) scale(1.05, 0.9)" },
 ];
 
+export function playerCell(position: { x: number; y: number }) {
+  return {
+    x: Math.floor(position.x + 0.5),
+    y: Math.floor(position.y + 0.5),
+  };
+}
+
+export function crossedAdjacentCell(
+  previous: { x: number; y: number } | null,
+  current: { x: number; y: number },
+) {
+  if (!previous) return false;
+  return Math.abs(current.x - previous.x) + Math.abs(current.y - previous.y) === 1;
+}
+
 export function playPlayerJump(element: HTMLElement, previous?: Animation | null) {
   previous?.cancel();
   return element.animate(PLAYER_JUMP_KEYFRAMES, {

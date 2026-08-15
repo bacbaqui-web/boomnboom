@@ -5,6 +5,8 @@ import {
   PLAYER_JUMP_DURATION_MS,
   PLAYER_JUMP_HEIGHT_PX,
   PLAYER_JUMP_KEYFRAMES,
+  crossedAdjacentCell,
+  playerCell,
 } from "../app/game/player-animation.ts";
 
 test("player motion keeps the requested floor-anchored squash and jump poses", async () => {
@@ -21,4 +23,12 @@ test("player motion keeps the requested floor-anchored squash and jump poses", a
     { offset: 0.8, transform: "translateY(0px) scale(1.05, 0.9)" },
     { offset: 1, transform: "translateY(0px) scale(1.05, 0.9)" },
   ]);
+});
+
+test("continuous movement triggers a jump only when an adjacent tile boundary is crossed", () => {
+  assert.deepEqual(playerCell({ x: 3.49, y: -1.5 }), { x: 3, y: -1 });
+  assert.deepEqual(playerCell({ x: 3.5, y: -1.51 }), { x: 4, y: -2 });
+  assert.equal(crossedAdjacentCell({ x: 3, y: 2 }, { x: 4, y: 2 }), true);
+  assert.equal(crossedAdjacentCell({ x: 3, y: 2 }, { x: 5, y: 2 }), false);
+  assert.equal(crossedAdjacentCell(null, { x: 4, y: 2 }), false);
 });

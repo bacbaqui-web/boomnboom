@@ -1,19 +1,18 @@
 # BOOMnBOOM 최근 작업 보고서
 
-## 0. 최신 Task — PC frame 기반 local 표시와 terrain render 축소
+## 0. 최신 Task — 모든 플레이어 연속 이동, 칸 점프와 전투 효과음
 
-내 PC가 서버 응답을 기다리지 않고 더 일정하게 local movement를 표시하도록 client
-Runtime의 scheduling과 terrain DOM 범위를 정리했다.
-
-- keyboard/pointer input은 기존처럼 즉시 command와 local prediction에 반영한다.
-- 30Hz prediction 진입 확인을 `setInterval`에서 browser `requestAnimationFrame`으로
-  옮겨 background timer 흔들림을 화면 target 갱신에 더하지 않는다.
-- 실제 movement step은 server와 같은 30Hz shared core를 유지하고, tick 사이는 기존
-  preview interpolation이 monitor의 60/120Hz frame을 채운다.
-- Store는 preload된 25개 chunk와 revision을 그대로 보존한다.
-- TerrainLayer는 local player 중심 3×3, 최대 9개 chunk만 DOM으로 만들어 tile element를
-  6,400개에서 최대 2,304개로 줄였다.
-- 서버 authority, collision, bomb cell, chunk cache와 network packet은 변경하지 않았다.
+- 원격 사람 플레이어는 기존 V3 15Hz absolute snapshot history를 rAF에서 보간한다.
+- AI는 500ms마다 의사결정만 하고, 결정된 방향과 폭탄을 사람과 같은 30Hz Command
+  Buffer와 Movement/Bomb System에서 처리한다. 구형 한 칸 즉시 이동은 product AI
+  경로에서 사용하지 않는다.
+- local, AI와 다른 사람은 보간된 위치가 인접 칸 경계를 통과할 때 175ms 동안 바닥
+  기준 `scale(1.05, 0.9) → translateY(-10px) scale(0.9, 1.05) → 착지`를 재생한다.
+- 이동할 때마다 두 음으로 된 짧은 `뽁뽁` 효과음을 재생하되, 여러 적의 소리가
+  겹치지 않도록 local player 이동에만 적용한다.
+- 폭발음은 pending 폭탄이 아니라 server가 확정한 V3 explosion event를 처음 적용할
+  때만 재생한다. 만료·중복 event는 소리를 내지 않는다.
+- BGM과 효과음은 기존 4단계 음량/음소거 상태를 함께 따른다.
 
 ---
 

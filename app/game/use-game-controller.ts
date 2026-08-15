@@ -150,10 +150,13 @@ export function useGameController() {
   }, [refreshExplosionFlames, refreshPendingBombs, store]);
 
   const handleV3WorldEvent = useCallback((event: V3WorldEvent) => {
-    explosionEventPresenterRef.current.ingest(
+    const accepted = explosionEventPresenterRef.current.ingest(
       event,
       clockSyncRef.current.estimatedServerTickFloat(Date.now()),
     );
+    if (accepted && event.eventType === "explosion") {
+      audioRef.current?.playExplosion();
+    }
     refreshExplosionFlames();
   }, [refreshExplosionFlames]);
 
@@ -388,6 +391,9 @@ export function useGameController() {
     const level = audioRef.current?.cycle(snapshot.metadata, snapshot) ?? 1;
     setVolumeLevel(level);
   }, [snapshot]);
+  const playLocalStep = useCallback(() => {
+    audioRef.current?.playMove();
+  }, []);
 
   return {
     store,
@@ -406,6 +412,7 @@ export function useGameController() {
     enterWorld,
     respawn,
     cycleVolume,
+    playLocalStep,
     ...input,
   };
 }

@@ -5,7 +5,7 @@ import { CameraRuntime } from "./camera-runtime";
 import { EnemyPointers } from "./EnemyPointers";
 import { EntityLayer } from "./EntityLayer";
 import { findLocalBomb, selectEnemySummaries } from "./entity-selectors";
-import { playPlayerJump } from "./player-animation";
+import { crossedAdjacentCell, playerCell, playPlayerJump } from "./player-animation";
 import { PlayerAvatar } from "./PlayerAvatar";
 import type { Position } from "./position-interpolator";
 import type { PlayerEntity } from "./protocol";
@@ -25,6 +25,7 @@ export function WorldViewport({
   remotePositionSource,
   pendingBombs,
   explosionFlames,
+  onLocalStep,
   children,
 }: {
   store: ClientWorldStore;
@@ -36,12 +37,15 @@ export function WorldViewport({
   remotePositionSource: RemotePositionSource | null;
   pendingBombs: readonly PendingBombVisual[];
   explosionFlames: readonly ExplosionFlameVisual[];
+  onLocalStep?: () => void;
   children?: React.ReactNode;
 }) {
   const boardRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const localAvatarRef = useRef<HTMLSpanElement | null>(null);
   const localJumpRef = useRef<Animation | null>(null);
+  const localVisualCellRef = useRef<{ x: number; y: number } | null>(null);
+  const lastLocalJumpAtRef = useRef(Number.NEGATIVE_INFINITY);
   const cameraRef = useRef(new CameraRuntime(175));
   const previousPlayerRef = useRef<{ x: number; y: number; alive: boolean } | null>(null);
   const [tileSize, setTileSize] = useState(0);
@@ -84,23 +88,43 @@ export function WorldViewport({
 
   useEffect(() => {
     let frame = 0;
+    localVisualCellRef.current = null;
     const paint = (now: number) => {
       const board = boardRef.current;
       const root = rootRef.current;
       if (board && root && tileSize > 0) {
-        root.style.transform = localPositionSource
-          ? CameraRuntime.transformFor(
-              localPositionSource.sample(now),
+        if (localPositionSource) {
+          const visual = localPositionSource.sample(now);
+          const cell = playerCell(visual);
+          if (
+            localPlayer?.alive &&
+            crossedAdjacentCell(localVisualCellRef.current, cell) &&
+            now - lastLocalJumpAtRef.current >= 90
+          ) {
+            if (localAvatarRef.current) {
+              localJumpRef.current = playPlayerJump(
+                localAvatarRef.current,
+                localJumpRef.current,
+              );
+            }
+            lastLocalJumpAtRef.current = now;
+            onLocalStep?.();
+          }
+          localVisualCellRef.current = cell;
+          root.style.transform = CameraRuntime.transformFor(
+              visual,
               board.clientWidth,
               board.clientHeight,
               tileSize,
-            )
-          : cameraRef.current.transformAt(
+            );
+        } else {
+          root.style.transform = cameraRef.current.transformAt(
               now,
               board.clientWidth,
               board.clientHeight,
               tileSize,
             );
+        }
       }
       frame = requestAnimationFrame(paint);
     };
@@ -109,7 +133,7 @@ export function WorldViewport({
       cancelAnimationFrame(frame);
       localJumpRef.current?.cancel();
     };
-  }, [localPositionSource, tileSize]);
+  }, [localPlayer?.alive, localPositionSource, onLocalStep, tileSize]);
 
   const localBomb = localPositionSource
     ? undefined

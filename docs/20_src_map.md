@@ -93,11 +93,14 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
   revision selector와 절대좌표 floor pattern 유지
 - `EntityLayer.tsx`: remote player rAF 보간과 world 좌표의 bomb/item/flame 렌더링
 - V3 remote player는 snapshot buffer를, V2 remote player는 기존 latest-target 보간을 사용
+- `player-animation.ts`: 바닥 기준 idle/jump pose와 인접 칸 경계 판정; local, AI,
+  다른 플레이어가 같은 렌더 전용 점프를 사용
 - `PlayerAvatar.tsx`: player body, nickname, shield와 local action cue 렌더링
 - `EnemyPointers.tsx`, `entity-selectors.ts`: V2 summary 또는 V3 player snapshot에서
   화면 밖 적 방향을 투영하고 local bomb 조회
 - `WorldViewport.tsx`: 15×11 overflow crop, local player 중앙 anchor와 rAF `translate3d`;
-  V3 bomb은 player 중심에 고정하지 않고 월드 좌표에 남김
+  V3 bomb은 player 중심에 고정하지 않고 월드 좌표에 남기며 local 칸 경계 이동음을 요청
+- `audio-runtime.ts`: BGM 동기화·음량과 local 이동/서버 확정 폭발 합성 효과음
 - `GameLegend.tsx`: 아이템 범례와 BGM 음량 UI
 - `JoinOverlay.tsx`, `DeathOverlay.tsx`: 입장과 사망 후 재접속 UI
 - `GameControls.tsx`, `PlayerStatus.tsx`: 조작 입력과 플레이어 상태 UI
@@ -163,6 +166,12 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - player/bomb/terrain read snapshot에서 nearest-human intent 결정
 - 사람이 없으면 intent 배열 0건으로 즉시 종료
 - canonical state를 변경하지 않고 Simulation과 같은 action 문자열만 반환
+
+### `server/src/ai/bot-command-driver.mjs`
+
+- 500ms AI intent를 다음 30Hz fixed tick의 공용 input/action command로 변환
+- AI도 사람과 같은 acceleration, collision, bomb authority 경로를 사용하도록 연결
+- World Owner를 직접 변경하지 않고 Command Buffer만 호출
 
 ### `server/src/world/coordinates.mjs`
 

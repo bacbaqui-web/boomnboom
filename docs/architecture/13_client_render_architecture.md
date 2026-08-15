@@ -187,9 +187,13 @@ pending(commandSeq, predictedCell)
 - local player는 viewport 중앙 anchor를 유지하고 camera가 predicted movement를 따라간다.
 - camera transform과 player body squash/jump transform을 다른 DOM layer가 소유한다.
 - body animation은 movement state를 변경하지 않는다.
-- V3 continuous movement 전환 뒤 기존 매 tile jump가 조작을 방해하면 별도 visual
-  tuning Task에서 stride/bob animation으로 교체한다. Network Sprint에서 art를
-  동시에 재설계하지 않는다.
+- local, AI와 다른 사람은 각자의 rAF 보간 위치가 다음 인접 칸 경계를 넘을 때만
+  같은 바닥 기준 175ms jump/squash를 한 번 재생한다. 첫 sample, teleport와 두 칸
+  이상 discontinuity는 jump를 만들지 않는다.
+- 이동 효과음은 local player의 화면상 칸 경계 통과에만 재생한다. 원격 6 AI의
+  발소리를 모두 합성하지 않아 전투음을 가리지 않는다.
+- 폭발 효과음은 server가 확정한 V3 explosion event를 만료 전에 처음 적용했을 때만
+  재생한다. prediction, pending bomb와 단순 flame snapshot은 소리를 만들지 않는다.
 
 ## 12. Clock Sync
 

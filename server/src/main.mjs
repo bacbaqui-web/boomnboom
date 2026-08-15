@@ -1,4 +1,5 @@
 import http from "node:http";
+import { createBotCommandDriver } from "./ai/bot-command-driver.mjs";
 import { createBotController } from "./ai/bot-controller.mjs";
 import { loadServerConfig } from "./config.mjs";
 import { createHealthHandler } from "./health-handler.mjs";
@@ -29,12 +30,22 @@ export function startServer({ environment = process.env, logger = console.log } 
     bombFuseTicks: 3,
   });
   const botController = createBotController({ world });
+  const botPlayers = [];
   for (let index = 0; index < config.botCount; index += 1) {
-    simulation.addPlayer({ isAI: true });
+    botPlayers.push(simulation.addPlayer({ isAI: true }));
   }
 
   const commandBuffer = createPlayerCommandBuffer();
   const movementSystem = createPlayerMovementSystem({ world });
+  let fixedStepLoop = null;
+  const botCommandDriver = createBotCommandDriver({
+    commandBuffer,
+    currentTick: () => fixedStepLoop?.readClock().tick ?? 0,
+  });
+  for (const player of botPlayers) {
+    botCommandDriver.registerPlayer(player.id);
+    movementSystem.initializePlayer(player.id, { resetToCell: true });
+  }
   const bombSystem = createBombSystem({
     world,
     tickRate: config.simulationTickRate,
@@ -69,14 +80,7 @@ export function startServer({ environment = process.env, logger = console.log } 
     if (handleHealth(request, response)) return;
     response.writeHead(404).end();
   });
-  const scheduler = createSimulationScheduler({
-    simulation,
-    botController,
-    timeline,
-    aiIntervalMs: config.aiIntervalMs,
-    publish: (options) => gateway?.publish(options),
-  });
-  const fixedStepLoop = createFixedStepLoop({
+  fixedStepLoop = createFixedStepLoop({
     tickRate: config.simulationTickRate,
     maxCatchUpSteps: config.maxCatchUpSteps,
     onStep(serverTick) {
@@ -110,6 +114,14 @@ export function startServer({ environment = process.env, logger = console.log } 
         gateway?.publishV3Snapshots(serverTick);
       }
     },
+  });
+  const scheduler = createSimulationScheduler({
+    simulation,
+    botController,
+    timeline,
+    aiIntervalMs: config.aiIntervalMs,
+    publish: (options) => gateway?.publish(options),
+    applyBotIntents: botCommandDriver.apply,
   });
 
   gateway = createWebSocketGateway({
@@ -173,6 +185,7 @@ export function startServer({ environment = process.env, logger = console.log } 
     bombSystem,
     explosionSystem,
     respawnSystem,
+    botCommandDriver,
     shutdown,
   };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
-import { playPlayerJump } from "./player-animation";
+import { crossedAdjacentCell, playerCell, playPlayerJump } from "./player-animation";
 import { PlayerAvatar } from "./PlayerAvatar";
 import type { PendingBombVisual } from "./pending-bomb-presenter";
 import type { ExplosionFlameVisual } from "./explosion-event-presenter";
@@ -24,6 +24,8 @@ function AnimatedPlayer({
   const jumpRef = useRef<Animation | null>(null);
   const motionRef = useRef(new PositionInterpolator(135));
   const previousRef = useRef({ x: player.x, y: player.y });
+  const visualCellRef = useRef<{ x: number; y: number } | null>(null);
+  const lastJumpAtRef = useRef(Number.NEGATIVE_INFINITY);
 
   useLayoutEffect(() => {
     if (remotePositionSource) return;
@@ -43,6 +45,18 @@ function AnimatedPlayer({
     let frame = 0;
     const paint = (now: number) => {
       const visual = remotePositionSource?.sample(player.id, now) ?? motionRef.current.sample(now);
+      if (remotePositionSource && visual) {
+        const cell = playerCell(visual);
+        if (
+          crossedAdjacentCell(visualCellRef.current, cell) &&
+          now - lastJumpAtRef.current >= 90 &&
+          avatarRef.current
+        ) {
+          jumpRef.current = playPlayerJump(avatarRef.current, jumpRef.current);
+          lastJumpAtRef.current = now;
+        }
+        visualCellRef.current = cell;
+      }
       if (elementRef.current) {
         elementRef.current.style.transform = `translate3d(${(visual.x + 0.14) * tileSize}px, ${(visual.y + 0.14) * tileSize}px, 0)`;
       }

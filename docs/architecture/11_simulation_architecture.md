@@ -36,6 +36,9 @@ generic command framework, ECS, event bus와 전체 world rollback은 만들지 
 - snapshot publication은 기본 15Hz로 두 simulation tick마다 실행한다.
 - AI decision은 더 낮은 cadence로 만들 수 있지만 결과는 사람과 같은 input state와
   action command로 fixed step에 들어온다.
+- 현재 AI는 500ms마다 방향 또는 폭탄 intent만 다시 고르고, Bot Command Driver가
+  이를 다음 fixed tick의 공용 Command Buffer에 넣는다. 따라서 결정 주기는 낮아도
+  실제 위치는 사람과 동일한 30Hz 가속 이동으로 연속 갱신된다.
 
 ### Catch-up
 

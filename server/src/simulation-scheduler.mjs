@@ -4,6 +4,7 @@ export function createSimulationScheduler({
   timeline,
   aiIntervalMs,
   publish,
+  applyBotIntents = null,
 }) {
   let nextTickAt = timeline.at().nextTickAt;
   let lastTickDurationMs = 0;
@@ -36,8 +37,13 @@ export function createSimulationScheduler({
       if (tickTimer || aiTimer) return;
       scheduleTick();
       aiTimer = setInterval(() => {
+        const intents = botController.decideAll();
+        if (applyBotIntents) {
+          applyBotIntents(intents);
+          return;
+        }
         let changed = false;
-        for (const intent of botController.decideAll()) {
+        for (const intent of intents) {
           const result = simulation.applyAction(intent.botId, intent.action);
           changed = result.changed || changed;
         }
