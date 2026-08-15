@@ -1,4 +1,4 @@
-# Player Squash and Jump Animation 완료 보고
+# Player Animation과 Production 배포 완료 보고
 
 ## 최근 Task
 
@@ -38,4 +38,16 @@
 
 ## Git과 배포
 
-이번 Task에서는 commit, push, Oracle 배포와 Sites 배포를 수행하지 않았다.
+- 제품 변경 commit: `f30ba3999d0795456af689accd82badf23b3b143`
+- GitHub `main` push 완료
+- Oracle server backup: `/home/ubuntu/boomnboom-server.backup-20260815-pre-f30ba39`
+- Oracle server 재배포와 service restart 완료
+- Sites version 42 production 배포 완료
+- 공개 URL: `https://bubble-boom-arcade.bacbaqui2.chatgpt.site`
+
+## 배포 후 검증
+
+- 공개 페이지 HTTP 200과 새 정적 asset 응답 확인
+- 공개 `/boom-health` 정상, V2 protocol과 bot 6명 확인
+- 공개 WebSocket 2-client가 각각 25개 initial chunk, entity snapshot과 pong 수신
+- 두 client 모두 V2 message만 수신
