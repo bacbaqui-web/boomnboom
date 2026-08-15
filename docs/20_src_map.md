@@ -93,10 +93,11 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `EntityLayer.tsx`: remote player rAF 보간과 world 좌표의 bomb/item/flame 렌더링
 - V3 remote player는 snapshot buffer를, V2 remote player는 기존 latest-target 보간을 사용
 - `PlayerAvatar.tsx`: player body, nickname, shield와 local action cue 렌더링
-- `EnemyPointers.tsx`, `entity-selectors.ts`: 화면 밖 적 방향과 local bomb 조회
+- `EnemyPointers.tsx`, `entity-selectors.ts`: V2 summary 또는 V3 player snapshot에서
+  화면 밖 적 방향을 투영하고 local bomb 조회
 - `WorldViewport.tsx`: 15×11 overflow crop, local player 중앙 anchor와 rAF `translate3d`;
   V3 bomb은 player 중심에 고정하지 않고 월드 좌표에 남김
-- `GameHeader.tsx`, `WorldTickHud.tsx`, `GameLegend.tsx`: 연결·박자·범례 UI
+- `GameLegend.tsx`: 아이템 범례와 BGM 음량 UI
 - `JoinOverlay.tsx`, `DeathOverlay.tsx`: 입장과 사망 후 재접속 UI
 - `GameControls.tsx`, `PlayerStatus.tsx`: 조작 입력과 플레이어 상태 UI
 

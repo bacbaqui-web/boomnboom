@@ -1,16 +1,18 @@
 # BOOMnBOOM 최근 작업 보고서
 
-## 0. 최신 Task — 30Hz 판정과 고주사율 화면 이동 분리
+## 0. 최신 Task — 상단 HUD 제거와 V3 적 방향 화살표 복구
 
-서버 권한과 client prediction은 기존 30Hz fixed tick을 유지하면서, 로컬 캐릭터가
-60Hz/120Hz 화면에서 같은 좌표를 여러 frame 반복해 뚝뚝 끊겨 보이는 문제를 고쳤다.
+게임판보다 위에 있던 장식과 상태 HUD를 제거하고, Protocol V3 전환 뒤 비어 있던
+AI 방향 표시를 현재 player snapshot에서 다시 계산하도록 고쳤다.
 
-- Local Predictor가 현재 state를 바꾸지 않고 다음 1 tick의 안전한 위치를 계산한다.
-- 화면은 현재 predicted 위치부터 preview 위치까지 33.33ms 동안 rAF로 보간한다.
-- preview도 shared Movement Core와 같은 collision reader를 사용해 벽을 가로지르지 않는다.
-- authoritative restore와 pending replay가 실제 위치를 바꾼 경우에만 render 기준을
-  다시 잡고 기존 Correction Smoother로 짧게 수렴한다.
-- 서버 tick, command sequence, 폭탄 설치 칸과 canonical player 위치는 변경하지 않았다.
+- BOOMnBOOM 제목·설명과 서버 연결 상태 header를 제거했다.
+- 1초마다 채워지던 원형 tick meter와 짙은 파란 HUD 영역을 제거했다.
+- 게임 shell의 위쪽 여백을 없애 화면 최상단에서 바로 게임판이 시작된다.
+- V2 `enemy_summary`는 먼 적 정보로 보존하고 V3의 전체 player snapshot은 client에서
+  화면용 `dx`, `dy`, 거리로 투영한다.
+- AI 또는 다른 player가 화면 안에 들어오면 기존처럼 화살표를 숨기고, 화면 밖에
+  있을 때만 가장자리에 방향과 거리를 표시한다.
+- 서버 simulation, 월드 좌표와 네트워크 protocol은 변경하지 않았다.
 
 ---
 

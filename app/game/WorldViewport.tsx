@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CameraRuntime } from "./camera-runtime";
 import { EnemyPointers } from "./EnemyPointers";
 import { EntityLayer } from "./EntityLayer";
-import { findLocalBomb } from "./entity-selectors";
+import { findLocalBomb, selectEnemySummaries } from "./entity-selectors";
 import { playPlayerJump } from "./player-animation";
 import { PlayerAvatar } from "./PlayerAvatar";
 import type { Position } from "./position-interpolator";
@@ -114,6 +114,11 @@ export function WorldViewport({
   const localBomb = localPositionSource
     ? undefined
     : findLocalBomb(entitySnapshot.entities, localPlayer);
+  const enemies = selectEnemySummaries(
+    entitySnapshot.entities,
+    localPlayer,
+    entitySnapshot.enemies,
+  );
   return (
     <div
       ref={boardRef}
@@ -157,7 +162,7 @@ export function WorldViewport({
         </span>
       ) : null}
       <EnemyPointers
-        enemies={entitySnapshot.enemies}
+        enemies={enemies}
         visibleWidth={visibleWidth}
         visibleHeight={visibleHeight}
       />

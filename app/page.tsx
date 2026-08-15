@@ -2,13 +2,11 @@
 
 import { GameControls } from "./game/GameControls";
 import { DeathOverlay } from "./game/DeathOverlay";
-import { GameHeader } from "./game/GameHeader";
 import { GameLegend } from "./game/GameLegend";
 import { JoinOverlay } from "./game/JoinOverlay";
 import { PlayerStatus } from "./game/PlayerStatus";
 import { useGameController } from "./game/use-game-controller";
 import { WorldViewport } from "./game/WorldViewport";
-import { WorldTickHud } from "./game/WorldTickHud";
 
 export default function Home() {
   const game = useGameController();
@@ -37,9 +35,7 @@ export default function Home() {
 
   return (
     <main>
-      <GameHeader status={game.snapshot.connection} />
       <section className="gameShell">
-        <WorldTickHud snapshot={game.snapshot} />
         {board}
         <GameControls
           startMoving={game.startMoving}
