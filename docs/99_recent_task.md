@@ -30,4 +30,7 @@
 - server 전체 회귀 101건 PASS
 - root production build/client 92건, ESLint와 TypeScript PASS
 - source/test 500줄 미만, Node syntax와 `git diff --check` PASS
-- commit/push와 Sites/Oracle 배포는 진행 중
+- GitHub `main` 구현 commit `2e79cea` push 완료
+- Sites version 65와 Oracle server/shared 배포 완료
+- Oracle staging server 101건, 공개 V3·V2 input ACK, health `ok`, fixed backlog 0 확인
+- 기존 Oracle server/shared 복구본 보존, Edge에서 `?render=65` 최신 게임 열기 완료

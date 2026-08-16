@@ -4,7 +4,7 @@
 
 - 구현: PASS
 - 로컬 자동 검증: PASS
-- commit/push, Sites와 Oracle 배포: 대기
+- commit/push, Sites와 Oracle 배포: PASS
 
 ## 목표
 
@@ -68,3 +68,14 @@
 - source/test 전부 500줄 미만, `git diff --check` PASS
 - server WebSocket 의존성의 iCloud placeholder를 `npm ci`로 다시 설치한 뒤 실제
   V2/V3 gateway 통합 테스트까지 통과
+
+## 배포 결과
+
+- GitHub `main` 구현 commit `2e79cea` push
+- Sites version 65 production publish, 공개 page HTTP 200
+- Oracle staging에서 root golden fixture까지 포함해 server 101건과 syntax PASS
+- Oracle 기존 `server/shared`를
+  `/home/ubuntu/deploy-backups/boomnboom-20260816-050145-before-2e79cea`에 보존
+- `boomnboom` service active, 공개 V3 join/input ACK와 V2 25청크/input ACK PASS
+- 공개 health `ok`, Protocol `[2,3]`, fixed backlog 0, 확인 시 RSS 약 80MB
+- Edge에서 cache-busting `?render=65` 주소로 최신 공개 게임을 열어둠
