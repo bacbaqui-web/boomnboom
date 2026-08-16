@@ -32,6 +32,8 @@ test("client composes the authoritative WebSocket world from focused modules", a
   assert.match(terrain, /tile === "floor"\) return null/);
   assert.doesNotMatch(terrain, /gridTemplateColumns/);
   assert.match(styles, /\.tile\.crate_warning/);
+  assert.match(styles, /\.tile\.crate_warning::after \{[^}]*width: 82%;[^}]*height: 82%;[^}]*border: 3px dashed/s);
+  assert.match(styles, /\.tile\.crate_warning \{[^}]*background: transparent;/s);
   assert.doesNotMatch(entities, /requestAnimationFrame/);
   assert.match(entities, /isWithinRenderBounds/);
   assert.match(entities, /staticPosition\(entity, 0, tileSize\)/);

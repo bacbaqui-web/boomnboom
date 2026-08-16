@@ -117,7 +117,8 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 
 - 전체 게임 shell, board, fixed chunk, entity, overlay와 control 스타일
 - player 위치 anchor와 바닥 기준 idle squash body 스타일
-- wall/crate box-shadow 0, chunk 단위 floor 교차 pattern과 3초 전 crate warning
+- wall/crate box-shadow 0, chunk 단위 floor 교차 pattern과 상자 크기의 연한 점선
+  3초 전 crate warning
 - player 위치 이동은 Runtime rAF, body jump/squash는 독립 animation으로 사용
 
 ### `app/layout.tsx`

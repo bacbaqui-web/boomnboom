@@ -1,25 +1,21 @@
 # BOOMnBOOM 최근 작업 보고서
 
-## 최근 Task — AI 드롭 아이템 10초 만료
+## 최근 Task — 상자 복구 예고 디자인
 
-### 확인
+### 요청
 
-- 운영 item 생성 경로는 V3와 V2 rollback의 AI 사망 처리뿐이다.
-- 아이템이 여기저기 남은 원인은 추가 생성기가 아니라 만료 규칙 부재였다.
+노란 장판을 더 연하게 하고 실제 상자와 같은 크기의 점선 자리 표시로 바꾼다.
 
 ### 변경
 
-- V3 AI drop에 생성 tick과 10초 뒤 만료 tick을 기록한다.
-- V2 rollback drop도 다음 fixed step에서 같은 10초 수명을 받는다.
-- Item Lifecycle System이 만료 tick에 미획득 item을 World Owner에서 제거한다.
-- 사람 사망은 item을 만들지 않고, 먼저 획득한 item은 만료 처리로 되살아나지 않는다.
+- 타일 전체 색칠을 제거해 원래 바닥이 보이게 한다.
+- 상자와 동일한 82% 크기의 중앙 실루엣을 사용한다.
+- 매우 연한 노란 배경과 반투명 점선 테두리로 곧 상자가 생길 자리를 표현한다.
 
 ### 현재 상태
 
-- server 전체 regression 106건 PASS
-- root production build/client 92건, ESLint와 TypeScript PASS
-- source/test 500줄 미만, syntax와 `git diff --check` PASS
-- GitHub `main` 구현 commit `35f73a2` push 완료
-- Sites version 66와 Oracle server/shared 배포 완료
-- Oracle staging server 106건, 공개 V3·V2 input ACK, health `ok`, fixed backlog 0 확인
-- 기존 Oracle server/shared 복구본 보존
+- 구현과 로컬 검증 완료
+- root production build와 client test 92/92 PASS
+- server regression 106/106 PASS
+- ESLint, TypeScript와 `git diff --check` PASS
+- GitHub push와 Sites production 배포 대기
