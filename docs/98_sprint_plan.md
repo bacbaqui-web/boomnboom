@@ -4,7 +4,7 @@
 
 - 구현: PASS
 - 로컬 검증: PASS
-- commit/push·Sites/Oracle 배포: 대기
+- commit/push·Sites/Oracle 배포: PASS
 
 ## 목표
 
@@ -45,3 +45,13 @@ client UI를 바꾸지 않으므로 Sites와 Oracle을 독립적으로 복구할
 - root production build/client 92건, ESLint와 TypeScript PASS
 - server regression 106건과 전체 `.mjs` syntax PASS
 - source/test 전부 500줄 미만, `git diff --check` PASS
+
+## 배포 결과
+
+- GitHub `main` 구현 commit `35f73a2` push
+- Sites version 66 production publish, 공개 page HTTP 200
+- Oracle staging에서 server 106건과 syntax PASS
+- 기존 `server/shared`를
+  `/home/ubuntu/deploy-backups/boomnboom-20260816-051417-before-35f73a2`에 보존
+- 공개 V3 25청크/join/input ACK와 V2 25청크/input ACK PASS
+- service active, health `ok`, Protocol `[2,3]`, fixed backlog 0, RSS 약 78MB

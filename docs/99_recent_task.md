@@ -19,4 +19,7 @@
 - server 전체 regression 106건 PASS
 - root production build/client 92건, ESLint와 TypeScript PASS
 - source/test 500줄 미만, syntax와 `git diff --check` PASS
-- commit/push와 Sites/Oracle 배포는 진행 중
+- GitHub `main` 구현 commit `35f73a2` push 완료
+- Sites version 66와 Oracle server/shared 배포 완료
+- Oracle staging server 106건, 공개 V3·V2 input ACK, health `ok`, fixed backlog 0 확인
+- 기존 Oracle server/shared 복구본 보존
