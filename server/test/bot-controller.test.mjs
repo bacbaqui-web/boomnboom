@@ -69,3 +69,33 @@ test("nearest-human heuristic preserves the current preferred direction", () => 
   });
   assert.equal(intent, "right");
 });
+
+test("six bots keep bounded tactical search metrics", () => {
+  const world = floorWorld();
+  world.addPlayer(player("P1", 0, 0, false));
+  for (let index = 1; index <= 6; index += 1) {
+    world.addPlayer(player(`BOT-${index}`, index + 3, index, true));
+  }
+  const controller = createBotController({ world, currentTick: () => 100 });
+
+  assert.equal(controller.decideAll().length, 6);
+  const metrics = controller.readMetrics();
+  assert.equal(metrics.lastBots, 6);
+  assert.ok(metrics.lastSearches <= 24);
+  assert.ok(metrics.maxSearchesPerDecision <= 4);
+});
+
+test("AI keeps its human target during the profile lock window", () => {
+  const world = floorWorld();
+  world.addPlayer(player("BOT-3", 0, 0, true));
+  world.addPlayer(player("P1", 5, 0, false));
+  world.addPlayer(player("P2", 0, 8, false));
+  let tick = 100;
+  const controller = createBotController({ world, currentTick: () => tick });
+
+  assert.equal(controller.decide("BOT-3"), "right");
+  world.updatePlayer("P2", { x: 0, y: 3, prevX: 0, prevY: 3 });
+  tick += 1;
+
+  assert.equal(controller.decide("BOT-3"), "right");
+});

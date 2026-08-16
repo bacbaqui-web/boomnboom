@@ -167,11 +167,20 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - blast가 닿은 armed bomb를 같은 tick에 모두 찾는 순수 chain resolution
 - World Owner와 entity를 mutation하지 않음
 
-### `server/src/ai/bot-controller.mjs`
+### AI tactical runtime
 
-- player/bomb/terrain read snapshot에서 nearest-human intent 결정
-- 사람이 없으면 intent 배열 0건으로 즉시 종료
-- canonical state를 변경하지 않고 Simulation과 같은 action 문자열만 반환
+- `server/src/ai/bot-controller.mjs`: snapshot/danger map 공유, bot별 목표 고정·막힘·
+  cooldown Runtime memory와 bounded aggregate metric 조립
+- `server/src/ai/bot-danger-map.mjs`: bomb fuse/chain과 live flame을 cell별 위험 tick
+  구간으로 예측하는 read-only 시간 지도
+- `server/src/ai/bot-pathfinder.mjs`: 탐색 거리와 방문 수가 제한된 결정적 BFS
+- `server/src/ai/bot-personality.mjs`: rookie/balanced/hunter의 탐색 예산·공격성·
+  결정적 안전 실수 tuning
+- `server/src/ai/bot-tactics.mjs`: 생존, 아이템, 탈출 가능한 폭탄, 추적, 상자 접근과
+  배회 우선순위를 한 decision으로 계산
+
+AI module은 World Owner를 mutation하지 않고 사람과 같은 방향/폭탄 intent만 반환한다.
+사람이 없으면 snapshot 뒤 즉시 종료하며 path search를 실행하지 않는다.
 
 ### `server/src/ai/bot-command-driver.mjs`
 
@@ -354,8 +363,12 @@ serializer를 제거했다.
   폭발 순간·live flame 접촉 damage, shield/death/AI drop·respawn, 사람 respawn 능력치 초기화, 영구 crate
   파괴와 tick catch-up
 - `server/test/player-respawn-system.test.mjs`: respawn lifeId/teleport와 command sequence 초기화
-- `server/test/bot-controller.test.mjs`: no-human idle, read snapshot intent와 shared
-  Simulation command
+- `server/test/bot-controller.test.mjs`: no-human idle, shared command, 6-bot bounded
+  search metric과 target lock
+- `server/test/bot-danger-map.test.mjs`: fuse/chain/flame 시간 위험과 wall 차단
+- `server/test/bot-pathfinder.test.mjs`: 우회 경로, 최대 거리와 방문 수 제한
+- `server/test/bot-personality.test.mjs`: profile 순환과 결정적 실수 빈도
+- `server/test/bot-tactics.test.mjs`: 생존/아이템/공격 우선순위와 폭탄 탈출 보장
 - `server/test/protocol-v2.test.mjs`, `backpressure-sender.test.mjs`: protocol과 전송 제한
 - `server/test/websocket-gateway.test.mjs`: 25청크 init 순서, 이동 tiles 0,
   sequence idempotency, shared delta/resync, interest, V2 query/subprotocol과 구형
@@ -369,7 +382,7 @@ serializer를 제거했다.
 | 단일 World Owner | 16×16 chunk/entity registry 구현 완료 |
 | materialized shared chunk | absolute-coordinate generator와 revision 구현 완료 |
 | chunk revision/snapshot/delta | V2 server/client delta/resync 구현, viewer tile matrix 제거 |
-| server simulation boundary | gameplay/tick은 Simulation, AI는 read-only Controller로 분리 완료 |
+| server simulation boundary | gameplay/tick은 Simulation, AI는 bounded read-only tactical modules로 분리 완료 |
 | Protocol V3 prediction/authority | 기본 V3와 V2 rollback client 공개 배포 완료 |
 | client chunk/entity store | revision 검증 external Store 구현 완료 |
 | terrain/entity/camera layer | fixed chunk / entity / rAF camera로 분리 완료 |

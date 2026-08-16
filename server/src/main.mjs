@@ -29,7 +29,11 @@ export function startServer({ environment = process.env, logger = console.log } 
     moveIntervalMs: config.moveIntervalMs,
     bombFuseTicks: 3,
   });
-  const botController = createBotController({ world });
+  let fixedStepLoop = null;
+  const botController = createBotController({
+    world,
+    currentTick: () => fixedStepLoop?.readClock().tick ?? 0,
+  });
   const botPlayers = [];
   for (let index = 0; index < config.botCount; index += 1) {
     botPlayers.push(simulation.addPlayer({ isAI: true }));
@@ -37,7 +41,6 @@ export function startServer({ environment = process.env, logger = console.log } 
 
   const commandBuffer = createPlayerCommandBuffer();
   const movementSystem = createPlayerMovementSystem({ world });
-  let fixedStepLoop = null;
   const botCommandDriver = createBotCommandDriver({
     commandBuffer,
     currentTick: () => fixedStepLoop?.readClock().tick ?? 0,

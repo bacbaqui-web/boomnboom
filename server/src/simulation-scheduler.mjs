@@ -66,6 +66,7 @@ export function createSimulationScheduler({
         lastEventLoopLagMs,
         lastCompletedTickAt,
         nextTickAt,
+        ai: botController.readMetrics?.() ?? null,
       };
     },
   };

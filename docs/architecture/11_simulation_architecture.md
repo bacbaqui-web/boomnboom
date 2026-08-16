@@ -34,11 +34,22 @@ generic command framework, ECS, event bus와 전체 world rollback은 만들지 
 - movement, collision, item collect, bomb placement, fuse, explosion, flame damage와
   death를 같은 단조 증가 `serverTick`에서 처리한다.
 - snapshot publication은 기본 15Hz로 두 simulation tick마다 실행한다.
-- AI decision은 더 낮은 cadence로 만들 수 있지만 결과는 사람과 같은 input state와
-  action command로 fixed step에 들어온다.
-- 현재 AI는 500ms마다 방향 또는 폭탄 intent만 다시 고르고, Bot Command Driver가
-  이를 다음 fixed tick의 공용 Command Buffer에 넣는다. 따라서 결정 주기는 낮아도
-  실제 위치는 사람과 동일한 30Hz 가속 이동으로 연속 갱신된다.
+- AI는 500ms마다 canonical read snapshot 하나와 공용 danger map 하나로 전술 intent를
+  다시 고른다. 결과는 Bot Command Driver가 다음 fixed tick의 공용 Command Buffer에
+  넣으므로, AI도 사람과 같은 30Hz 이동·충돌·폭탄 권한 경로를 사용한다.
+- AI의 우선순위는 `생존 탈출 → 안전한 아이템 → 탈출 가능한 공격/상자 폭탄 →
+  공격 위치 추적 → 상자 접근 → 안전한 배회`로 고정한다.
+- danger map은 active flame과 bomb의 `explodeTick`, chain reaction과 flame lifetime을
+  cell별 시간 구간으로 투영한다. 경로 탐색은 도착 tick에 위험한 cell을 통과하지
+  않으며 탐색 반경과 방문 수가 bounded다.
+- 폭탄은 현재 위치에서 목표 또는 상자를 맞힐 수 있다는 이유만으로 놓지 않는다.
+  후보 폭탄을 danger map에 임시 추가한 뒤 fuse 만료 전에 안전 cell까지 갈 수 있을
+  때만 authoritative bomb command를 만든다.
+- bot별 Runtime memory는 짧은 목표 고정, 최근 방향과 막힘 횟수, bomb cooldown만
+  가진다. canonical World Owner에 AI 계획 상태를 저장하지 않는다.
+- 성향은 rookie/balanced/hunter 세 profile의 bounded tuning 차이만 사용한다. 실수는
+  결정적인 낮은 빈도의 비최적 안전 이동이며, 위험 탈출과 폭탄 안전성에는 적용하지
+  않는다.
 
 ### Catch-up
 
