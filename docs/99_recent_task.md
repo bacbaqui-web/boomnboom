@@ -31,7 +31,7 @@
 - server 전체 회귀 95건 PASS
 - visibility, 단일 frame coordinator, remote painter와 최대 4청크 selector 신규 테스트 PASS
 - 모든 source/test 파일 500줄 미만
-- GitHub `main` commit `74008b4`와 Sites version 62 게시 완료
+- GitHub `main` 구현 commit `74008b4`와 Sites production 게시 완료
 - 공개 page HTTP 200, Oracle health `ok`, Protocol V2/V3와 fixed backlog 0 확인
 - Edge가 같은 시간에 사용자 조작으로 계속 이동해 자동 새 탭 요청이 안전하게 중단됐으므로
   실제 플레이 체감은 공개 URL에서 사용자가 확인한다.
