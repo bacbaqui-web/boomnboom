@@ -3,7 +3,7 @@
 ## 상태
 
 - 구현·로컬 검증: PASS
-- commit/push와 Oracle·Sites 배포: PENDING
+- commit/push와 Oracle·Sites 배포: PASS
 
 ## 목표
 
@@ -27,8 +27,8 @@ local prediction은 즉시 반응을 유지하되 30Hz owner snapshot에서 auth
 - server authority, 30Hz movement/snapshot, 초당 3칸, V2 rollback, AI, 폭탄·아이템·상자
   복구와 BGM 계약을 보존한다.
 - client에는 주변 청크만 전송해 65,536개 타일 전체를 내려보내지 않는다.
-- 256청크 선행 materialize는 로컬에서 약 30ms, RSS 약 12MB가 추가됐다. Oracle 128MB
-  환경의 배포 후 RSS와 두 접속자 smoke를 확인해야 한다.
+- 256청크 선행 materialize는 로컬에서 약 30ms, RSS 약 12MB가 추가됐다. Oracle은
+  배포 후 256청크를 유지하며 실제 확인 시 RSS 약 82MB로 128MB 제한 안에서 동작했다.
 - 일반 network jitter의 replay correction은 deterministic harness에서 0.5칸 이하다.
 
 ## 검증 결과
@@ -38,6 +38,10 @@ local prediction은 즉시 반응을 유지하되 30Hz owner snapshot에서 auth
 - 200/300ms RTT, 50ms jitter와 receive stall replay correction 0.5칸 이하
 - finite 256청크 1회 materialize, perimeter wall, bounded interest/spawn PASS
 - ESLint, TypeScript, source 500줄 미만과 `git diff --check` PASS
+- GitHub `main`에 제품 commit `87cd007`과 Sites lockfile 호환 commit `3220d90` push 완료
+- Oracle staging server regression 109/109 PASS 뒤 service 교체와 public health PASS
+- public V3 두 접속자와 V2 rollback smoke에서 같은 world ID, 256×256 크기와 같은 bomb cell 확인
+- Sites version 71 배포 완료, Edge에서 nickname 입장·AI 6명·초기 stat 렌더와 console error 0 확인
 
 ## Rollback
 
