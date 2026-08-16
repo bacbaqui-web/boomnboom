@@ -7,7 +7,7 @@
 - 2단계 생존·아이템·공격 전술: PASS
 - 3단계 성향·기억·공용 command 통합: PASS
 - 4단계 부하·회귀·문서 검증: PASS
-- commit/push/deploy: 실행하지 않음
+- commit/push와 Oracle/Sites 배포: 완료
 
 ## 1. 목표
 
@@ -179,8 +179,7 @@ Rollback: 새 controller 조립만 기존 stateless heuristic으로 복원
 
 ## 9. 배포 순서와 Rollback
 
-이번 Sprint는 server-only product change다. 사용자가 배포를 요청하면 다음 순서로만
-진행한다.
+이번 Sprint는 server-only product change다. 다음 순서로 배포했다.
 
 1. 변경 파일과 검증 결과 재확인
 2. Oracle 기존 server/shared rollback artifact 확보
@@ -188,5 +187,13 @@ Rollback: 새 controller 조립만 기존 stateless heuristic으로 복원
 4. `/boom-health`, V2/V3 upgrade와 V3 human+AI smoke
 5. RSS, fixed backlog와 AI decision duration 관찰
 
-이상 시 Sites는 건드리지 않고 Oracle server만 이전 artifact로 되돌린다. protocol과
-client payload는 바뀌지 않으므로 웹 재배포는 필요하지 않다.
+배포 결과:
+
+- GitHub `main`에 AI 구현 commit을 push
+- Oracle 기존 server/shared를 별도 복구 디렉터리에 보존하고 service restart
+- 원격 staging에서 server test 95건과 Node syntax PASS 뒤 교체
+- 공개 V3에서 human input ACK, AI 6명 전원 이동과 동시 bomb 최대 6개 확인
+- 공개 health `ok`, RSS 약 83MB, fixed backlog 0, AI decision 약 2ms 확인
+- protocol/client payload 변경은 없지만 동일 source의 Sites version도 게시
+
+이상 시 Sites는 건드리지 않고 Oracle server만 보존한 이전 artifact로 되돌릴 수 있다.

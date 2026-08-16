@@ -50,8 +50,13 @@ AI가 가장 가까운 사람 쪽으로만 움직이고 조건이 맞으면 바�
 - local RSS 약 89MB, AI 6명 최근 decision 약 1ms, fixed backlog 0 확인
 - 모든 source/test 파일 500줄 미만 확인
 
-### 외부 반영 상태
+### 배포
 
-- commit, push와 Oracle/Sites 배포는 실행하지 않았다.
-- 이번 변경은 server-only이므로 배포 요청 시 Oracle server만 먼저 교체하고 health와
-  실제 V3 human+AI 흐름을 확인한다.
+- AI 구현을 commit해 GitHub `main`에 push했다.
+- Oracle 기존 server/shared는 별도 복구본으로 남기고 `boomnboom` 서비스만 교체했다.
+- 원격 준비 영역에서 server test 95건과 Node syntax를 다시 통과한 뒤 재시작했다.
+- 공개 V3 연결에서 AI 6명 전원 이동, 동시 bomb 최대 6개와 사람 입력 ACK를 확인했다.
+- 공개 health는 `ok`, RSS 약 83MB, fixed backlog 0, 최근 AI 판단 약 2ms다.
+- client payload 변경은 없지만 동일 source를 기존 Sites 프로젝트의 새 version으로
+  게시했다.
+- 공개 URL: `https://bubble-boom-arcade.bacbaqui2.chatgpt.site/`
