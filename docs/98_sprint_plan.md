@@ -4,7 +4,8 @@
 
 - 구현: PASS
 - root build/client test, lint, TypeScript: PASS
-- server regression, 실제 배포와 Edge QA: 진행 중
+- server regression과 실제 배포: PASS
+- Edge 자동 진입 QA: 사용자가 같은 앱을 조작 중이라 URL 전달 단계에서 중단
 
 ## 목표와 Preserve
 
@@ -30,6 +31,16 @@ Rollback은 새 coordinator/painter/visibility 제거 후 EntityLayer의 개별 
 - root build/client tests, ESLint, TypeScript, server tests와 `git diff --check` PASS
 - public Sites 배포 뒤 Edge에서 join, 이동, remote AI, 폭탄/폭발과 enemy pointer 확인
 - 공개 `/boom-health`와 WebSocket V3 연결 정상
+
+## 결과
+
+- root production build/client test 92건, ESLint와 TypeScript PASS
+- server regression 95건과 `git diff --check` PASS
+- GitHub `main` commit `74008b4` push
+- Sites version 62 publish succeeded, 공개 page HTTP 200
+- 공개 Oracle health `ok`, Protocol V2/V3 유지, fixed backlog 0
+- Edge가 사용자 조작으로 계속 이동 중이어서 자동화가 현재 탭을 빼앗지 않고 중단됨;
+  공개 URL은 배포 완료 상태이며 실제 플레이 진입은 사용자 확인 항목으로 남김
 
 ---
 
