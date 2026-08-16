@@ -4,7 +4,7 @@ export const PROTOCOL_VERSION = 2 as const;
 export const CHUNK_SIZE = 16;
 export const PRELOAD_CHUNK_COUNT = 25;
 
-export type Tile = "floor" | "wall" | "crate";
+export type Tile = "floor" | "wall" | "crate" | "crate_warning";
 export type Action = "up" | "down" | "left" | "right" | "bomb" | "wait" | "stop";
 export type MoveAction = Extract<Action, "up" | "down" | "left" | "right">;
 export type ConnectionStatus = "connecting" | "online" | "offline";

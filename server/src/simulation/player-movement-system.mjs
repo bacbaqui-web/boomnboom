@@ -185,7 +185,11 @@ export function createPlayerMovementSystem({
       occupiedPlayers.set(nextCellKey, ids);
       contactsByPlayer.set(playerId, result.contacts);
       const item = world.getItemAt(after.x, after.y);
-      if (item && playerOverlapsCell(after, item.x, item.y, movementConfig)) {
+      if (
+        item &&
+        !after.isAI &&
+        playerOverlapsCell(after, item.x, item.y, movementConfig)
+      ) {
         const update = itemStatUpdate(after, item.type);
         if (update) world.updatePlayer(playerId, update);
         world.removeItemAt(item.x, item.y);

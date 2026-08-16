@@ -23,6 +23,7 @@ export class WorldOwner {
   #bombs = new Map();
   #items = new Map();
   #flames = [];
+  #destroyedCrates = [];
   #accessClock = 0;
   #materializationCount = 0;
 
@@ -142,6 +143,29 @@ export class WorldOwner {
     const { chunk, index } = this.#chunkAndCell(x, y);
     if (chunk.tiles[index] !== "crate") return false;
     chunk.tiles[index] = "floor";
+    chunk.revision += 1;
+    this.#destroyedCrates.push({ x, y });
+    return true;
+  }
+
+  drainDestroyedCrates() {
+    const destroyed = this.#destroyedCrates.map(cloneEntity);
+    this.#destroyedCrates = [];
+    return destroyed;
+  }
+
+  markCrateRespawnWarning(x, y) {
+    const { chunk, index } = this.#chunkAndCell(x, y);
+    if (chunk.tiles[index] !== "floor") return false;
+    chunk.tiles[index] = "crate_warning";
+    chunk.revision += 1;
+    return true;
+  }
+
+  restoreCrate(x, y) {
+    const { chunk, index } = this.#chunkAndCell(x, y);
+    if (chunk.tiles[index] !== "crate_warning") return false;
+    chunk.tiles[index] = "crate";
     chunk.revision += 1;
     return true;
   }

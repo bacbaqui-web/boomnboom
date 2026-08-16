@@ -140,7 +140,7 @@ export class GameSimulation {
 
   #collectItem(playerId) {
     const player = this.#world.getPlayer(playerId);
-    if (!player) return false;
+    if (!player || player.isAI) return false;
     const x = Math.round(player.x);
     const y = Math.round(player.y);
     const item = this.#world.getItemAt(x, y);

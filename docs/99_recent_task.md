@@ -1,37 +1,33 @@
 # BOOMnBOOM 최근 작업 보고서
 
-## 최근 Task — 화면 렌더 Hot Path 최적화
+## 최근 Task — AI 완화, 상자 복구와 남은 렌더 렉 제거
 
-### 문제
+### 사용자 관찰
 
-서버의 input ACK와 entity snapshot은 정상 범위였지만 Edge renderer 사용량이 높았다.
-원인은 player마다 별도 rAF를 돌리고 controller prediction도 별도 rAF를 가지며, 화면에
-보이지 않는 AI와 3×3 청크 2,304타일까지 계속 DOM/compositor 작업에 포함한 구조였다.
+- 전술 AI가 아이템까지 획득하면서 사람보다 빠르게 강해졌다.
+- 상자가 영구히 사라져 전장이 너무 빨리 비었다.
+- 이전 rAF/culling 최적화 뒤에도 이동 중 체감 끊김이 남았다.
 
-### 변경
+### 확인한 원인
 
-- `WorldViewport` 한 곳만 `requestAnimationFrame`을 소유한다.
-- 한 frame 안에서 predictor 진행, local sample, remote 일괄 paint, camera/local paint를 순서대로 한다.
-- remote player별 frame loop를 없애고 `RemotePlayerPainter`가 보이는 player를 한 번에 갱신한다.
-- 화면 2칸 밖 player, bomb, item, flame과 death visual은 DOM에 만들지 않는다.
-- terrain은 Store의 25청크를 유지하면서 viewport와 겹치는 최대 4청크만 렌더한다.
-- 동일한 camera/player transform과 idle style은 다시 쓰지 않는다.
+- AI가 사람과 같은 item collect 경로를 쓰고 Tactics가 안전한 item을 우선 탐색했다.
+- crate destruction 뒤 복구 상태를 소유하는 server system이 없었다.
+- 공개 health의 fixed catch-up backlog는 0으로 server tick 정체 증거는 없었다.
+- client는 보이는 최대 4청크만 골라도 청크마다 256개 floor DOM을 만들어, 최대
+  1,024개 바닥 요소를 camera transform과 함께 합성하고 있었다.
 
-### 유지한 계약
+### 구현 방향
 
-- Server Authority, World Owner와 Protocol V2/V3 payload는 변경하지 않았다.
-- local prediction/replay/correction과 remote snapshot interpolation 계산은 그대로다.
-- 15×11 crop, 고정 floor pattern, enemy pointer, player 점프/이동음과 폭발음은 유지한다.
-- culling은 render-only이며 canonical entity와 remote snapshot history를 삭제하지 않는다.
+- AI는 item을 소비하거나 목표로 삼지 않고 시작 능력치를 유지한다.
+- 생존 탈출은 유지하고 탐색 예산·bomb cooldown·비최적 안전 선택만 완화한다.
+- 상자는 파괴 12초 뒤 복구하며 3초 전 warning 장판을 chunk revision으로 전송한다.
+- 새 warning은 살아 있는 player 주변 9×9에서 미루고, 이미 표시된 warning은 예정대로
+  3초 뒤 복구한다.
+- floor는 chunk CSS 배경 하나로 그리고 obstacle과 warning만 DOM으로 만든다.
 
-### 검증과 배포
+### 현재 상태
 
-- root production build와 client test 92건 PASS
-- ESLint와 TypeScript PASS
-- server 전체 회귀 95건 PASS
-- visibility, 단일 frame coordinator, remote painter와 최대 4청크 selector 신규 테스트 PASS
-- 모든 source/test 파일 500줄 미만
-- GitHub `main` 구현 commit `74008b4`와 Sites production 게시 완료
-- 공개 page HTTP 200, Oracle health `ok`, Protocol V2/V3와 fixed backlog 0 확인
-- Edge가 같은 시간에 사용자 조작으로 계속 이동해 자동 새 탭 요청이 안전하게 중단됐으므로
-  실제 플레이 체감은 공개 URL에서 사용자가 확인한다.
+- server 전체 회귀 101건 PASS
+- root production build/client 92건, ESLint와 TypeScript PASS
+- source/test 500줄 미만, Node syntax와 `git diff --check` PASS
+- commit/push와 Sites/Oracle 배포는 진행 중

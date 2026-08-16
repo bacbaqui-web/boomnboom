@@ -157,6 +157,20 @@ for (const [type, field] of [["bomb", "power"], ["shield", "shield"], ["flame", 
   });
 }
 
+test("AI walks over an item without consuming it or gaining its stat", () => {
+  const world = createFlatWorld();
+  addJoinedPlayer(world, "BOT-1");
+  world.updatePlayer("BOT-1", { isAI: true, range: 1, speedLevel: 0 });
+  const system = createPlayerMovementSystem({ world });
+  system.initializePlayer("BOT-1");
+  world.setItem({ id: "DROP", x: 1, y: 0, type: "flame" });
+  for (let tick = 1; tick <= 4; tick += 1) {
+    system.step(tick, new Map([["BOT-1", { direction: "right", actions: [] }]]));
+  }
+  assert.equal(world.getPlayer("BOT-1").range, 1);
+  assert.equal(world.getItemAt(1, 0).id, "DROP");
+});
+
 test("speedLevel zero cruises near three tiles per second and each item adds half", () => {
   function cruiseDistance(speedLevel) {
     const world = createFlatWorld();

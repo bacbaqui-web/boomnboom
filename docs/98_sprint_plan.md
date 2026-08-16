@@ -1,245 +1,70 @@
-# Render Hot Path Optimization Sprint
+# AI Balance, Crate Respawn and Terrain Render Sprint
 
 ## 상태
 
 - 구현: PASS
-- root build/client test, lint, TypeScript: PASS
-- server regression과 실제 배포: PASS
-- Edge 자동 진입 QA: 사용자가 같은 앱을 조작 중이라 URL 전달 단계에서 중단
+- 로컬 자동 검증: PASS
+- commit/push, Sites와 Oracle 배포: 대기
 
-## 목표와 Preserve
+## 목표
 
-새 Tactical AI가 움직일 때도 browser가 server보다 더 많은 일을 하지 않게 한다.
-Server Authority, 30Hz fixed simulation, 15Hz snapshot, 15×11 화면, 25청크 preload,
-local prediction, remote interpolation, 점프와 효과음은 그대로 유지한다.
+1. AI가 아이템으로 강해지거나 사람용 아이템을 빼앗지 않게 한다.
+2. AI의 생존 규칙은 유지하되 탐색·폭탄 빈도와 비최적 선택을 완화한다.
+3. 파괴된 노란 상자를 12초 뒤 복구하고 3초 전 장판으로 알린다.
+4. 서버가 정상인데도 남는 체감 렉의 client terrain hot path를 줄인다.
+
+## Preserve와 범위 밖
+
+- Server Authority, 30Hz fixed simulation, 15Hz snapshot과 V2 rollback을 유지한다.
+- 사람의 bomb/range/shield/speed 아이템과 AI 사망 drop을 유지한다.
+- 폭발, 연쇄 폭발, 현재 위치 damage, 점프와 효과음은 바꾸지 않는다.
+- protocol message type을 추가하지 않고 기존 chunk revision/delta를 사용한다.
+- AI를 고의로 폭발에 죽게 만들거나 이동속도를 다르게 만들지 않는다.
 
 ## 구현 Manifest
 
-1. `WorldViewport`만 rAF를 소유하고 prediction/camera/local/remote paint를 한 frame에서 실행
-2. remote player별 rAF와 controller prediction rAF 제거
-3. 위치가 바뀐 경우만 `translate3d`를 쓰고 idle pose DOM style 반복 기록 제거
-4. viewport 2칸 밖 player/bomb/item/flame/death visual DOM 제외
-5. Store의 25청크는 유지하되 terrain DOM은 3×3 9청크에서 viewport 교차 최대 4청크로 축소
-6. pure visibility/selector와 shared frame/painter 회귀 테스트 추가
+### 1. AI 밸런스
 
-Rollback은 새 coordinator/painter/visibility 제거 후 EntityLayer의 개별 rAF와 3×3 selector를
-복원하는 client-only 단위다. protocol, server와 canonical world state는 변경하지 않는다.
+- fixed와 legacy movement 모두 `isAI` player가 item을 소비하지 않는다.
+- Bot Controller snapshot과 Tactics에서 item 목표를 제거한다.
+- 탐색 거리를 6~10칸으로 줄이고 bomb cooldown을 30~45 tick으로 늘린다.
+- 안전 후보 중 비최적 선택을 더 자주 하되 escape와 bomb escape 검증은 유지한다.
 
-## 완료 조건
+### 2. Crate Respawn
 
-- source/test 전부 500줄 미만
-- root build/client tests, ESLint, TypeScript, server tests와 `git diff --check` PASS
-- public Sites 배포 뒤 Edge에서 join, 이동, remote AI, 폭탄/폭발과 enemy pointer 확인
-- 공개 `/boom-health`와 WebSocket V3 연결 정상
+- World Owner가 성공한 crate destruction을 한 번 queue한다.
+- 독립 Crate Respawn System이 30Hz fixed tick에서 상태를 관리한다.
+- 파괴 9초 뒤 warning을 시도하고 모든 alive player의 9×9 밖일 때만 표시한다.
+- warning을 실제 표시한 tick에서 정확히 3초 뒤 crate를 복구한다.
+- warning 뒤 접근은 복구를 취소하지 않는 기존 제품 결정을 유지한다.
 
-## 결과
+### 3. Terrain Render
 
-- root production build/client test 92건, ESLint와 TypeScript PASS
-- server regression 95건과 `git diff --check` PASS
-- GitHub `main` commit `74008b4` push
-- Sites production publish succeeded, 공개 page HTTP 200
-- 공개 Oracle health `ok`, Protocol V2/V3 유지, fixed backlog 0
-- Edge가 사용자 조작으로 계속 이동 중이어서 자동화가 현재 탭을 빼앗지 않고 중단됨;
-  공개 URL은 배포 완료 상태이며 실제 플레이 진입은 사용자 확인 항목으로 남김
+- viewport와 겹치는 최대 4청크 cache selector는 유지한다.
+- chunk의 256 floor DOM을 CSS checkerboard 배경 하나로 교체한다.
+- wall, crate와 warning만 개별 DOM을 만든다.
+- warning은 animation 없는 연한 노란 장판으로 표시한다.
 
----
+## 검증
 
-# Tactical AI Sprint
+- AI item 미획득과 item 비추적 테스트
+- crate destroy queue, 9초 warning, 3초 restore, 9×9 억제와 uint32 wrap 테스트
+- warning tile client type/render와 floor DOM 제거 contract 테스트
+- root build/client test, ESLint, TypeScript와 server 전체 regression
+- source/test 500줄 미만, Node syntax와 `git diff --check`
+- 배포 후 Sites HTTP, Oracle health, V2/V3 join/input과 crate live 흐름
 
-## 상태
+## Rollback
 
-- Sprint 완료
-- 1단계 위험 시간 지도와 bounded 경로 탐색: PASS
-- 2단계 생존·아이템·공격 전술: PASS
-- 3단계 성향·기억·공용 command 통합: PASS
-- 4단계 부하·회귀·문서 검증: PASS
-- commit/push와 Oracle/Sites 배포: 완료
+- AI: controller/tactics/profile과 두 item guard만 이전 commit으로 복원
+- crate: main에서 Crate Respawn System 조립 제거 후 World Owner warning methods 제거
+- render: TerrainLayer를 cell grid로 되돌리는 client-only rollback
+- Sites와 Oracle은 별도 단계로 배포하고 각각 직전 artifact를 보존한다.
 
-## 1. 목표
+## 로컬 결과
 
-AI 6명이 벽을 향해 단순 이동하거나 무조건 폭탄을 놓는 상태에서 벗어나 다음을
-수행하게 한다.
-
-1. 예정된 폭발과 live flame을 피한다.
-2. 안전한 아이템을 가까우면 우선 획득한다.
-3. 사람 또는 상자를 맞힐 수 있고 탈출 경로가 있을 때만 폭탄을 놓는다.
-4. 장애물을 우회해 공격 위치와 상자 근처로 이동한다.
-5. 모든 AI가 같은 행동을 하지 않되 안전 규칙은 공통으로 지킨다.
-
-Server Authority, World Owner 단일 mutation 경계와 Protocol V3 fixed simulation은
-변경하지 않는다. AI는 계획만 만들고 canonical 결과는 기존 command/simulation이
-확정한다.
-
-## 2. Preserve 계약
-
-- 사람과 AI가 같은 30Hz movement core, collision과 bomb authority 사용
-- AI decision cadence 500ms
-- AI 6명, 사람 추적과 AI 사망 item drop
-- 폭탄 fuse 90 fixed tick, chain explosion, shield와 current-position damage
-- 128MiB Oracle 단일 process와 현재 WebSocket V2/V3 계약
-- crate 영구 파괴, endless chunk world와 결정적 terrain
-- 모든 production/test 파일 500줄 미만과 한 파일 한 주책임
-
-## 3. 범위 밖
-
-- machine learning, behavior tree framework, ECS와 generic planner
-- navmesh 사전 생성과 전 월드 경로 탐색
-- 사람 입력 예측, 팀 전술과 bot 간 통신
-- 난이도 UI, 계정별 MMR와 persistent AI 학습
-- gameplay speed, 폭탄 화력, item 확률과 spawn 규칙 변경
-- client rendering, protocol schema와 배포 구성 변경
-
-## 4. 책임 구조
-
-```text
-500ms AI timer
-  → Bot Controller: snapshot 1회, danger map 1회, bot memory/metrics
-      → Danger Map: 폭탄·연쇄·flame의 cell별 위험 tick
-      → Tactics: 우선순위와 폭탄 안전성
-          → Pathfinder: bounded BFS
-          → Personality: 탐색 예산과 안전한 비최적 선택
-  → Bot Command Driver
-  → 사람과 같은 Command Buffer
-  → 30Hz Movement/Bomb/Explosion System
-  → World Owner commit
-```
-
-### 파일별 단일 책임
-
-| 파일 | 책임 |
-|---|---|
-| `bot-danger-map.mjs` | 시간축 위험 cell projection |
-| `bot-pathfinder.mjs` | bounded grid BFS |
-| `bot-personality.mjs` | deterministic profile tuning |
-| `bot-tactics.mjs` | 한 bot의 전술 우선순위 결정 |
-| `bot-controller.mjs` | snapshot 공유, bot memory와 metric 조립 |
-| `bot-command-driver.mjs` | intent를 공용 fixed command로 변환 |
-
-## 5. 전술 규칙
-
-### 위험 지도
-
-- active flame은 현재부터 `expireTick`까지 위험하다.
-- bomb은 `explodeTick`에 blast cell을 만들고 flame lifetime 동안 위험하다.
-- blast가 다른 bomb에 닿으면 같은 tick에 연쇄 폭발한다고 예측한다.
-- permanent wall은 blast를 막는다.
-- crate는 실제 폭발 순서와 다른 보수적 오판을 피하려고 danger prediction에서는
-  안전을 넓게 잡되, 실제 공격 blast 계산에서는 canonical crate 차단 규칙을 쓴다.
-
-### 경로 탐색
-
-- 네 방향 cell BFS만 사용한다.
-- profile별 최대 8~12칸, 최대 256~512개 방문으로 제한한다.
-- 도착 예상 tick에 wall/crate/bomb/player 또는 위험 구간과 겹치는 cell은 버린다.
-- 전체 맵이나 materialized chunk를 복사하지 않는다.
-
-### 행동 우선순위
-
-1. 현재 cell이 fuse/flame 위험이면 안전 cell로 탈출
-2. bounded 반경의 안전한 item으로 이동
-3. 현재 폭탄으로 사람 또는 crate를 맞힐 수 있고 탈출 가능하면 bomb
-4. 사람을 blast line에 넣을 수 있는 cell로 우회 추적
-5. crate를 맞힐 수 있는 cell로 접근
-6. 안전한 방향으로 배회, 없으면 wait
-
-폭탄 탈출 검사는 후보 폭탄을 위험 지도에 포함한 뒤 다시 경로를 찾는다. 성향 실수는
-escape, bomb placement와 blocked 결과에는 적용하지 않는다.
-
-## 6. 기억과 성향
-
-- bot memory는 target ID/lock expiry, 마지막 cell/action, 막힘 횟수, bomb cooldown과
-  decision number만 보관한다.
-- 목표는 profile별 짧은 tick 동안 유지해 가까운 사람이 잠깐 바뀌어도 방향을 자주
-  뒤집지 않는다.
-- 이동 intent를 냈는데 같은 cell에 두 번 머물면 직전 방향을 다음 탐색의 후순위로
-  내린다.
-- rookie/balanced/hunter는 탐색 거리, item 관심, 탈출 lookahead와 cooldown만 다르다.
-- 낮은 빈도의 deterministic 실수는 안전 후보 중 두 번째 이동을 고르는 방식이다.
-
-## 7. 부하 한계와 운영 지표
-
-- 한 decision cycle에서 World Owner entity snapshot과 danger map은 각각 1회다.
-- bot별 path search 최대 4회, 방문 수는 profile 상한을 넘지 않는다.
-- 사람이 없으면 AI intent와 path search는 0건이다.
-- health scheduler metric은 identity 없이 다음 aggregate만 공개한다.
-  - 누적 decisions
-  - 최근 bot 수와 search 수
-  - bot 하나의 최대 search 수
-  - 최근 decision 소요 ms
-  - reason별 누적 횟수
-
-## 8. 단계별 결과
-
-### 1단계 — Danger Map과 Pathfinder
-
-상태: **PASS**
-
-- fuse, live flame, wall 차단과 same-tick chain projection 구현
-- bounded BFS의 obstacle 우회, 거리/방문 상한 구현
-- tick wrap-safe 비교와 기존 explosion blast helper 재사용
-
-Rollback: 새 danger/pathfinder와 해당 테스트 제거
-
-### 2단계 — Tactical Priority
-
-상태: **PASS**
-
-- 생존, item, 공격 폭탄, 추적, crate 접근과 배회 순서 구현
-- candidate bomb을 포함한 escape simulation 구현
-- speed item에 따른 예상 cell 도착 tick 반영
-
-Rollback: controller에서 기존 nearest-human decision으로 되돌리고 tactics 제거
-
-### 3단계 — Personality, Memory와 Runtime 통합
-
-상태: **PASS**
-
-- 세 deterministic profile, 안전 후보 안의 낮은 빈도 실수 구현
-- target lock, stuck direction 후순위와 bomb cooldown 구현
-- controller snapshot/danger map 공유와 identity-free aggregate metric 구현
-- 기존 Bot Command Driver와 30Hz authoritative simulation 경로 유지
-
-Rollback: 새 controller 조립만 기존 stateless heuristic으로 복원
-
-### 4단계 — 회귀와 운영 검증
-
-상태: **PASS**
-
-완료 조건:
-
-- AI tactical/server 전체 test PASS
-- root build/client test, lint, TypeScript와 syntax PASS
-- 모든 source/test 500줄 미만, dead import와 `git diff --check` PASS
-- local V3 실제 연결에서 AI 6명 이동과 폭탄 확인
-- `/health`에서 fixed backlog 0, RSS 128MiB 이내와 bounded AI search 확인
-- source map, simulation architecture와 최근 작업 보고 갱신
-
-결과:
-
-- tactical AI 18건과 server 전체 95건 PASS
-- root production build/client 89건, ESLint와 TypeScript PASS
-- local V3 human 연결에서 AI 6명 전원 이동, 동시 bomb 최대 6개 관찰
-- local RSS 약 89MB, fixed backlog 0, AI 6명의 최근 decision 약 1ms와 search
-  11건 확인
-- source/test 500줄 미만, Node syntax와 `git diff --check` PASS
-
-## 9. 배포 순서와 Rollback
-
-이번 Sprint는 server-only product change다. 다음 순서로 배포했다.
-
-1. 변경 파일과 검증 결과 재확인
-2. Oracle 기존 server/shared rollback artifact 확보
-3. server 배치와 service restart
-4. `/boom-health`, V2/V3 upgrade와 V3 human+AI smoke
-5. RSS, fixed backlog와 AI decision duration 관찰
-
-배포 결과:
-
-- GitHub `main`에 AI 구현 commit을 push
-- Oracle 기존 server/shared를 별도 복구 디렉터리에 보존하고 service restart
-- 원격 staging에서 server test 95건과 Node syntax PASS 뒤 교체
-- 공개 V3에서 human input ACK, AI 6명 전원 이동과 동시 bomb 최대 6개 확인
-- 공개 health `ok`, RSS 약 83MB, fixed backlog 0, AI decision 약 2ms 확인
-- protocol/client payload 변경은 없지만 동일 source의 Sites version도 게시
-
-이상 시 Sites는 건드리지 않고 Oracle server만 보존한 이전 artifact로 되돌릴 수 있다.
+- root production build/client 92건, ESLint와 TypeScript PASS
+- server regression 101건과 전체 `.mjs` syntax PASS
+- source/test 전부 500줄 미만, `git diff --check` PASS
+- server WebSocket 의존성의 iCloud placeholder를 `npm ci`로 다시 설치한 뒤 실제
+  V2/V3 gateway 통합 테스트까지 통과

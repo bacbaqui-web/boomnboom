@@ -6,7 +6,6 @@ import { chooseBotTactic } from "../src/ai/bot-tactics.mjs";
 const PROFILE = {
   searchSteps: 10,
   maxVisited: 384,
-  itemSearchSteps: 7,
   escapeLookaheadTicks: 105,
   bombCooldownTicks: 24,
 };
@@ -66,17 +65,14 @@ test("survival overrides every objective when the current cell will explode", ()
   assert.notEqual(result.action, "wait");
 });
 
-test("a nearby safe item is collected before chasing a distant human", () => {
+test("a nearby item does not distract an AI from its human target", () => {
   const bot = player("BOT-1", 0, 0, true);
   const result = scenario({
     bot,
     target: player("P1", 7, 0),
     items: [{ id: "I1", x: 1, y: 0, type: "flame" }],
   });
-  assert.deepEqual({ action: result.action, reason: result.reason }, {
-    action: "right",
-    reason: "item",
-  });
+  assert.notEqual(result.reason, "item");
 });
 
 test("AI bombs a target or crate only when a post-placement escape exists", () => {

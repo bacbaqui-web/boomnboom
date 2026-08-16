@@ -40,6 +40,20 @@ test("two viewers read the same canonical chunk revision", () => {
   assert.equal(changed.revision, firstViewer.revision + 1);
 });
 
+test("destroyed crates publish one mutation and restore through a warning tile", () => {
+  const world = createWorldOwner({
+    generateChunk: ({ chunkSize }) => new Array(chunkSize * chunkSize).fill("crate"),
+  });
+  assert.equal(world.destroyCrate(2, 3), true);
+  assert.deepEqual(world.drainDestroyedCrates(), [{ x: 2, y: 3 }]);
+  assert.deepEqual(world.drainDestroyedCrates(), []);
+  assert.equal(world.markCrateRespawnWarning(2, 3), true);
+  assert.equal(world.readTerrainTile(2, 3), "crate_warning");
+  assert.equal(world.hasCrate(2, 3), false);
+  assert.equal(world.restoreCrate(2, 3), true);
+  assert.equal(world.readTerrainTile(2, 3), "crate");
+});
+
 test("world metrics expose bounded chunk and entity categories", () => {
   const world = createWorldOwner({
     generateChunk: ({ chunkSize }) => new Array(chunkSize * chunkSize).fill("floor"),

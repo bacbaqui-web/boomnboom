@@ -90,7 +90,6 @@ export function chooseBotIntent({
   bot,
   players = [],
   bombs = [],
-  items = [],
   flames = [],
   currentTick = 0,
   isBlocked = () => false,
@@ -112,7 +111,6 @@ export function chooseBotIntent({
     target,
     players,
     bombs,
-    items,
     flames,
     currentTick,
     terrain,
@@ -136,7 +134,6 @@ export function createBotController({ world, currentTick = () => 0 } = {}) {
     return {
       players: world.readPlayers(),
       bombs: world.readBombs(),
-      items: world.readItems(),
       flames: world.readFlames(),
       terrain: {
         isPermanentWall: (x, y) => world.isPermanentWall(x, y),

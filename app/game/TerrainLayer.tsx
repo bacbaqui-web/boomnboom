@@ -30,18 +30,23 @@ const TerrainChunk = memo(function TerrainChunk({
         top: chunk.originY * tileSize,
         width: 16 * tileSize,
         height: 16 * tileSize,
-        gridTemplateColumns: "repeat(16, 1fr)",
+        backgroundSize: `${tileSize * 2}px ${tileSize * 2}px`,
       }}
     >
       {chunk.tiles.map((tile, index) => {
+        if (tile === "floor") return null;
         const localX = index % 16;
         const localY = Math.floor(index / 16);
-        const worldX = chunk.originX + localX;
-        const worldY = chunk.originY + localY;
         return (
           <div
-            className={`tile ${tile} ${(worldX + worldY) & 1 ? "floorAlt" : ""}`}
+            className={`tile ${tile}`}
             key={index}
+            style={{
+              left: localX * tileSize,
+              top: localY * tileSize,
+              width: tileSize,
+              height: tileSize,
+            }}
           >
             {tile === "crate" ? <span className="box" /> : null}
           </div>

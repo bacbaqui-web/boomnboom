@@ -29,6 +29,9 @@ test("client composes the authoritative WebSocket world from focused modules", a
   assert.doesNotMatch(controller, /setInterval\(\(\) => \{\s*const predictor/);
   assert.match(terrain, /data-revision/);
   assert.match(terrain, /selectViewportChunkKeys/);
+  assert.match(terrain, /tile === "floor"\) return null/);
+  assert.doesNotMatch(terrain, /gridTemplateColumns/);
+  assert.match(styles, /\.tile\.crate_warning/);
   assert.doesNotMatch(entities, /requestAnimationFrame/);
   assert.match(entities, /isWithinRenderBounds/);
   assert.match(entities, /staticPosition\(entity, 0, tileSize\)/);

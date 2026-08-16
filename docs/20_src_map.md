@@ -95,8 +95,8 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 
 ### Render와 UI
 
-- `TerrainLayer.tsx`: Store의 25청크 중 viewport와 겹치는 최대 4청크만 DOM으로 만들고
-  chunk revision selector와 절대좌표 floor pattern 유지
+- `TerrainLayer.tsx`: Store의 25청크 중 viewport와 겹치는 최대 4청크만 만들며 floor는
+  chunk CSS 배경 하나, wall/crate/warning만 개별 DOM으로 렌더
 - `EntityLayer.tsx`: 보이는 entity만 DOM으로 만들고 remote player를 공용 frame에서 paint
 - V3 remote player는 snapshot buffer를, V2 remote player는 기존 latest-target 보간을 사용
 - `player-animation.ts`: 바닥 기준 idle과 중앙→경계 최고점→다음 중앙의 위치 기반 pose;
@@ -117,7 +117,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 
 - 전체 게임 shell, board, fixed chunk, entity, overlay와 control 스타일
 - player 위치 anchor와 바닥 기준 idle squash body 스타일
-- wall/crate box-shadow 0, absolute coordinate floor 교차 pattern
+- wall/crate box-shadow 0, chunk 단위 floor 교차 pattern과 3초 전 crate warning
 - player 위치 이동은 Runtime rAF, body jump/squash는 독립 animation으로 사용
 
 ### `app/layout.tsx`
@@ -141,16 +141,18 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `src/simulation/fixed-step-loop.mjs`: 30Hz scheduling과 bounded catch-up metric
 - `src/simulation/player-command-buffer.mjs`: V3 sequence/target tick/queue 검증과 input state
 - `src/simulation/player-movement-system.mjs`: shared core 실행, 목표 칸 예약과 World Owner commit
+- `src/simulation/crate-respawn-system.mjs`: 파괴 상자의 12초 복구 예약, 플레이어 9×9
+  warning 억제와 warning 뒤 3초 fixed-tick 복구
 - `src/simulation/item-rules.mjs`: AI 드롭 4종과 아이템별 authoritative stat update
 
 ### `server/src/simulation/game-simulation.mjs`
 
 - player/AI 생성, join, respawn과 disconnect command
 - authoritative 140ms movement cadence와 collision
-- bomb 설치/limit/fuse, item collect와 능력치
+- bomb 설치/limit/fuse, 사람 item collect와 능력치; AI는 item을 소비하지 않음
 - world tick catch-up, 폭발 순간 damage, shield/death와 AI drop/respawn
 - live flame 칸으로 이동할 때 같은 damage/shield 규칙 적용
-- 폭발로 파괴된 crate를 floor로 확정하고 자동 재생성하지 않음
+- 폭발로 파괴된 crate를 floor로 확정하고 복구 시스템이 읽는 mutation을 queue
 - 모든 canonical 변경을 World Owner 공개 command로 수행
 - command 결과의 `accepted`, `changed`, `publish`를 session/timer에 반환
 - legacy 1초 bomb/flame만 처리하고 V3 fixed clock entity는 건드리지 않음
@@ -163,6 +165,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `player-respawn-system.mjs`: V3 lifeId/teleport, fixed motion과 새 생명 command session reset
 - `fixed-aabb.mjs`: player와 bomb/flame/item cell overlap 순수 판정
 - `player-movement-system.mjs`: fixed movement commit, bomb pass-through 종료와 item 획득
+- `crate-respawn-system.mjs`: fixed tick 기반 warning/restore 상태 전이
 
 ### `server/src/simulation/explosion.mjs`
 
@@ -178,6 +181,8 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `server/src/ai/bot-danger-map.mjs`: bomb fuse/chain과 live flame을 cell별 위험 tick
   구간으로 예측하는 read-only 시간 지도
 - `server/src/ai/bot-pathfinder.mjs`: 탐색 거리와 방문 수가 제한된 결정적 BFS
+- AI는 item snapshot을 읽거나 item 경로를 탐색하지 않고, 사람보다 작은 탐색 예산과
+  긴 bomb cooldown·잦은 안전한 비최적 이동을 사용
 - `server/src/ai/bot-personality.mjs`: rookie/balanced/hunter의 탐색 예산·공격성·
   결정적 안전 실수 tuning
 - `server/src/ai/bot-tactics.mjs`: 생존, 아이템, 탈출 가능한 폭탄, 추적, 상자 접근과

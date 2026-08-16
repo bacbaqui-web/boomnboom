@@ -7,6 +7,7 @@ import { createWebSocketGateway } from "./network/websocket-gateway.mjs";
 import { createSimulationScheduler } from "./simulation-scheduler.mjs";
 import { createFixedStepLoop } from "./simulation/fixed-step-loop.mjs";
 import { createBombSystem } from "./simulation/bomb-system.mjs";
+import { createCrateRespawnSystem } from "./simulation/crate-respawn-system.mjs";
 import { createExplosionSystem } from "./simulation/explosion-system.mjs";
 import { createGameSimulation } from "./simulation/game-simulation.mjs";
 import { createPlayerCommandBuffer } from "./simulation/player-command-buffer.mjs";
@@ -75,6 +76,10 @@ export function startServer({ environment = process.env, logger = console.log } 
     movementSystem,
     commandBuffer,
   });
+  const crateRespawnSystem = createCrateRespawnSystem({
+    world,
+    tickRate: config.simulationTickRate,
+  });
 
   let gateway;
   let v2MovementDirty = false;
@@ -94,6 +99,7 @@ export function startServer({ environment = process.env, logger = console.log } 
         blockedPlayerIds: respawn.respawnedPlayerIds,
       });
       const explosion = explosionSystem.step(serverTick);
+      const crateRespawn = crateRespawnSystem.step(serverTick);
       for (const damage of explosion.damaged) {
         if (damage.outcome === "death") commandBuffer.resetPlayerIntent(damage.playerId);
       }
@@ -108,7 +114,8 @@ export function startServer({ environment = process.env, logger = console.log } 
         movement.itemChanged ||
         respawn.changed ||
         bombs.changed ||
-        explosion.changed;
+        explosion.changed ||
+        crateRespawn.changed;
       if (serverTick % 2 === 0) {
         if (v2MovementDirty) {
           gateway?.publish();
@@ -188,6 +195,7 @@ export function startServer({ environment = process.env, logger = console.log } 
     bombSystem,
     explosionSystem,
     respawnSystem,
+    crateRespawnSystem,
     botCommandDriver,
     shutdown,
   };

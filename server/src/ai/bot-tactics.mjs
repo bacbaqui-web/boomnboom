@@ -193,7 +193,6 @@ export function chooseBotTactic({
   target,
   players = [],
   bombs = [],
-  items = [],
   flames = [],
   currentTick = 0,
   terrain,
@@ -236,22 +235,6 @@ export function chooseBotTactic({
       alternatives,
       searches: planner.searches,
     };
-  }
-
-  const itemKeys = new Set(items.map((item) => cellKey(item.x, item.y)));
-  if (itemKeys.size > 0) {
-    const itemPath = planner.pathTo(
-      (x, y) => itemKeys.has(cellKey(x, y)),
-      { maxSteps: profile.itemSearchSteps, dangerLingerTicks: DEFAULT_FLAME_TICKS },
-    );
-    if (itemPath) {
-      return {
-        action: itemPath.directions[0] ?? "wait",
-        reason: "item",
-        alternatives: planner.safeDirections(),
-        searches: planner.searches,
-      };
-    }
   }
 
   const canBomb = mayPlaceBomb({ bot, bombs, currentTick, bombCooldownUntilTick });

@@ -206,7 +206,7 @@ test("moving into a live flame applies the same damage and shield rules", () => 
   assert.equal(world.getPlayer("SHIELDED").shield, 0);
 });
 
-test("a crate destroyed by an explosion remains floor on later world ticks", () => {
+test("legacy explosion queues a destroyed crate for the fixed respawn system", () => {
   const world = createTestWorld({ crates: [[1, 1]] });
   addPlayer(world, { id: "P1", x: 0, y: 1, range: 2 });
   const simulation = createGameSimulation({ world, initialTick: 0, bombFuseTicks: 1 });
@@ -215,11 +215,17 @@ test("a crate destroyed by an explosion remains floor on later world ticks", () 
   world.updatePlayer("P1", { x: 10, y: 10, prevX: 10, prevY: 10 });
   simulation.advanceToTick(1);
   assert.equal(world.readTerrainTile(1, 1), "floor");
-  const revision = world.readChunkSnapshot(0, 0).revision;
+  assert.deepEqual(world.drainDestroyedCrates(), [{ x: 1, y: 1 }]);
+});
 
-  simulation.advanceToTick(20);
-  assert.equal(world.readTerrainTile(1, 1), "floor");
-  assert.equal(world.readChunkSnapshot(0, 0).revision, revision);
+test("legacy AI movement does not consume or gain stats from an item", () => {
+  const world = createTestWorld();
+  addPlayer(world, { id: "BOT-1", x: 0, y: 0, isAI: true, range: 1 });
+  world.setItem({ id: "DROP", x: 1, y: 0, type: "flame" });
+  const simulation = createGameSimulation({ world, moveIntervalMs: 0 });
+  simulation.applyAction("BOT-1", "right", { now: 1 });
+  assert.equal(world.getPlayer("BOT-1").range, 1);
+  assert.equal(world.getItemAt(1, 0).id, "DROP");
 });
 
 test("late timer catch-up advances each missed bomb tick exactly once", () => {

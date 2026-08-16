@@ -190,8 +190,10 @@ remote interpolation은 latest arrival에서 target으로 새 easing을 시작�
   state를 canonical Map에 섞지 않는다.
 - `snapshotSeq`, `eventSeq`, chunk revision과 lifeId stale 검사를 각각 수행한다.
 - moving entity sample 때문에 terrain subscriber를 갱신하지 않는다.
-- preload 반경 2의 25개 chunk는 Store에 유지하되, TerrainLayer는 local player 중심
-  반경 1의 9개 chunk만 DOM으로 만든다. cache와 render 범위를 같은 것으로 취급하지 않는다.
+- preload 반경 2의 25개 chunk는 Store에 유지하되, TerrainLayer는 viewport와 실제로
+  겹치는 최대 4개 chunk만 DOM으로 만든다. floor 256칸은 chunk당 하나의 고정 CSS
+  checkerboard 배경으로 그리고 wall, crate와 crate warning만 개별 DOM으로 만든다.
+  cache와 render 범위를 같은 것으로 취급하지 않는다.
 
 ## 10. Pending Bomb Presentation
 

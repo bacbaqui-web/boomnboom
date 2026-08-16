@@ -37,8 +37,10 @@ generic command framework, ECS, event bus와 전체 world rollback은 만들지 
 - AI는 500ms마다 canonical read snapshot 하나와 공용 danger map 하나로 전술 intent를
   다시 고른다. 결과는 Bot Command Driver가 다음 fixed tick의 공용 Command Buffer에
   넣으므로, AI도 사람과 같은 30Hz 이동·충돌·폭탄 권한 경로를 사용한다.
-- AI의 우선순위는 `생존 탈출 → 안전한 아이템 → 탈출 가능한 공격/상자 폭탄 →
+- AI의 우선순위는 `생존 탈출 → 탈출 가능한 공격/상자 폭탄 →
   공격 위치 추적 → 상자 접근 → 안전한 배회`로 고정한다.
+- AI는 아이템을 목표로 삼거나 획득하지 않으며 bomb/range/shield/speed 시작 능력치를
+  유지한다. 아이템은 사람 플레이어만 소비할 수 있다.
 - danger map은 active flame과 bomb의 `explodeTick`, chain reaction과 flame lifetime을
   cell별 시간 구간으로 투영한다. 경로 탐색은 도착 tick에 위험한 cell을 통과하지
   않으며 탐색 반경과 방문 수가 bounded다.
@@ -47,9 +49,9 @@ generic command framework, ECS, event bus와 전체 world rollback은 만들지 
   때만 authoritative bomb command를 만든다.
 - bot별 Runtime memory는 짧은 목표 고정, 최근 방향과 막힘 횟수, bomb cooldown만
   가진다. canonical World Owner에 AI 계획 상태를 저장하지 않는다.
-- 성향은 rookie/balanced/hunter 세 profile의 bounded tuning 차이만 사용한다. 실수는
-  결정적인 낮은 빈도의 비최적 안전 이동이며, 위험 탈출과 폭탄 안전성에는 적용하지
-  않는다.
+- 성향은 rookie/balanced/hunter 세 profile의 bounded tuning 차이만 사용한다. 현재
+  밸런스는 탐색 6~10칸, 폭탄 cooldown 30~45 tick과 비교적 잦은 deterministic
+  비최적 안전 이동을 쓰며, 위험 탈출과 폭탄 안전성에는 적용하지 않는다.
 
 ### Catch-up
 
@@ -182,8 +184,9 @@ Unity의 command slack과 같은 목적이며 별도 local key delay가 아니�
 8. explosion cells와 crate mutation 계산
 9. explosion damage, shield, death와 AI drop/respawn
 10. flame lifetime 갱신
-11. World Owner mutation batch commit
-12. action result, world event와 snapshot publication 후보 생성
+11. 파괴된 crate 복구 예약, 3초 전 warning과 예정 tick 복구
+12. World Owner mutation batch commit
+13. action result, world event와 snapshot publication 후보 생성
 
 같은 tick의 결과는 socket callback 순서가 아니라 `(targetTick, playerId, commandSeq)`의
 안정적인 정렬 규칙으로 고정한다.
@@ -208,6 +211,17 @@ Unity의 command slack과 같은 목적이며 별도 local key delay가 아니�
 
 폭발과 flame damage는 exact server tick 현재 위치로 판정한다. shooter식 rewind와
 과거 위치 damage를 사용하지 않는다.
+
+## 8.1 Crate Respawn
+
+- World Owner는 `destroyCrate` 성공 mutation을 한 번만 queue한다.
+- Crate Respawn System은 파괴 tick 기준 9초 뒤 warning 후보를 평가한다.
+- 살아 있는 사람 또는 AI가 crate 좌표의 Chebyshev 반경 4 이내에 있으면 warning만
+  미루며 floor는 계속 이동 가능하다.
+- warning을 commit한 실제 tick에서 90 fixed tick 뒤 crate를 복구한다. 그 사이
+  플레이어가 들어와도 복구 시각은 바꾸지 않는다.
+- warning과 restore는 같은 chunk revision/delta 계약을 사용하며 새 protocol message를
+  만들지 않는다.
 
 ## 9. Correction을 위한 Server State
 
