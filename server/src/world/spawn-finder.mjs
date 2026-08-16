@@ -43,8 +43,25 @@ function selectSpawnAnchor(players, spawnNumber) {
   const activePlayers = players.filter((player) => player.alive);
   const activeHumans = activePlayers.filter((player) => !player.isAI && player.joined !== false);
   const candidates = activeHumans.length > 0 ? activeHumans : activePlayers;
-  if (candidates.length === 0) return { x: 1, y: 1 };
+  if (candidates.length === 0) return null;
   return candidates[(Math.max(1, spawnNumber) - 1) % candidates.length];
+}
+
+function finiteCenter(world) {
+  const { worldWidth, worldHeight } = world.metadata ?? {};
+  if (!Number.isSafeInteger(worldWidth) || !Number.isSafeInteger(worldHeight)) {
+    return { x: 1, y: 1 };
+  }
+  return { x: Math.floor(worldWidth / 2), y: Math.floor(worldHeight / 2) };
+}
+
+function clampToFiniteWorld(world, cell) {
+  const { worldWidth, worldHeight } = world.metadata ?? {};
+  if (!Number.isSafeInteger(worldWidth) || !Number.isSafeInteger(worldHeight)) return cell;
+  return {
+    x: Math.max(1, Math.min(worldWidth - 2, cell.x)),
+    y: Math.max(1, Math.min(worldHeight - 2, cell.y)),
+  };
 }
 
 export function findSpawn({
@@ -56,19 +73,19 @@ export function findSpawn({
   minimumPlayerDistance = DEFAULT_MINIMUM_PLAYER_DISTANCE,
 }) {
   const activePlayers = players.filter((player) => player.alive);
-  const anchor = selectSpawnAnchor(players, spawnNumber);
+  const anchor = selectSpawnAnchor(players, spawnNumber) ?? finiteCenter(world);
   const targets = [];
-  if (isAI && activePlayers.length === 0) targets.push({ x: 1, y: 1 });
+  if (isAI && activePlayers.length === 0) targets.push(anchor);
 
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const distance =
       TARGET_DISTANCE_MIN +
       ((spawnNumber * 7 + attempt * 5) % TARGET_DISTANCE_SPAN);
     const angle = spawnNumber * 2.399 + attempt * 0.73;
-    targets.push({
+    targets.push(clampToFiniteWorld(world, {
       x: Math.round(anchor.x + Math.cos(angle) * distance),
       y: Math.round(anchor.y + Math.sin(angle) * distance),
-    });
+    }));
   }
 
   for (const target of targets) {

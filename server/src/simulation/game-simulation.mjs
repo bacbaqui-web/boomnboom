@@ -33,6 +33,7 @@ export class GameSimulation {
   #nextPlayerNumber = 1;
   #nextBotNumber = 1;
   #nextBombNumber = 1;
+  #nextSpawnNumber = 1;
 
   constructor({
     world,
@@ -55,7 +56,7 @@ export class GameSimulation {
       world: this.#world,
       players: this.#world.readPlayers(),
       bombs: this.#world.readBombs(),
-      spawnNumber: isAI ? this.#nextBotNumber : this.#nextPlayerNumber,
+      spawnNumber: this.#nextSpawnNumber++,
       isAI,
     });
   }

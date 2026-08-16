@@ -68,7 +68,7 @@ test("render preview fills the next fixed tick without mutating prediction", () 
   assert.equal(predictor.predictedTick, 1);
 });
 
-test("owner snapshots ACK input and update metadata without correcting local position", () => {
+test("owner snapshots restore authority and replay still-pending input", () => {
   const predictor = new LocalMovementPredictor();
   const timeline = new CommandTimeline();
   predictor.reset(owner({ seq: 1 }));
@@ -79,12 +79,18 @@ test("owner snapshots ACK input and update metadata without correcting local pos
   predictor.advanceTo(6, timeline.pending, openWorld);
   const localPosition = predictor.position;
   timeline.acknowledge(0);
-  const result = predictor.observeOwnerSnapshot(
-    owner({ tick: 2, seq: 2, px: -4096, vx: 0, ack: 0, speedLevel: 1 }),
+  const result = predictor.reconcile(
+    owner({ tick: 2, seq: 2, px: 512, vx: 0, ack: 0, speedLevel: 1 }),
+    timeline.pending,
+    openWorld,
   );
   assert.equal(result.applied, true);
-  assert.deepEqual(predictor.position, localPosition);
-  assert.equal(predictor.observeOwnerSnapshot(owner({ tick: 1, seq: 1 })).reason, "stale");
+  assert.notDeepEqual(predictor.position, localPosition);
+  assert.deepEqual(predictor.position, { x: 0, y: 0 });
+  assert.equal(
+    predictor.reconcile(owner({ tick: 1, seq: 1 }), timeline.pending, openWorld).reason,
+    "stale",
+  );
 });
 
 test("reconnect and lifecycle reset clear prediction history", () => {

@@ -33,7 +33,7 @@ export function createChunkPublisher({
   function nextInterest(session) {
     const player = world.getPlayer(session.playerId);
     return player
-      ? chunkInterestForPlayer(player, chunkSize, preloadRadius)
+      ? chunkInterestForPlayer(player, chunkSize, preloadRadius, world.metadata)
       : new Set();
   }
 

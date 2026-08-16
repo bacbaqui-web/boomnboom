@@ -1,55 +1,45 @@
-# Local Presentation and 30Hz Snapshot Sprint
+# Fixed World and Authoritative Reconciliation Sprint
 
 ## 상태
 
 - 구현·로컬 검증: PASS
-- commit/push와 Oracle·Sites 배포: PASS
+- commit/push와 Oracle·Sites 배포: PENDING
 
 ## 목표
 
-내 화면의 플레이어 위치는 일반 owner snapshot으로 되감거나 보정하지 않고 local
-prediction만 표시한다. 칸 이동은 첫 tick부터 정속으로 실행하며 V3 remote 위치
-snapshot을 15Hz에서 30Hz로 높인다.
+production 월드를 256×256 유한 맵으로 고정하고 모든 타일을 server boot에서 확정한다.
+local prediction은 즉시 반응을 유지하되 30Hz owner snapshot에서 authoritative state를
+복원하고 pending input만 replay해 폭탄·충돌 위치가 누적해서 어긋나지 않게 한다.
 
 ## 구현 Manifest
 
-1. owner snapshot은 ACK와 stat 갱신에만 쓰고 local presentation `px/py`를 바꾸지 않는다.
-2. join, respawn, reconnect, 새 `lifeId`와 teleport만 새 시작 위치로 reset한다.
-3. gameplay movement config의 acceleration/deceleration을 최대속도와 같게 해 첫 tick부터
-   초당 3칸 정속을 사용한다.
-4. V3 owner/entity snapshot을 30Hz fixed simulation 매 tick 발행한다.
-5. V2 rollback의 dirty publication cadence와 server gameplay authority는 유지한다.
-6. 사용되지 않는 Correction Smoother와 해당 test를 제거한다.
+1. `world-bounds.mjs`가 production 256×256 bounds와 chunk range를 소유한다.
+2. 서버 시작 시 16×16 청크 256개를 전부 materialize하고 유한 맵에서는 trim하지 않는다.
+3. 외곽 한 칸과 bounds 바깥은 permanent wall이며 interest는 0..15 청크로 제한한다.
+4. `world_init`에 `worldWidth/worldHeight`를 전달하고 새 world ID로 client cache를 분리한다.
+5. spawn/respawn은 기존 지형을 바꾸지 않으며 매 spawn sequence마다 다른 안전 후보를 쓴다.
+6. local predictor는 owner snapshot restore 뒤 ACK되지 않은 input만 shared movement core로 replay한다.
+7. render-only correction은 0.75칸 이하 차이를 100~180ms에 흡수하고 큰 수명 전환은 snap한다.
+8. bomb preview cell은 보정된 화면 transform이 아니라 reconcile된 simulation position을 쓴다.
 
 ## Preserve와 위험
 
-- 폭탄 설치, 아이템 획득, 충돌, damage와 다른 client가 보는 위치는 server authority다.
-- local presentation과 server 위치가 달라도 일반 snapshot으로 자동 수렴하지 않는다.
-  이 차이는 이번 요청의 명시적 계약이며 이후 divergence metric으로 관찰한다.
-- 30Hz full entity snapshot은 기존 15Hz보다 전송·직렬화량이 약 두 배다. 현재 소규모
-  운영에서는 허용하되 동접 증가 전 interest/delta projection을 우선한다.
+- server authority, 30Hz movement/snapshot, 초당 3칸, V2 rollback, AI, 폭탄·아이템·상자
+  복구와 BGM 계약을 보존한다.
+- client에는 주변 청크만 전송해 65,536개 타일 전체를 내려보내지 않는다.
+- 256청크 선행 materialize는 로컬에서 약 30ms, RSS 약 12MB가 추가됐다. Oracle 128MB
+  환경의 배포 후 RSS와 두 접속자 smoke를 확인해야 한다.
+- 일반 network jitter의 replay correction은 deterministic harness에서 0.5칸 이하다.
 
 ## 검증 결과
 
-- root production build와 client test 91/91 PASS
-- server regression 106/106 PASS
-- 200/300ms RTT, jitter와 300ms receive stall에서 owner snapshot local 이동 0
-- 첫 gameplay tick에서 speed level별 최고속도 적용 확인
-- 실제 V3 gateway owner snapshot tick `2,3,4` 연속 발행 확인
-- ESLint와 TypeScript PASS
+- root production build와 client test 93/93 PASS
+- server regression 109/109 PASS
+- 200/300ms RTT, 50ms jitter와 receive stall replay correction 0.5칸 이하
+- finite 256청크 1회 materialize, perimeter wall, bounded interest/spawn PASS
+- ESLint, TypeScript, source 500줄 미만과 `git diff --check` PASS
 
 ## Rollback
 
-local owner reconcile/Correction Smoother를 복원하고 gameplay acceleration tuning과 V3
-snapshot cadence를 이전 15Hz로 되돌리는 client+server 단위다. V2 path와 protocol schema는
-바뀌지 않아 직전 Oracle/Sites version으로 각각 복구할 수 있다.
-
-## 배포 결과
-
-- GitHub `main` 구현 commit `e7a3c26` push 완료
-- Oracle staging server regression 106/106 PASS 후 service 재시작
-- Oracle V3 `snapshotRate: 30`, 연속 owner tick `2220,2221,2222`와 V2 input ACK 확인
-- Oracle health `ok`, fixed backlog 0, 최근 step 0ms, RSS 약 80MB
-- 이전 server/shared는
-  `/home/ubuntu/deploy-backups/boomnboom-20260816-local-correction-before-e7a3c26`에 보존
-- Sites version 68 production 배포와 공개 페이지 HTTP 200 확인
+Oracle server를 직전 unbounded world build로 되돌리고 Sites client를 직전
+correction-free build로 되돌리는 두 단계다. world ID가 달라 client chunk cache가 섞이지 않는다.

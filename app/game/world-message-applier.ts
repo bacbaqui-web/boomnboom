@@ -107,6 +107,8 @@ export function applyWorldMessage(
       seed: numberField(message, "seed"),
       generatorVersion: identityField(message, "generatorVersion"),
       chunkSize: numberField(message, "chunkSize", 16),
+      worldWidth: Number.isSafeInteger(message.worldWidth) ? Number(message.worldWidth) : null,
+      worldHeight: Number.isSafeInteger(message.worldHeight) ? Number(message.worldHeight) : null,
       preloadRadius: numberField(message, "preloadRadius", 2),
       visibleWidth: numberField(message, "visibleWidth", 15),
       visibleHeight: numberField(message, "visibleHeight", 11),
@@ -119,7 +121,9 @@ export function applyWorldMessage(
     const sameWorld =
       previous?.worldId === metadata.worldId &&
       previous.generatorVersion === metadata.generatorVersion &&
-      previous.chunkSize === metadata.chunkSize;
+      previous.chunkSize === metadata.chunkSize &&
+      previous.worldWidth === metadata.worldWidth &&
+      previous.worldHeight === metadata.worldHeight;
     const removedChunks = sameWorld ? [] : [...state.chunks.keys()];
     if (!sameWorld) state.chunks.clear();
     state.entities.clear();

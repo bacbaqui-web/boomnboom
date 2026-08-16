@@ -81,6 +81,8 @@ export function createV3SessionFlow({
       seed: world.metadata.seed,
       generatorVersion: world.metadata.generatorVersion,
       chunkSize: world.metadata.chunkSize,
+      worldWidth: world.metadata.worldWidth,
+      worldHeight: world.metadata.worldHeight,
       preloadRadius,
       tickRate: simulationTickRate,
       snapshotRate,

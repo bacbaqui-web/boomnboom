@@ -43,8 +43,8 @@ Browser
 - `tests/fixtures/movement-golden-fixture.mjs`: client/server 공용 결정적 tick fixture
 
 server fixed movement와 client local predictor가 이 코어를 함께 사용한다. canonical
-state는 server만 commit하고 client는 correction-free local presentation에 같은 수식을
-사용한다.
+state는 server만 commit하고 client는 owner snapshot restore 뒤 pending input replay에
+같은 수식을 사용한다.
 
 ## 2. 웹 클라이언트 — `app/`
 
@@ -83,7 +83,8 @@ state는 server만 commit하고 client는 correction-free local presentation에 
 - `input-sampler.ts`: V3 key state 변경 즉시 전송과 250ms held-direction heartbeat
 - `command-timeline.ts`: 전송 성공한 V3 command sequence와 bounded pending queue
 - `local-movement-predictor.ts`: shared movement fixed tick, owner ACK/stat 관찰,
-  correction-free local state와 다음 1-tick render preview
+  authoritative restore, pending replay와 다음 1-tick render preview
+- `correction-smoother.ts`: simulation을 바꾸지 않는 100~180ms render offset 감쇠
 - `protocol-v3.ts`: V3 client envelope parse, fixed entity projection과 typed command
 - `remote-snapshot-buffer.ts`: 원격 player별 bounded absolute history, 보간/외삽/freeze
 - `render-frame-coordinator.ts`: viewport의 단일 rAF frame을 render listener에 전달
@@ -207,24 +208,28 @@ AI module은 World Owner를 mutation하지 않고 사람과 같은 방향/폭탄
 
 ### `server/src/world/chunk-generator.mjs`
 
-- absolute coordinate, seed와 generator version 기반 deterministic terrain
+- 256×256 bounds, absolute coordinate, seed와 generator version 기반 deterministic terrain
 - 기존 permanent wall 규칙 유지
 - 이웃 좌표를 함께 평가해 특정 청크 경계에 빈 줄을 만들지 않는 crate 생성
 - 청크 전체 plain tile payload 생성
 
 ### `server/src/world/world-owner.mjs`
 
-- 16×16 canonical materialized chunk registry와 monotonic revision
+- production 시작 시 전부 확정하는 16×16 청크 256개와 monotonic revision
 - player, bomb, item, flame entity registry의 유일한 소유자
 - tile rectangle, entity snapshot과 mutation command 제공
-- player 주변 반경 2청크 materialize와 base-only cold chunk trim
+- 유한 맵 전체 resident, 관심 영역은 network projection에서만 제한
 - 외부에는 Map과 mutable canonical object를 반환하지 않음
 - `commitPlayerMovement`: fixed-point state를 canonical player에 쓰고 V2 호환 정수 cell 파생
 
 ### `server/src/world/spawn-finder.mjs`
 
-- 현재 terrain, player와 bomb read snapshot에서 안전한 floor 검색
+- 매 spawn sequence마다 달라지는 bounded 후보에서 안전한 floor 검색
 - spawn 때문에 crate나 wall을 삭제하지 않음
+
+### `server/src/world/world-bounds.mjs`
+
+- production 256×256 크기, cell 경계와 유효 chunk range 계산
 
 ### `server/src/network/protocol-v2.mjs`
 
@@ -255,9 +260,9 @@ AI module은 World Owner를 mutation하지 않고 사람과 같은 방향/폭탄
 
 ### 현재 지형 흐름
 
-1. player 주변 청크를 World Owner가 최초 접근에서 materialize한다.
+1. server boot에서 256×256 전체 타일과 256청크를 한 번 materialize한다.
 2. 이동·충돌·폭발은 World Owner의 canonical tile을 읽는다.
-3. crate 파괴가 해당 chunk revision을 증가시키며 이후 자동 복구하지 않는다.
+3. crate 파괴·warning·12초 복구가 해당 chunk revision을 증가시킨다.
 4. Gateway는 V2 구독자에게 changed chunk delta만 보내며 viewer별 tile matrix를
    만들지 않는다.
 
@@ -358,8 +363,8 @@ serializer를 제거했다.
   movement의 client/server golden 결과, 목표 칸 완주, 중심선, 동적 sweep, 음수 좌표와
   tick wrap 계약
 - `tests/clock-sync`, `command-timeline`, `local-movement-predictor`,
-  `game-socket-v3`, `v3-network-harness`: V3 correction-free local prediction,
-  ACK/reset과 200/300ms RTT·jitter 계약
+  `correction-smoother`, `game-socket-v3`, `v3-network-harness`: V3 authority replay,
+  render-only 보정과 200/300ms RTT·jitter 계약
 - `tests/remote-snapshot-buffer.test.mjs`: 15Hz→60/120Hz 일정 속도, stale/drop/stall,
   100ms 외삽 상한, lifecycle snap과 terrain selector 격리
 - `tests/pending-bomb-presenter`, `explosion-event-presenter`, `death-event-presenter`:
@@ -370,7 +375,8 @@ serializer를 제거했다.
   late join, 실제 1013→resume와 identity-free metrics
 - `tests/input-runtime.test.mjs`: movement hold/stop/bomb/unmount cleanup 2건
 - `server/test/coordinates.test.mjs`, `chunk-generator.test.mjs`: 음수 좌표와 결정적 경계 생성
-- `server/test/world-owner.test.mjs`, `spawn-finder.test.mjs`: canonical revision/metric과 spawn non-mutation
+- `server/test/world-owner.test.mjs`, `spawn-finder.test.mjs`, `chunk-interest.test.mjs`:
+  canonical revision, 256청크 resident, bounded spawn/interest
 - `server/test/game-simulation.test.mjs`: 이동 cadence/collision/item, 폭탄,
   폭발 순간·live flame 접촉 damage, shield/death/AI drop·respawn, 사람 death 무드롭과 respawn 능력치 초기화
 - `server/test/item-lifecycle-system.test.mjs`: 10초 stamp/expiry, 선획득과 uint32 wrap
@@ -392,15 +398,15 @@ serializer를 제거했다.
 
 | 목표 책임 | 현재 상태 |
 |---|---|
-| 단일 World Owner | 16×16 chunk/entity registry 구현 완료 |
-| materialized shared chunk | absolute-coordinate generator와 revision 구현 완료 |
+| 단일 World Owner | 256×256 fixed map의 16×16 chunk/entity registry 구현 완료 |
+| materialized shared chunk | 부팅 시 전체 256청크 확정과 revision 구현 완료 |
 | chunk revision/snapshot/delta | V2 server/client delta/resync 구현, viewer tile matrix 제거 |
 | server simulation boundary | gameplay/tick은 Simulation, AI는 bounded read-only tactical modules로 분리 완료 |
 | Protocol V3 prediction/authority | 기본 V3와 V2 rollback client 공개 배포 완료 |
 | client chunk/entity store | revision 검증 external Store 구현 완료 |
 | terrain/entity/camera layer | fixed chunk / entity / rAF camera로 분리 완료 |
-| bounded lifecycle metrics | base-only cold trim, health count와 production 10분 soak PASS |
-| behavior regression tests | server 63건 + root build/client 65건 검증 |
+| bounded lifecycle metrics | 256청크 resident와 health count 관찰 |
+| behavior regression tests | server 109건 + root build/client 93건 검증 |
 
 7단계 배포와 10분 운영 관찰을 완료했다. V2는 첫 V3 release의 즉시 rollback을 위해
 유지하며, 더 긴 live traffic 관찰 뒤 별도 cleanup Sprint에서 제거 여부를 판단한다.

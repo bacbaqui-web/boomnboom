@@ -88,3 +88,16 @@ test("item metadata updates only the item at the addressed cell", () => {
   assert.equal(world.getItemAt(2, 1).expireTick, undefined);
   assert.equal(world.updateItemAt(9, 9, { expireTick: 300 }), false);
 });
+
+test("finite world materializes every canonical tile once and blocks its perimeter", () => {
+  const world = createWorldOwner({ worldWidth: 256, worldHeight: 256 });
+  assert.equal(world.materializeAll(), 256);
+  assert.equal(world.readMetrics().chunks, 256);
+  assert.equal(world.readTerrainTile(-1, 128), "wall");
+  assert.equal(world.readTerrainTile(256, 128), "wall");
+  assert.equal(world.readTerrainTile(0, 128), "wall");
+  assert.equal(world.readTerrainTile(255, 128), "wall");
+  assert.equal(world.readMaterializedChunkKeys().some((key) => key.startsWith("-1,")), false);
+  assert.equal(world.trimColdChunks({ maxChunks: 1 }), 0);
+  assert.equal(world.readMetrics().chunks, 256);
+});

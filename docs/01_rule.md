@@ -14,8 +14,9 @@
 
 ## 2. 공유 월드
 
-- 월드는 유한한 화면 배열이 아니라 정수 월드 좌표로 이어지는 희소 청크 집합이다.
-- 서버에서 처음 materialize한 청크는 해당 수명 동안 확정된 월드 데이터다.
+- production 월드는 `256×256` 절대 타일 좌표의 유한한 공유 맵이다.
+- 서버 시작 시 16×16 청크 256개와 모든 wall/crate/floor를 한 번 materialize해
+  해당 프로세스 수명 동안 확정한다.
 - 같은 `worldId`, `chunkKey`, `revision`은 모든 접속자에게 같은 내용을 뜻한다.
 - 화면 밖을 포함한 주변 청크를 미리 준비하고 클라이언트는 그중 viewport만 잘라
   보여준다.
@@ -41,8 +42,8 @@
 - 타일 변화가 생기면 청크 `revision`을 단조 증가시킨다.
 - 전체 snapshot은 최초 로딩 또는 revision 복구에만 사용하고 일반 변화는
   delta로 전달한다.
-- 활성 플레이어보다 넓은 구역을 materialize하되 사용하지 않는 청크는 명시적
-  retention 정책으로 해제한다.
+- 클라이언트에는 플레이어 주변 청크만 전송하지만 이는 관심 영역 최적화이며
+  서버의 전체 맵 소유권과 타일 배치를 바꾸지 않는다.
 
 ## 5. 이동과 게임 판정
 
@@ -109,8 +110,9 @@
 - 지형, 움직이는 entity, 카메라와 HUD를 별도 렌더링 책임으로 둔다.
 - 지형은 chunk revision이 바뀔 때만 갱신한다.
 - authoritative server movement와 local presentation movement를 구분한다.
-- local player 화면은 owner snapshot의 위치로 되감거나 보정하지 않고 local prediction만
-  표시한다. 단, join·respawn·reconnect·새 `lifeId`는 새 수명 기준으로 초기화한다.
+- local player 판정 위치는 owner snapshot을 기준으로 미처리 입력을 다시 실행해
+  server authority에 수렴한다. 화면 위치는 별도 render offset으로 짧게 보정해
+  순간이동처럼 보이지 않게 한다.
 - server는 폭탄·아이템·충돌·피해와 다른 접속자에게 보낼 위치의 authority를 유지한다.
 - remote player는 과거 server snapshot 사이를 보간한다.
 - 로컬 플레이어를 화면 중앙에 고정하고 카메라가 월드를 움직이는 것은
@@ -123,7 +125,7 @@
 ## 9. Persistence와 수명주기
 
 - 현재 Sprint의 live world authority는 단일 Oracle Node 프로세스의 메모리다.
-- base terrain은 `worldId + seed + generatorVersion`으로 복원 가능해야 한다.
+- base terrain은 `worldId + seed + generatorVersion + 256×256 bounds`로 복원 가능해야 한다.
 - 재시작 뒤 플레이어 연결, 폭탄, 아이템과 파괴된 상자를 보존하는 영속화는
   별도 제품 결정 없이는 추가하지 않는다.
 - 서버 재시작 시 live runtime은 초기화되지만 base terrain 좌표 결과와 영구

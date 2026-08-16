@@ -110,21 +110,22 @@ React state는 fixed snapshot과 gameplay event에서만 바꾸며 위치 transf
 1. stale snapshot 폐기
 2. `lastProcessedCommandSeq` 이하 pending command 제거
 3. `speedLevel`, 생존과 stat metadata 갱신
-4. 일반 snapshot의 `px/py/vx/vy`는 local presentation에 적용하지 않음
-5. join, respawn, reconnect, 새 `lifeId`와 teleport만 새 시작 위치로 reset
+4. snapshot의 fixed movement state를 복원하고 남은 pending input만 replay
+5. simulation 위치 차이는 즉시 canonical predictor에 반영
+6. join, respawn, reconnect, 새 `lifeId`와 teleport는 새 시작 위치로 reset
 
 local predictor는 remote player, bomb fuse, React state와 Audio를 replay하지 않는다.
 
-## 7. Correction-free Local Presentation
+## 7. Authoritative Reconciliation과 부드러운 화면 보정
 
 ```text
-renderPosition = localPredictedPosition
+simulationPosition = reconcile(ownerSnapshot) + replay(pendingInput)
+renderPosition = simulationPosition + decayingRenderOffset
 ```
 
-일반 owner snapshot은 local 카메라와 player presentation transform을 다시 목표로 잡지
-않는다. server 위치는 gameplay 판정과 remote client projection의 authority로 남는다.
-따라서 local/server 위치 차이는 숨기지 말고 metric으로 관찰해야 하며, 폭탄 설치·아이템
-획득·피해 결과는 server 결과를 따른다. 새 수명과 연결 baseline만 명시적으로 snap한다.
+작은 위치 차이는 이전 화면 위치를 offset으로 보존한 뒤 100~180ms 동안 0으로 줄인다.
+0.75칸 초과, teleport와 새 life는 즉시 snap한다. 폭탄 cell은 render offset이 아니라
+reconcile된 simulation position에서 계산하므로 화면과 서버 판정 차이가 누적되지 않는다.
 
 ## 8. Remote Snapshot Buffer
 
@@ -251,8 +252,8 @@ V3 전환과 같은 rollback 단위에서 다음 current runtime을 제거한다
 
 - keydown frame feedback과 다음 predicted tick 이동
 - command send 실패가 pending queue에 남지 않음
-- owner ACK 뒤 local presentation 위치 불변
-- 200/300ms RTT, 50ms jitter와 receive stall에서 local 위치 보정 0
+- owner ACK 뒤 authoritative restore와 pending replay
+- 200/300ms RTT, 50ms jitter와 receive stall에서 correction 0.5칸 이하
 - new lifeId, reconnect와 teleport reset
 - snapshot reorder, loss simulation, bounded extrapolation과 freeze
 - remote constant-speed render와 variable FPS

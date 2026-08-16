@@ -49,7 +49,12 @@ export function createWorldPublisher({
   function syncInterest(session, { initial = false } = {}) {
     const player = world.getPlayer(session.playerId);
     if (!player) return;
-    const nextInterest = chunkInterestForPlayer(player, chunkSize, preloadRadius);
+    const nextInterest = chunkInterestForPlayer(
+      player,
+      chunkSize,
+      preloadRadius,
+      world.metadata,
+    );
     const added = [...nextInterest].filter((key) => !session.interest.has(key));
     const removed = [...session.interest].filter((key) => !nextInterest.has(key));
     if (!initial && (added.length > 0 || removed.length > 0)) {
@@ -77,6 +82,8 @@ export function createWorldPublisher({
       seed: world.metadata.seed,
       generatorVersion: world.metadata.generatorVersion,
       chunkSize,
+      worldWidth: world.metadata.worldWidth,
+      worldHeight: world.metadata.worldHeight,
       preloadRadius,
       visibleWidth: 15,
       visibleHeight: 11,

@@ -24,9 +24,8 @@ test("client composes the authoritative WebSocket world from focused modules", a
   assert.match(viewport, /paintPlayerTravelPose/);
   assert.match(controller, /new PositionInterpolator\(1000 \/ 30\)/);
   assert.match(controller, /predictor\.previewNext/);
-  assert.match(controller, /predictor\.observeOwnerSnapshot\(owner\)/);
-  assert.doesNotMatch(controller, /predictor\.reconcile\(/);
-  assert.doesNotMatch(controller, /CorrectionSmoother/);
+  assert.match(controller, /predictor\.reconcile\(/);
+  assert.match(controller, /CorrectionSmoother/);
   assert.doesNotMatch(controller, /requestAnimationFrame/);
   assert.match(controller, /advanceRenderFrame/);
   assert.doesNotMatch(controller, /setInterval\(\(\) => \{\s*const predictor/);

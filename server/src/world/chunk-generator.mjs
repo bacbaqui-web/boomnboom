@@ -1,4 +1,5 @@
 import { chunkOrigin, DEFAULT_CHUNK_SIZE } from "./coordinates.mjs";
+import { isWorldBoundaryCell, isWorldCellInBounds } from "./world-bounds.mjs";
 
 export const DEFAULT_WORLD_SEED = 0x9e3779b9;
 export const DEFAULT_GENERATOR_VERSION = 1;
@@ -77,8 +78,15 @@ export function isBaseCrate(
 export function baseTileAt(
   x,
   y,
-  { seed = DEFAULT_WORLD_SEED, generatorVersion = DEFAULT_GENERATOR_VERSION } = {},
+  {
+    seed = DEFAULT_WORLD_SEED,
+    generatorVersion = DEFAULT_GENERATOR_VERSION,
+    worldWidth,
+    worldHeight,
+  } = {},
 ) {
+  const bounds = { worldWidth, worldHeight };
+  if (!isWorldCellInBounds(x, y, bounds) || isWorldBoundaryCell(x, y, bounds)) return "wall";
   if (isPermanentWall(x, y)) return "wall";
   return isBaseCrate(x, y, seed, generatorVersion) ? "crate" : "floor";
 }
@@ -89,6 +97,8 @@ export function generateChunk({
   chunkSize = DEFAULT_CHUNK_SIZE,
   seed = DEFAULT_WORLD_SEED,
   generatorVersion = DEFAULT_GENERATOR_VERSION,
+  worldWidth,
+  worldHeight,
 }) {
   const origin = chunkOrigin(chunkX, chunkY, chunkSize);
   const tiles = new Array(chunkSize * chunkSize);
@@ -97,6 +107,8 @@ export function generateChunk({
       tiles[localY * chunkSize + localX] = baseTileAt(origin.x + localX, origin.y + localY, {
         seed,
         generatorVersion,
+        worldWidth,
+        worldHeight,
       });
     }
   }

@@ -8,6 +8,11 @@ import {
   DEFAULT_WORLD_SEED,
   generateChunk as generateBaseChunk,
 } from "./chunk-generator.mjs";
+import {
+  finiteChunkRange,
+  hasFiniteWorldBounds,
+  isWorldCellInBounds,
+} from "./world-bounds.mjs";
 
 function cloneEntity(entity) {
   return entity ? { ...entity } : null;
@@ -18,6 +23,8 @@ export class WorldOwner {
   #seed;
   #generatorVersion;
   #generateChunk;
+  #worldWidth;
+  #worldHeight;
   #chunks = new Map();
   #players = new Map();
   #bombs = new Map();
@@ -32,11 +39,25 @@ export class WorldOwner {
     seed = DEFAULT_WORLD_SEED,
     generatorVersion = DEFAULT_GENERATOR_VERSION,
     generateChunk = generateBaseChunk,
+    worldWidth = null,
+    worldHeight = null,
   } = {}) {
     this.#chunkSize = chunkSize;
     this.#seed = seed;
     this.#generatorVersion = generatorVersion;
     this.#generateChunk = generateChunk;
+    this.#worldWidth = worldWidth;
+    this.#worldHeight = worldHeight;
+    if ((worldWidth === null) !== (worldHeight === null)) {
+      throw new TypeError("finite world width and height must be configured together");
+    }
+    if (
+      worldWidth !== null &&
+      (!Number.isSafeInteger(worldWidth) || worldWidth < 3 ||
+        !Number.isSafeInteger(worldHeight) || worldHeight < 3)
+    ) {
+      throw new RangeError("finite world dimensions must be safe integers of at least 3 tiles");
+    }
   }
 
   get metadata() {
@@ -44,6 +65,8 @@ export class WorldOwner {
       chunkSize: this.#chunkSize,
       seed: this.#seed,
       generatorVersion: this.#generatorVersion,
+      worldWidth: this.#worldWidth,
+      worldHeight: this.#worldHeight,
     };
   }
 
@@ -57,6 +80,8 @@ export class WorldOwner {
         chunkSize: this.#chunkSize,
         seed: this.#seed,
         generatorVersion: this.#generatorVersion,
+        worldWidth: this.#worldWidth,
+        worldHeight: this.#worldHeight,
       });
       if (!Array.isArray(tiles) || tiles.length !== this.#chunkSize * this.#chunkSize) {
         throw new Error(`Generator returned an invalid tile payload for ${key}`);
@@ -78,20 +103,38 @@ export class WorldOwner {
   }
 
   #chunkAndCell(x, y) {
+    if (!isWorldCellInBounds(x, y, this.metadata)) return null;
     const location = worldToChunk(x, y, this.#chunkSize);
     return { ...location, chunk: this.#ensureChunk(location.chunkX, location.chunkY) };
   }
 
   materializeAround(x, y, radius = 2) {
     const center = worldToChunk(x, y, this.#chunkSize);
+    const range = finiteChunkRange(this.metadata);
     const snapshots = [];
     for (let chunkY = center.chunkY - radius; chunkY <= center.chunkY + radius; chunkY += 1) {
       for (let chunkX = center.chunkX - radius; chunkX <= center.chunkX + radius; chunkX += 1) {
+        if (
+          range &&
+          (chunkX < range.minChunkX || chunkX > range.maxChunkX ||
+            chunkY < range.minChunkY || chunkY > range.maxChunkY)
+        ) continue;
         const chunk = this.#ensureChunk(chunkX, chunkY);
         snapshots.push({ key: chunk.key, revision: chunk.revision });
       }
     }
     return snapshots;
+  }
+
+  materializeAll() {
+    const range = finiteChunkRange(this.metadata);
+    if (!range) throw new Error("materializeAll requires finite world bounds");
+    for (let chunkY = range.minChunkY; chunkY <= range.maxChunkY; chunkY += 1) {
+      for (let chunkX = range.minChunkX; chunkX <= range.maxChunkX; chunkX += 1) {
+        this.#ensureChunk(chunkX, chunkY);
+      }
+    }
+    return this.#chunks.size;
   }
 
   readChunkSnapshot(chunkX, chunkY) {
@@ -115,7 +158,9 @@ export class WorldOwner {
   }
 
   readTerrainTile(x, y) {
-    const { chunk, index } = this.#chunkAndCell(x, y);
+    const located = this.#chunkAndCell(x, y);
+    if (!located) return "wall";
+    const { chunk, index } = located;
     return chunk.tiles[index];
   }
 
@@ -140,7 +185,9 @@ export class WorldOwner {
   }
 
   destroyCrate(x, y) {
-    const { chunk, index } = this.#chunkAndCell(x, y);
+    const located = this.#chunkAndCell(x, y);
+    if (!located) return false;
+    const { chunk, index } = located;
     if (chunk.tiles[index] !== "crate") return false;
     chunk.tiles[index] = "floor";
     chunk.revision += 1;
@@ -155,7 +202,9 @@ export class WorldOwner {
   }
 
   markCrateRespawnWarning(x, y) {
-    const { chunk, index } = this.#chunkAndCell(x, y);
+    const located = this.#chunkAndCell(x, y);
+    if (!located) return false;
+    const { chunk, index } = located;
     if (chunk.tiles[index] !== "floor") return false;
     chunk.tiles[index] = "crate_warning";
     chunk.revision += 1;
@@ -163,7 +212,9 @@ export class WorldOwner {
   }
 
   restoreCrate(x, y) {
-    const { chunk, index } = this.#chunkAndCell(x, y);
+    const located = this.#chunkAndCell(x, y);
+    if (!located) return false;
+    const { chunk, index } = located;
     if (chunk.tiles[index] !== "crate_warning") return false;
     chunk.tiles[index] = "crate";
     chunk.revision += 1;
@@ -296,6 +347,7 @@ export class WorldOwner {
   }
 
   trimColdChunks({ maxChunks = 512, retentionRadius = 3 } = {}) {
+    if (hasFiniteWorldBounds(this.metadata)) return 0;
     if (this.#chunks.size <= maxChunks) return 0;
     const protectedKeys = new Set();
     for (const player of this.#players.values()) {

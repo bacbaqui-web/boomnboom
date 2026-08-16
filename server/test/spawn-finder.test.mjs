@@ -45,3 +45,14 @@ test("human and AI spawns stay near an active human while preserving safe spacin
     assert.ok(Math.hypot(x, y) > 50);
   }
 });
+
+test("finite-world spawn stays inside the fixed perimeter", () => {
+  const world = createWorldOwner({ worldWidth: 32, worldHeight: 32 });
+  world.materializeAll();
+  for (let spawnNumber = 1; spawnNumber <= 12; spawnNumber += 1) {
+    const [x, y] = findSpawn({ world, spawnNumber, isAI: true });
+    assert.ok(x > 0 && x < 31);
+    assert.ok(y > 0 && y < 31);
+    assert.equal(world.readTile(x, y), "floor");
+  }
+});

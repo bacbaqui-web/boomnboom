@@ -24,21 +24,21 @@ World Owner
   └─ Mutation Journal / Runtime indexes
 ```
 
-월드는 화면 크기의 2차원 배열이 아니다. 정수 좌표 전체를 청크 단위로 나눈
-희소한 registry다. 접속자 수와 viewport 크기는 월드 데이터 모양을 바꾸지
-않는다.
+production 월드는 `0..255 × 0..255` 절대 타일 좌표의 유한한 registry다. 서버 시작 시
+16×16 청크 256개를 전부 확정하며 접속자 수와 viewport 크기는 월드 데이터 모양을
+바꾸지 않는다. 청크는 생성 단위가 아니라 전송·revision 단위로 계속 사용한다.
 
 ## 3. World Owner
 
 World Owner는 다음 command를 제공하는 단일 mutation boundary다.
 
-- player join, disconnect, respawn
+- player join, disconnect, bounded random respawn
 - movement intent 적용
 - bomb 설치
 - simulation tick 적용
 - AI intent 적용
 - item 획득
-- chunk materialize, retain, release
+- fixed chunk materialize와 snapshot/delta read
 - chunk snapshot과 delta read
 
 Generator는 새 청크 후보를 계산하지만 registry에 직접 넣지 않는다. Simulation은
@@ -54,6 +54,8 @@ Generator는 새 청크 후보를 계산하지만 registry에 직접 넣지 않�
 - 기준 단위는 `1 tile = 1024 movement units`이며 오른쪽/아래가 양수다.
 - cell 변환, 음수 좌표와 경계 tie-break는 shared helper 하나가 소유한다.
 - 화면용 local 좌표는 client projection에서만 계산한다.
+- production 유효 cell은 `0 ≤ x < 256`, `0 ≤ y < 256`이며 바깥과 한 칸짜리
+  perimeter는 permanent wall이다.
 
 ### 청크
 
@@ -93,19 +95,16 @@ WorldChunk
 
 ## 6. Materialization
 
-1. active player의 위치로 필요한 청크 범위를 계산한다.
-2. registry에 없는 청크만 generator에 요청한다.
-3. generator는 seed와 version으로 전체 청크 후보를 만든다.
-4. 청크 경계 밖 이웃 좌표까지 참고해 상자 밀도와 통로 규칙을 평가한다.
-5. World Owner가 결과를 canonical WorldChunk로 등록한다.
-6. 이후 같은 청크 요청은 등록된 instance와 revision을 사용한다.
+1. 서버 부팅 시 유한 chunk range `0..15 × 0..15`를 순서대로 생성한다.
+2. generator는 seed, version, absolute cell과 world bounds로 타일을 만든다.
+3. World Owner가 256개 청크를 canonical registry에 등록한다.
+4. 이후 이동·접속·카메라 변화는 새 타일이나 청크를 만들지 않는다.
+5. 타일 mutation은 기존 청크의 revision만 증가시킨다.
 
-서버는 플레이어가 실제 viewport 끝에 도착하기 전에 materialize한다. 기준 범위는
-각 active player의 현재 청크를 중심으로 다음과 같다.
+클라이언트 관심 영역 기준은 다음과 같다.
 
 - client initial/preload: 반경 2, 최대 5×5 청크
-- server active simulation: 반경 2
-- server retention: 반경 3 또는 마지막 사용 뒤 TTL
+- server canonical terrain: 전체 256청크 상시 resident
 
 정확한 수치는 부하 측정으로 조정할 수 있지만 `preload > viewport` 계약은
 유지한다.
@@ -124,7 +123,7 @@ WorldChunk
 
 ## 8. Spawn
 
-- spawn은 materialize된 월드의 유효한 floor를 검색한다.
+- spawn은 전체 확정 맵에서 매 spawn sequence마다 달라지는 bounded 후보를 검색한다.
 - 살아 있는 사람 player가 있으면 이를 우선 기준점으로 삼고, 사람과 AI 모두 대략
   7~12칸 거리의 후보에서 spawn한다. 사람이 없으면 살아 있는 AI를 기준점으로 삼는다.
 - 다른 살아 있는 player와 최소 거리, wall/crate/bomb 부재와 탈출 가능한 인접
@@ -138,9 +137,7 @@ WorldChunk
 
 - 폭발로 crate가 파괴되면 해당 tile은 floor가 된다.
 - 파괴 시 해당 chunk revision을 한 번 증가시킨다.
-- 자동 재생성 schedule과 warning projection은 만들지 않는다.
-- 파괴 mutation이 있는 청크는 별도 journal이 없는 동안 프로세스 수명 내에서
-  해제하지 않아 같은 live world에서 상자가 되살아나지 않게 한다.
+- 파괴 뒤 12초 복구와 3초 전 warning mutation을 같은 청크 revision으로 전달한다.
 - 서버 재시작 뒤 terrain mutation이 초기화되는 현재 비영속 계약은 유지한다.
 
 ## 10. Runtime index와 메모리
@@ -156,16 +153,15 @@ WorldChunk
 index는 canonical registry의 두 번째 원본이 아니며 mutation commit과 함께
 갱신하거나 재구축할 수 있어야 한다.
 
-청크 eviction은 다음을 모두 만족할 때만 가능하다.
+production 유한 맵은 프로세스 수명 동안 청크를 eviction하지 않는다. 실험용
+unbounded World Owner에서만 다음 조건으로 cold trim할 수 있다.
 
 - active/retention 범위 밖
 - subscriber 0
 - bomb, item과 flame 없음
 - 보존해야 할 mutation이 journal 또는 persistent snapshot에 반영됨
 
-첫 구현에서는 안전성을 위해 mutation이 있는 청크를 프로세스 수명 동안
-유지하고, base-only cold chunk부터 TTL/LRU로 해제한다. 메모리 상한과 청크 수는
-health/metrics에서 확인 가능해야 한다.
+메모리 상한과 전체 256청크 resident 수는 health/metrics에서 확인 가능해야 한다.
 
 ## 11. 금지 사항
 

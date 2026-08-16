@@ -15,6 +15,7 @@ import { createPlayerCommandBuffer } from "./simulation/player-command-buffer.mj
 import { createPlayerMovementSystem } from "./simulation/player-movement-system.mjs";
 import { createPlayerRespawnSystem } from "./simulation/player-respawn-system.mjs";
 import { createWorldOwner } from "./world/world-owner.mjs";
+import { DEFAULT_WORLD_HEIGHT, DEFAULT_WORLD_WIDTH } from "./world/world-bounds.mjs";
 import { createWorldTimeline } from "./world-timeline.mjs";
 
 export function startServer({ environment = process.env, logger = console.log } = {}) {
@@ -24,7 +25,11 @@ export function startServer({ environment = process.env, logger = console.log } 
     tickMs: config.tickMs,
   });
   const initialTimeline = timeline.at();
-  const world = createWorldOwner();
+  const world = createWorldOwner({
+    worldWidth: DEFAULT_WORLD_WIDTH,
+    worldHeight: DEFAULT_WORLD_HEIGHT,
+  });
+  world.materializeAll();
   const simulation = createGameSimulation({
     world,
     initialTick: initialTimeline.tick,
@@ -149,6 +154,7 @@ export function startServer({ environment = process.env, logger = console.log } 
     worldEpochMs: config.worldEpochMs,
     bgmDurationMs: config.bgmDurationMs,
     bgmSnareOffsetMs: config.bgmSnareOffsetMs,
+    worldId: "FINITE_WORLD_256_V1",
     commandBuffer,
     movementSystem,
     getV3Clock: fixedStepLoop.readClock,

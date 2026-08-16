@@ -85,7 +85,7 @@ function runNetworkScenario(rttMs, { stallFrom = null, stallTo = null } = {}) {
       if (!predictor.canApplySnapshot(packet.snapshot)) continue;
       const before = predictor.position;
       timeline.acknowledge(packet.snapshot.lastProcessedCommandSeq);
-      const result = predictor.observeOwnerSnapshot(packet.snapshot);
+      const result = predictor.reconcile(packet.snapshot, timeline.pending, openWorld);
       if (!result.applied) continue;
       const after = predictor.position;
       errors.push(Math.hypot(before.x - after.x, before.y - after.y));
@@ -95,19 +95,19 @@ function runNetworkScenario(rttMs, { stallFrom = null, stallTo = null } = {}) {
   return { errors, observedSnapshots, lead, pending: timeline.size };
 }
 
-test("300ms receive stall never lets owner snapshots move the local visual simulation", () => {
+test("300ms receive stall keeps authoritative replay corrections bounded", () => {
   const result = runNetworkScenario(300, { stallFrom: 30, stallTo: 39 });
   assert.ok(result.observedSnapshots >= 30);
-  assert.ok(result.errors.every((distance) => distance === 0));
+  assert.ok(result.errors.every((distance) => distance <= 0.5), JSON.stringify(result));
   assert.equal(result.pending, 0);
   assert.ok(result.lead <= 12);
 });
 
 for (const rttMs of [200, 300]) {
-  test(`${rttMs}ms RTT and 50ms-class jitter keep local presentation correction-free`, () => {
+  test(`${rttMs}ms RTT and 50ms-class jitter keep authoritative replay bounded`, () => {
     const result = runNetworkScenario(rttMs);
     assert.ok(result.observedSnapshots >= 40);
-    assert.ok(result.errors.every((distance) => distance === 0));
+    assert.ok(result.errors.every((distance) => distance <= 0.5), JSON.stringify(result));
     assert.equal(result.pending, 0);
     assert.ok(result.lead >= (rttMs === 200 ? 5 : 7));
   });

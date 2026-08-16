@@ -248,8 +248,9 @@ teleport
 ```
 
 server는 매 input packet에 ACK를 별도 전송하지 않고 30Hz owner snapshot에 처리한
-command sequence와 authoritative state를 piggyback한다. local presentation은 일반 owner
-snapshot의 위치로 되감지 않으며 ACK 이하 pending command 제거와 stat 갱신에 사용한다.
+command sequence와 authoritative state를 piggyback한다. client simulation은 snapshot
+state에서 ACK 이하 command를 제거하고 아직 처리되지 않은 입력만 다시 실행한다.
+화면 transform은 별도 render correction으로 기존 위치에서 짧게 수렴한다.
 bomb처럼 즉시 UI 결과가 필요한 edge action만 별도 `action_result`를 보낸다.
 
 사람 respawn은 새 생명 경계다. 위치·fixed motion·`lifeId`와 함께 폭탄 수, 화력,
@@ -274,7 +275,8 @@ bomb처럼 즉시 UI 결과가 필요한 edge action만 별도 `action_result`�
 - 음수 좌표, wall/crate/bomb/player sweep collision과 관통 0
 - 200/300ms RTT와 50ms jitter에서 target tick scheduling
 - late/missing/duplicate command와 bounded queue
-- owner ACK가 local presentation 위치를 변경하지 않음
+- owner ACK replay가 authoritative 이동 구간에 수렴하고 render correction이 simulation을
+  변경하지 않음
 - bomb placement cell, owner exit pass-through와 re-entry block
 - explosion 순간과 live flame 접촉 damage
 - tick catch-up 순서와 event-loop starvation 방지

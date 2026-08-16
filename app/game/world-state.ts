@@ -20,6 +20,8 @@ export type WorldMetadata = {
   seed: number;
   generatorVersion: string | number;
   chunkSize: number;
+  worldWidth: number | null;
+  worldHeight: number | null;
   preloadRadius: number;
   visibleWidth: number;
   visibleHeight: number;
