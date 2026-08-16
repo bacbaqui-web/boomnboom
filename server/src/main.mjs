@@ -10,6 +10,7 @@ import { createBombSystem } from "./simulation/bomb-system.mjs";
 import { createCrateRespawnSystem } from "./simulation/crate-respawn-system.mjs";
 import { createExplosionSystem } from "./simulation/explosion-system.mjs";
 import { createGameSimulation } from "./simulation/game-simulation.mjs";
+import { createItemLifecycleSystem } from "./simulation/item-lifecycle-system.mjs";
 import { createPlayerCommandBuffer } from "./simulation/player-command-buffer.mjs";
 import { createPlayerMovementSystem } from "./simulation/player-movement-system.mjs";
 import { createPlayerRespawnSystem } from "./simulation/player-respawn-system.mjs";
@@ -57,6 +58,7 @@ export function startServer({ environment = process.env, logger = console.log } 
   });
   const explosionSystem = createExplosionSystem({
     world,
+    itemLifetimeTicks: config.simulationTickRate * 10,
     respawnAI(playerId, tick) {
       const before = world.getPlayer(playerId);
       const result = simulation.respawnPlayer(playerId);
@@ -80,6 +82,10 @@ export function startServer({ environment = process.env, logger = console.log } 
     world,
     tickRate: config.simulationTickRate,
   });
+  const itemLifecycleSystem = createItemLifecycleSystem({
+    world,
+    tickRate: config.simulationTickRate,
+  });
 
   let gateway;
   let v2MovementDirty = false;
@@ -92,6 +98,7 @@ export function startServer({ environment = process.env, logger = console.log } 
     tickRate: config.simulationTickRate,
     maxCatchUpSteps: config.maxCatchUpSteps,
     onStep(serverTick) {
+      const itemLifecycle = itemLifecycleSystem.step(serverTick);
       const commands = commandBuffer.consumeTick(serverTick);
       const movement = movementSystem.step(serverTick, commands);
       const respawn = respawnSystem.step(serverTick, commands);
@@ -112,6 +119,7 @@ export function startServer({ environment = process.env, logger = console.log } 
         v2MovementDirty ||
         movement.cellChanged ||
         movement.itemChanged ||
+        itemLifecycle.changed ||
         respawn.changed ||
         bombs.changed ||
         explosion.changed ||
@@ -196,6 +204,7 @@ export function startServer({ environment = process.env, logger = console.log } 
     explosionSystem,
     respawnSystem,
     crateRespawnSystem,
+    itemLifecycleSystem,
     botCommandDriver,
     shutdown,
   };

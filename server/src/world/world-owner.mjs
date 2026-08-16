@@ -259,6 +259,13 @@ export class WorldOwner {
     this.#items.set(`${item.x},${item.y}`, cloneEntity(item));
   }
 
+  updateItemAt(x, y, changes) {
+    const item = this.#items.get(`${x},${y}`);
+    if (!item) return false;
+    Object.assign(item, changes);
+    return true;
+  }
+
   getItemAt(x, y) {
     return cloneEntity(this.#items.get(`${x},${y}`));
   }

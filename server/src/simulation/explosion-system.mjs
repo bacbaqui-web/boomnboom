@@ -30,6 +30,7 @@ function damageVisual(player, movementConfig) {
 export function createExplosionSystem({
   world,
   flameTicks = 15,
+  itemLifetimeTicks = 300,
   movementConfig = DEFAULT_MOVEMENT_CONFIG,
   respawnAI = () => false,
 } = {}) {
@@ -82,6 +83,8 @@ export function createExplosionSystem({
             x,
             y,
             type: dropType(player, tick),
+            spawnTick: tick,
+            expireTick: addNetTicks(tick, itemLifetimeTicks),
           });
           const respawned = respawnAI(player.id, tick);
           damaged.push({

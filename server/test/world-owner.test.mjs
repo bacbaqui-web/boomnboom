@@ -76,3 +76,15 @@ test("world metrics expose bounded chunk and entity categories", () => {
   assert.equal(metrics.bots, 1);
   assert.equal(metrics.entities, 5);
 });
+
+test("item metadata updates only the item at the addressed cell", () => {
+  const world = createWorldOwner({
+    generateChunk: ({ chunkSize }) => new Array(chunkSize * chunkSize).fill("floor"),
+  });
+  world.setItem({ id: "A", x: 1, y: 1, type: "bomb" });
+  world.setItem({ id: "B", x: 2, y: 1, type: "shield" });
+  assert.equal(world.updateItemAt(1, 1, { expireTick: 300 }), true);
+  assert.equal(world.getItemAt(1, 1).expireTick, 300);
+  assert.equal(world.getItemAt(2, 1).expireTick, undefined);
+  assert.equal(world.updateItemAt(9, 9, { expireTick: 300 }), false);
+});

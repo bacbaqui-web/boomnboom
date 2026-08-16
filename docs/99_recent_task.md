@@ -1,36 +1,22 @@
 # BOOMnBOOM 최근 작업 보고서
 
-## 최근 Task — AI 완화, 상자 복구와 남은 렌더 렉 제거
+## 최근 Task — AI 드롭 아이템 10초 만료
 
-### 사용자 관찰
+### 확인
 
-- 전술 AI가 아이템까지 획득하면서 사람보다 빠르게 강해졌다.
-- 상자가 영구히 사라져 전장이 너무 빨리 비었다.
-- 이전 rAF/culling 최적화 뒤에도 이동 중 체감 끊김이 남았다.
+- 운영 item 생성 경로는 V3와 V2 rollback의 AI 사망 처리뿐이다.
+- 아이템이 여기저기 남은 원인은 추가 생성기가 아니라 만료 규칙 부재였다.
 
-### 확인한 원인
+### 변경
 
-- AI가 사람과 같은 item collect 경로를 쓰고 Tactics가 안전한 item을 우선 탐색했다.
-- crate destruction 뒤 복구 상태를 소유하는 server system이 없었다.
-- 공개 health의 fixed catch-up backlog는 0으로 server tick 정체 증거는 없었다.
-- client는 보이는 최대 4청크만 골라도 청크마다 256개 floor DOM을 만들어, 최대
-  1,024개 바닥 요소를 camera transform과 함께 합성하고 있었다.
-
-### 구현 방향
-
-- AI는 item을 소비하거나 목표로 삼지 않고 시작 능력치를 유지한다.
-- 생존 탈출은 유지하고 탐색 예산·bomb cooldown·비최적 안전 선택만 완화한다.
-- 상자는 파괴 12초 뒤 복구하며 3초 전 warning 장판을 chunk revision으로 전송한다.
-- 새 warning은 살아 있는 player 주변 9×9에서 미루고, 이미 표시된 warning은 예정대로
-  3초 뒤 복구한다.
-- floor는 chunk CSS 배경 하나로 그리고 obstacle과 warning만 DOM으로 만든다.
+- V3 AI drop에 생성 tick과 10초 뒤 만료 tick을 기록한다.
+- V2 rollback drop도 다음 fixed step에서 같은 10초 수명을 받는다.
+- Item Lifecycle System이 만료 tick에 미획득 item을 World Owner에서 제거한다.
+- 사람 사망은 item을 만들지 않고, 먼저 획득한 item은 만료 처리로 되살아나지 않는다.
 
 ### 현재 상태
 
-- server 전체 회귀 101건 PASS
+- server 전체 regression 106건 PASS
 - root production build/client 92건, ESLint와 TypeScript PASS
-- source/test 500줄 미만, Node syntax와 `git diff --check` PASS
-- GitHub `main` 구현 commit `2e79cea` push 완료
-- Sites version 65와 Oracle server/shared 배포 완료
-- Oracle staging server 101건, 공개 V3·V2 input ACK, health `ok`, fixed backlog 0 확인
-- 기존 Oracle server/shared 복구본 보존, Edge에서 `?render=65` 최신 게임 열기 완료
+- source/test 500줄 미만, syntax와 `git diff --check` PASS
+- commit/push와 Sites/Oracle 배포는 진행 중

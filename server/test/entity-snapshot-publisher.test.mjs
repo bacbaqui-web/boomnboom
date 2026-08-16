@@ -33,7 +33,9 @@ test("entity snapshot includes exact fixed bomb, item, and flame state", () => {
     id: "V3-B1", x: 0, y: 0, owner: "P1", range: 2, fuse: 3,
     bornTick: 10, spawnTick: 10, explodeTick: 100, clockDomain: "v3",
   });
-  world.setItem({ id: "I1", x: 1, y: 0, type: "shield" });
+  world.setItem({
+    id: "I1", x: 1, y: 0, type: "shield", spawnTick: 10, expireTick: 310,
+  });
   world.replaceFlamesForDomain("v3", [{
     id: "F1", x: 2, y: 0, clockDomain: "v3", eventSeq: 0,
     startTick: 10, expireTick: 25,
@@ -66,5 +68,6 @@ test("entity snapshot includes exact fixed bomb, item, and flame state", () => {
   assert.equal(entities.bombs[0].fuse, 2);
   assert.equal(entities.bombs[0].explodeTick, 100);
   assert.equal(entities.items[0].id, "I1");
+  assert.equal(entities.items[0].expireTick, 310);
   assert.equal(entities.flames[0].eventSeq, 0);
 });

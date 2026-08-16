@@ -183,10 +183,11 @@ Unity의 command slack과 같은 목적이며 별도 local key delay가 아니�
 7. fuse 만료와 chain candidate 계산
 8. explosion cells와 crate mutation 계산
 9. explosion damage, shield, death와 AI drop/respawn
-10. flame lifetime 갱신
-11. 파괴된 crate 복구 예약, 3초 전 warning과 예정 tick 복구
-12. World Owner mutation batch commit
-13. action result, world event와 snapshot publication 후보 생성
+10. AI drop의 10초 expire tick 기록과 기존 item 만료
+11. flame lifetime 갱신
+12. 파괴된 crate 복구 예약, 3초 전 warning과 예정 tick 복구
+13. World Owner mutation batch commit
+14. action result, world event와 snapshot publication 후보 생성
 
 같은 tick의 결과는 socket callback 순서가 아니라 `(targetTick, playerId, commandSeq)`의
 안정적인 정렬 규칙으로 고정한다.
@@ -222,6 +223,15 @@ Unity의 command slack과 같은 목적이며 별도 local key delay가 아니�
   플레이어가 들어와도 복구 시각은 바꾸지 않는다.
 - warning과 restore는 같은 chunk revision/delta 계약을 사용하며 새 protocol message를
   만들지 않는다.
+
+## 8.2 Item Lifecycle
+
+- item 생성 command는 AI death branch에만 있다. 사람 death와 crate destruction은
+  item을 만들지 않는다.
+- V3 AI drop은 death tick의 `spawnTick`과 `spawnTick + 300`인 `expireTick`을 가진다.
+- V2 rollback AI drop은 다음 30Hz fixed step에서 같은 10초 수명을 stamp한다.
+- Item Lifecycle System은 wrap-safe tick 비교로 만료 item을 World Owner에서 제거한다.
+- 사람이 먼저 획득한 item은 registry에서 이미 사라졌으므로 만료 처리로 복원하지 않는다.
 
 ## 9. Correction을 위한 Server State
 

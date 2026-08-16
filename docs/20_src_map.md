@@ -143,6 +143,8 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `src/simulation/player-movement-system.mjs`: shared core 실행, 목표 칸 예약과 World Owner commit
 - `src/simulation/crate-respawn-system.mjs`: 파괴 상자의 12초 복구 예약, 플레이어 9×9
   warning 억제와 warning 뒤 3초 fixed-tick 복구
+- `src/simulation/item-lifecycle-system.mjs`: AI 사망 drop의 10초 fixed-tick 수명 stamp와
+  미획득 item 제거
 - `src/simulation/item-rules.mjs`: AI 드롭 4종과 아이템별 authoritative stat update
 
 ### `server/src/simulation/game-simulation.mjs`
@@ -161,7 +163,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 
 - `bomb-system.mjs`: authoritative 몸 중심이 속한 칸의 fixed bomb placement, owner limit,
   90-tick fuse와 action result
-- `explosion-system.mjs`: exact blast/crate/current-AABB damage, AI drop·respawn와 event
+- `explosion-system.mjs`: exact blast/crate/current-AABB damage, 10초 수명의 AI drop·respawn와 event
 - `player-respawn-system.mjs`: V3 lifeId/teleport, fixed motion과 새 생명 command session reset
 - `fixed-aabb.mjs`: player와 bomb/flame/item cell overlap 순수 판정
 - `player-movement-system.mjs`: fixed movement commit, bomb pass-through 종료와 item 획득
@@ -185,7 +187,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
   긴 bomb cooldown·잦은 안전한 비최적 이동을 사용
 - `server/src/ai/bot-personality.mjs`: rookie/balanced/hunter의 탐색 예산·공격성·
   결정적 안전 실수 tuning
-- `server/src/ai/bot-tactics.mjs`: 생존, 아이템, 탈출 가능한 폭탄, 추적, 상자 접근과
+- `server/src/ai/bot-tactics.mjs`: 생존, 탈출 가능한 폭탄, 추적, 상자 접근과
   배회 우선순위를 한 decision으로 계산
 
 AI module은 World Owner를 mutation하지 않고 사람과 같은 방향/폭탄 intent만 반환한다.
@@ -369,7 +371,8 @@ serializer를 제거했다.
 - `server/test/coordinates.test.mjs`, `chunk-generator.test.mjs`: 음수 좌표와 결정적 경계 생성
 - `server/test/world-owner.test.mjs`, `spawn-finder.test.mjs`: canonical revision/metric과 spawn non-mutation
 - `server/test/game-simulation.test.mjs`: 이동 cadence/collision/item, 폭탄,
-  폭발 순간·live flame 접촉 damage, shield/death/AI drop·respawn, 사람 respawn 능력치 초기화, 영구 crate
+  폭발 순간·live flame 접촉 damage, shield/death/AI drop·respawn, 사람 death 무드롭과 respawn 능력치 초기화
+- `server/test/item-lifecycle-system.test.mjs`: 10초 stamp/expiry, 선획득과 uint32 wrap
   파괴와 tick catch-up
 - `server/test/player-respawn-system.test.mjs`: respawn lifeId/teleport와 command sequence 초기화
 - `server/test/bot-controller.test.mjs`: no-human idle, shared command, 6-bot bounded
@@ -377,7 +380,7 @@ serializer를 제거했다.
 - `server/test/bot-danger-map.test.mjs`: fuse/chain/flame 시간 위험과 wall 차단
 - `server/test/bot-pathfinder.test.mjs`: 우회 경로, 최대 거리와 방문 수 제한
 - `server/test/bot-personality.test.mjs`: profile 순환과 결정적 실수 빈도
-- `server/test/bot-tactics.test.mjs`: 생존/아이템/공격 우선순위와 폭탄 탈출 보장
+- `server/test/bot-tactics.test.mjs`: 생존/공격 우선순위, item 무시와 폭탄 탈출 보장
 - `server/test/protocol-v2.test.mjs`, `backpressure-sender.test.mjs`: protocol과 전송 제한
 - `server/test/websocket-gateway.test.mjs`: 25청크 init 순서, 이동 tiles 0,
   sequence idempotency, shared delta/resync, interest, V2 query/subprotocol과 구형

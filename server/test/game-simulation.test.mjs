@@ -228,6 +228,18 @@ test("legacy AI movement does not consume or gain stats from an item", () => {
   assert.equal(world.getItemAt(1, 0).id, "DROP");
 });
 
+test("human death never creates an item drop", () => {
+  const world = createTestWorld();
+  addPlayer(world, { id: "OWNER", x: 0, y: 0, range: 1 });
+  addPlayer(world, { id: "HUMAN", x: 1, y: 0 });
+  const simulation = createGameSimulation({ world, bombFuseTicks: 1 });
+  simulation.applyAction("OWNER", "bomb");
+  world.updatePlayer("OWNER", { x: 8, y: 8, prevX: 8, prevY: 8 });
+  simulation.advanceToTick(1);
+  assert.equal(world.getPlayer("HUMAN").alive, false);
+  assert.deepEqual(world.readItems(), []);
+});
+
 test("late timer catch-up advances each missed bomb tick exactly once", () => {
   const world = createTestWorld();
   addPlayer(world, { id: "P1", x: 0, y: 1 });

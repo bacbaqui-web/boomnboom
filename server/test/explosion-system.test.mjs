@@ -160,7 +160,10 @@ test("AI death drops an item then safely respawns with reset fixed motion", () =
   assert.equal(bot.alive, true);
   assert.equal(bot.lifeId, 2);
   assert.deepEqual([bot.vx, bot.vy, bot.desiredDirection], [0, 0, "neutral"]);
-  assert.ok(world.getItemAt(1, 0));
+  const drop = world.getItemAt(1, 0);
+  assert.ok(drop);
+  assert.equal(drop.spawnTick, 3);
+  assert.equal(drop.expireTick, 303);
   assert.equal(world.readPlayers().filter((player) => player.isAI && player.alive).length, 6);
 });
 
