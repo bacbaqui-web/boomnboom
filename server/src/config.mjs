@@ -9,7 +9,7 @@ export function loadServerConfig(environment = process.env) {
     moveIntervalMs: 1000 / 3,
     aiIntervalMs: 500,
     simulationTickRate: 30,
-    snapshotRate: 15,
+    snapshotRate: 30,
     maxCatchUpSteps: 5,
     worldEpochMs: numericValue(
       environment.WORLD_EPOCH_MS,

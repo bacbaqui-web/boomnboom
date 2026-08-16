@@ -44,12 +44,26 @@ test("gameplay speed starts at three tiles per second and gains half a tile per 
   assert.equal(speedTilesPerSecond(1), 3.5);
   assert.equal(speedTilesPerSecond(4), 5);
   assert.equal(BASE_GAMEPLAY_MOVEMENT_CONFIG.maxSpeedPerTick, 102);
+  assert.equal(BASE_GAMEPLAY_MOVEMENT_CONFIG.accelerationPerTick, 102);
+  assert.equal(BASE_GAMEPLAY_MOVEMENT_CONFIG.decelerationPerTick, 102);
   assert.equal(movementConfigForSpeedLevel(1).maxSpeedPerTick, 119);
+  assert.equal(movementConfigForSpeedLevel(1).accelerationPerTick, 119);
   assert.ok(
     Math.abs(
       BASE_GAMEPLAY_MOVEMENT_CONFIG.maxSpeedPerTick * 30 / 1024 - 3,
     ) < 0.02,
   );
+});
+
+test("gameplay movement reaches configured speed on the first tick", () => {
+  const result = stepMovement(
+    initialState(),
+    { tick: 1, direction: "right" },
+    openWorld,
+    BASE_GAMEPLAY_MOVEMENT_CONFIG,
+  );
+  assert.equal(result.state.vx, BASE_GAMEPLAY_MOVEMENT_CONFIG.maxSpeedPerTick);
+  assert.equal(result.state.px, 512 + BASE_GAMEPLAY_MOVEMENT_CONFIG.maxSpeedPerTick);
 });
 
 test("a pressed direction commits the adjacent cell and keyup still completes it", () => {

@@ -141,33 +141,18 @@ export class LocalMovementPredictor {
     };
   }
 
-  reconcile(
-    snapshot: V3OwnerSnapshot,
-    pending: readonly PendingCommand[],
-    collision: CollisionReader,
-  ) {
+  observeOwnerSnapshot(snapshot: V3OwnerSnapshot) {
     if (this.#snapshotSeq !== null && !isNetTickAfter(snapshot.snapshotSeq, this.#snapshotSeq)) {
       return { applied: false as const, reason: "stale" as const };
     }
-    const previousTick = this.#predictedTick;
-    const previousLifeId = this.#lifeId;
-    this.#state = stateFromOwner(snapshot);
     this.#movementConfig = Number.isSafeInteger(snapshot.player.speedLevel)
       ? movementConfigForSpeedLevel(snapshot.player.speedLevel)
       : DEFAULT_MOVEMENT_CONFIG;
-    this.#predictedTick = snapshot.serverTick;
     this.#snapshotSeq = snapshot.snapshotSeq;
     this.#lifeId = snapshot.player.lifeId;
-    const replay = this.advanceTo(previousTick, pending, collision);
     return {
       applied: true as const,
-      position: replay.position,
-      replayTicks: replay.replayTicks,
-      collisionCrossing: replay.collisionCrossing,
-      forceSnap:
-        snapshot.player.teleport ||
-        previousLifeId === null ||
-        previousLifeId !== snapshot.player.lifeId,
+      position: this.position,
     };
   }
 

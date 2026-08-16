@@ -16,7 +16,6 @@ Game Controller
   ├─ Input Sampler
   ├─ Command Timeline
   ├─ Local Predictor
-  ├─ Correction Smoother
   ├─ Remote Snapshot Buffer
   ├─ Pending Bomb Presenter
   ├─ Camera Runtime
@@ -31,7 +30,6 @@ Game Controller
 - Input Sampler는 DOM input을 direction/action으로 바꾸기만 한다.
 - Command Timeline은 sequence, target tick과 pending command를 소유한다.
 - Local Predictor는 shared Movement Core와 collision reader만 사용한다.
-- Correction Smoother는 simulation을 바꾸지 않고 render offset만 계산한다.
 - Remote Snapshot Buffer는 server samples와 Clock Sync만 사용한다.
 - Pending Bomb Presenter는 action result와 world snapshot을 사용하고 Movement Core를
   mutation하지 않는다.
@@ -77,11 +75,11 @@ lastAckedCommandSeq
 
 ## 6. Local Predictor
 
-local predictor는 `AuthoritativeState + PendingCommands`로 predicted state를 만든다.
+local predictor는 수명 시작 snapshot과 이후 local input으로 presentation state를 만든다.
 
 owner snapshot의 `speedLevel`이 있으면 기본 3칸/초와 아이템당 +0.5칸/초 설정을
-shared config에서 계산한다. 전환 기간의 구형 server처럼 필드가 없을 때만 기존
-속도를 사용해 client-first 배포 중 prediction mismatch를 막는다.
+shared config에서 계산한다. 속도 단계는 첫 이동 tick부터 즉시 적용하며 가속·감속
+곡선을 두지 않는다. 전환 기간의 구형 server처럼 필드가 없을 때만 기존 설정을 쓴다.
 
 ### 일반 tick
 
@@ -111,36 +109,22 @@ React state는 fixed snapshot과 gameplay event에서만 바꾸며 위치 transf
 
 1. stale snapshot 폐기
 2. `lastProcessedCommandSeq` 이하 pending command 제거
-3. authoritative movement state를 즉시 적용
-4. snapshot server tick 이후 현재 predicted tick까지 pending input replay
-5. replay 전 render position과 replay 후 predicted position 차이 계산
-6. Correction Smoother에 visual error 전달
+3. `speedLevel`, 생존과 stat metadata 갱신
+4. 일반 snapshot의 `px/py/vx/vy`는 local presentation에 적용하지 않음
+5. join, respawn, reconnect, 새 `lifeId`와 teleport만 새 시작 위치로 reset
 
 local predictor는 remote player, bomb fuse, React state와 Audio를 replay하지 않는다.
-300ms RTT에서도 replay 대상은 local movement 약 10~12 tick 정도로 bounded한다.
 
-## 7. Render-only Smooth Reconciliation
+## 7. Correction-free Local Presentation
 
 ```text
-renderPosition = predictedPosition + correctionOffset
+renderPosition = localPredictedPosition
 ```
 
-simulation position은 owner snapshot과 replay 결과로 즉시 수정한다. correction
-offset만 rAF에서 0으로 감쇠한다.
-
-초기 기준:
-
-| replay 뒤 위치 오차 | visual 처리 |
-|---|---|
-| `0~0.10 tile` | 약 80ms 감쇠 |
-| `0.10~0.50 tile` | clear path에서 120~180ms 감쇠 |
-| `0.50 tile 초과` | snap |
-| collision을 가로지름 | snap |
-| new lifeId, respawn, reconnect, teleport | snap |
-
-error가 생겼다고 authoritative collision state를 천천히 움직이지 않는다. correction
-duration, error distance, cause와 snap count를 metric/debug overlay에서 볼 수 있어야
-한다.
+일반 owner snapshot은 local 카메라와 player presentation transform을 다시 목표로 잡지
+않는다. server 위치는 gameplay 판정과 remote client projection의 authority로 남는다.
+따라서 local/server 위치 차이는 숨기지 말고 metric으로 관찰해야 하며, 폭탄 설치·아이템
+획득·피해 결과는 server 결과를 따른다. 새 수명과 연결 baseline만 명시적으로 snap한다.
 
 ## 8. Remote Snapshot Buffer
 
@@ -247,8 +231,7 @@ Clock Sync 결과를 읽되 playback correction만 소유한다.
 
 - disconnect 시 마지막 frame을 유지하고 reconnect UI를 표시한다.
 - resume 성공 전에는 새 command를 pending queue에 넣지 않는다.
-- resume full snapshot에서 command queue, prediction history와 correction offset을
-  초기화한다.
+- resume full snapshot에서 command queue와 local prediction history를 초기화한다.
 - 같은 player를 resume해도 새 `lifeId` 또는 teleport flag가 있으면 snap한다.
 - late join은 baseline chunks와 entity snapshot이 끝나기 전 playable 상태가 아니다.
 
@@ -268,9 +251,9 @@ V3 전환과 같은 rollback 단위에서 다음 current runtime을 제거한다
 
 - keydown frame feedback과 다음 predicted tick 이동
 - command send 실패가 pending queue에 남지 않음
-- ACK 뒤 pending 전체 replay와 bounded history
-- 200/300ms RTT, 50ms jitter에서 correction distribution
-- small error smoothing과 collision/teleport snap
+- owner ACK 뒤 local presentation 위치 불변
+- 200/300ms RTT, 50ms jitter와 receive stall에서 local 위치 보정 0
+- new lifeId, reconnect와 teleport reset
 - snapshot reorder, loss simulation, bounded extrapolation과 freeze
 - remote constant-speed render와 variable FPS
 - pending bomb confirm/reject/snapshot race

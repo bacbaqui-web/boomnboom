@@ -5,7 +5,7 @@ import { LocalMovementPredictor } from "../app/game/local-movement-predictor.ts"
 
 const openWorld = { isBlockedCell: () => false };
 
-function owner({ tick = 0, seq = 0, px = 512, vx = 0, lifeId = 1, ack = null, speedLevel } = {}) {
+function owner({ tick = 0, seq = 0, px = 512, vx = 0, lifeId = 1, ack = null, speedLevel = 0 } = {}) {
   return {
     protocol: 3,
     type: "owner_snapshot",
@@ -18,7 +18,7 @@ function owner({ tick = 0, seq = 0, px = 512, vx = 0, lifeId = 1, ack = null, sp
       targetCellX: null, targetCellY: null,
       x: Math.floor(px / 1024), y: 0, alive: true, joined: true, isAI: false,
       nickname: "P1", power: 1, range: 2, shield: 0, lifeId, teleport: false,
-      ...(speedLevel === undefined ? {} : { speedLevel }),
+      ...(speedLevel === null ? {} : { speedLevel }),
     },
   };
 }
@@ -29,9 +29,9 @@ test("keydown predicts exactly one shared step in-frame and scheduler cannot dup
   predictor.reset(owner());
   const command = timeline.prepareDirection("right", 1);
   timeline.commit(command);
-  assert.equal(predictor.advanceTo(1, timeline.pending, openWorld).position.x, 0.0625);
-  assert.equal(predictor.advanceTo(1, timeline.pending, openWorld).position.x, 0.0625);
-  assert.equal(predictor.advanceTo(2, timeline.pending, openWorld).position.x, 0.1875);
+  assert.equal(predictor.advanceTo(1, timeline.pending, openWorld).position.x, 0.099609375);
+  assert.equal(predictor.advanceTo(1, timeline.pending, openWorld).position.x, 0.099609375);
+  assert.equal(predictor.advanceTo(2, timeline.pending, openWorld).position.x, 0.19921875);
 });
 
 test("prediction uses the authoritative speed level while old snapshots keep legacy speed", () => {
@@ -48,7 +48,7 @@ test("prediction uses the authoritative speed level while old snapshots keep leg
 
   assert.ok(Math.abs(cruiseDistance(0) - 3) < 0.02);
   assert.ok(Math.abs(cruiseDistance(1) - 3.5) < 0.02);
-  assert.ok(cruiseDistance(undefined) > 7);
+  assert.ok(cruiseDistance(null) > 7);
 });
 
 test("render preview fills the next fixed tick without mutating prediction", () => {
@@ -59,16 +59,16 @@ test("render preview fills the next fixed tick without mutating prediction", () 
   timeline.commit(command);
   predictor.advanceTo(1, timeline.pending, openWorld);
 
-  assert.deepEqual(predictor.position, { x: 0.0625, y: 0 });
+  assert.deepEqual(predictor.position, { x: 0.099609375, y: 0 });
   assert.deepEqual(predictor.previewNext(timeline.pending, openWorld).position, {
-    x: 0.1875,
+    x: 0.19921875,
     y: 0,
   });
-  assert.deepEqual(predictor.position, { x: 0.0625, y: 0 });
+  assert.deepEqual(predictor.position, { x: 0.099609375, y: 0 });
   assert.equal(predictor.predictedTick, 1);
 });
 
-test("owner reconciliation drops ACKed input, replays all pending ticks, and rejects reorder", () => {
+test("owner snapshots ACK input and update metadata without correcting local position", () => {
   const predictor = new LocalMovementPredictor();
   const timeline = new CommandTimeline();
   predictor.reset(owner({ seq: 1 }));
@@ -77,15 +77,14 @@ test("owner reconciliation drops ACKed input, replays all pending ticks, and rej
   const neutral = timeline.prepareDirection("neutral", 4);
   timeline.commit(neutral);
   predictor.advanceTo(6, timeline.pending, openWorld);
+  const localPosition = predictor.position;
   timeline.acknowledge(0);
-  const result = predictor.reconcile(
-    owner({ tick: 2, seq: 2, px: 576, vx: 64, ack: 0 }),
-    timeline.pending,
-    openWorld,
+  const result = predictor.observeOwnerSnapshot(
+    owner({ tick: 2, seq: 2, px: -4096, vx: 0, ack: 0, speedLevel: 1 }),
   );
   assert.equal(result.applied, true);
-  assert.equal(result.replayTicks, 4);
-  assert.equal(predictor.reconcile(owner({ tick: 1, seq: 1 }), timeline.pending, openWorld).reason, "stale");
+  assert.deepEqual(predictor.position, localPosition);
+  assert.equal(predictor.observeOwnerSnapshot(owner({ tick: 1, seq: 1 })).reason, "stale");
 });
 
 test("reconnect and lifecycle reset clear prediction history", () => {
@@ -121,7 +120,7 @@ test("prediction uses the body-majority cell for bombs and finishes after keyup"
 
   const neutral = timeline.prepareDirection("neutral", 3);
   timeline.commit(neutral);
-  predictor.advanceTo(7, timeline.pending, openWorld);
+  predictor.advanceTo(12, timeline.pending, openWorld);
   assert.deepEqual(predictor.position, { x: 1, y: 0 });
   assert.deepEqual(predictor.bombCell, { x: 1, y: 0 });
 });

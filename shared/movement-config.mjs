@@ -41,8 +41,8 @@ export function movementConfigForSpeedLevel(speedLevel = 0) {
   return Object.freeze({
     ...DEFAULT_MOVEMENT_CONFIG,
     maxSpeedPerTick,
-    accelerationPerTick: Math.ceil(maxSpeedPerTick / 4),
-    decelerationPerTick: Math.ceil(maxSpeedPerTick * 3 / 8),
+    accelerationPerTick: maxSpeedPerTick,
+    decelerationPerTick: maxSpeedPerTick,
     carryRemainderAcrossCells: true,
   });
 }

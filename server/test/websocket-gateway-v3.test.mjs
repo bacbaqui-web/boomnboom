@@ -72,12 +72,13 @@ function createHarness() {
     const explosion = explosionSystem.step(serverTick);
     gateway.publishV3ActionResults([...respawn.results, ...bombs.results], serverTick);
     gateway.publishV3WorldEvents(explosion.events, serverTick);
-    if (serverTick % 2 === 0) {
-      if (movement.cellChanged || bombs.changed || explosion.changed || respawn.changed) {
-        gateway.publish();
-      }
-      gateway.publishV3Snapshots(serverTick);
+    if (
+      serverTick % 2 === 0 &&
+      (movement.cellChanged || bombs.changed || explosion.changed || respawn.changed)
+    ) {
+      gateway.publish();
     }
+    gateway.publishV3Snapshots(serverTick);
   }
 
   const fixedStepLoop = createFixedStepLoop({ onStep: step });
@@ -176,7 +177,7 @@ async function joinV2(harness, url) {
   return { ...client, hello };
 }
 
-test("V3 gateway runs join, ready, 30Hz movement, and 15Hz absolute snapshots", async (t) => {
+test("V3 gateway runs join, ready, 30Hz movement, and 30Hz absolute snapshots", async (t) => {
   const harness = createHarness();
   t.after(() => closeHarness(harness));
   const url = await listen(harness);
@@ -203,7 +204,7 @@ test("V3 gateway runs join, ready, 30Hz movement, and 15Hz absolute snapshots", 
   const snapshots = client.collector.messages.filter(
     (message) => message.type === "owner_snapshot" && message.lastProcessedCommandSeq === 1,
   ).slice(0, 3);
-  assert.deepEqual(snapshots.map((message) => message.serverTick), [2, 4, 6]);
+  assert.deepEqual(snapshots.map((message) => message.serverTick), [2, 3, 4]);
   const wallIntervals = snapshots.slice(1).map(
     (message, index) => message.serverTimeMs - snapshots[index].serverTimeMs,
   );

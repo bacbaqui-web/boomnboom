@@ -8,7 +8,7 @@
 V3의 목적은 generic networking framework가 아니라 다음 다섯 가지다.
 
 - future target tick command
-- owner ACK와 full pending input replay
+- 30Hz owner ACK와 local presentation 독립성
 - absolute remote movement sample
 - authoritative bomb/action result와 world event
 - reconnect resume와 late join baseline
@@ -133,11 +133,11 @@ owner_snapshot
   clock { rttEcho?, nextBeatTick }
 ```
 
-ACK는 별도 input packet마다 보내지 않고 기본 15Hz snapshot에 piggyback한다. local
-client는 ACK 이하 pending command를 제거하고 나머지를 replay한다.
-`targetCellX/Y`는 keyup 뒤 남은 이동과 이동 중 폭탄의 설치 칸을 client prediction이
-server와 동일하게 replay하기 위한 authoritative movement state다. 두 값은 함께
-정수이거나 함께 `null`이어야 한다.
+ACK는 별도 input packet마다 보내지 않고 기본 30Hz snapshot에 piggyback한다. local
+client는 ACK 이하 pending command를 제거하지만 일반 snapshot의 `px/py`로 화면 위치를
+되감거나 pending command를 다시 replay하지 않는다. `targetCellX/Y`는 server gameplay와
+remote projection을 설명하는 authoritative movement state이며 두 값은 함께 정수이거나
+함께 `null`이어야 한다.
 `speedLevel`은 server가 확정한 누적 속도 아이템 수다. 필드가 없는 구형 server와
 연결된 새 client는 전환 호환을 위해 구형 이동 설정을 사용하며, 새 server는 항상
 0 이상의 정수를 보낸다.
@@ -147,7 +147,7 @@ server와 동일하게 replay하기 위한 authoritative movement state다. 두 
 moving entity sample은 다음 원칙을 따른다.
 
 - 각 sample은 absolute `px, py, vx, vy`, `speedLevel`, `serverTick`, `lifeId`를 가진다.
-- 움직이는 remote player는 기본 15Hz로 관심 영역 subscriber에게 보낸다.
+- 움직이는 remote player는 기본 30Hz로 관심 영역 subscriber에게 보낸다.
 - spawn, death, respawn과 forced relocation은 `teleport` 또는 새 `lifeId`를 가진다.
 - stale `snapshotSeq`는 폐기한다.
 - entity removed는 tombstone key로 전달한다.
@@ -263,7 +263,7 @@ unknown `type`은 reject한다. 같은 version의 optional additive server field
 - join/resume → baseline chunks/entity → ready 순서
 - 200/300ms RTT와 50ms jitter target tick arrival
 - duplicate/stale/late command idempotency
-- owner ACK와 pending replay
+- owner ACK 수신이 local presentation 위치를 변경하지 않음
 - snapshot reorder/stale 폐기와 absolute sample recovery
 - bomb action result correlation과 event dedupe
 - backpressure 1013 뒤 resume full snapshot

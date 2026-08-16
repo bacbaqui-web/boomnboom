@@ -24,7 +24,7 @@ Browser
               → World Publisher의 interest/snapshot/delta publication
               → Game Simulation command
               → World Owner mutation/read
-              → V3: 30Hz fixed simulation / 15Hz entity snapshot
+              → V3: 30Hz fixed simulation / 30Hz entity snapshot
               → V2 rollback: chunk/entity/enemy delta
       ← authoritative snapshots, deltas와 world events
       → chunk cache에서 15×11 crop + 단일 rAF camera/entity transform
@@ -36,14 +36,15 @@ Browser
 ## 1.1 Protocol V3 공용 이동 코어
 
 - `shared/net-tick.mjs`: uint32 wrap-safe tick 비교와 target lead window 분류
-- `shared/movement-config.mjs`: fixed unit, 속도, 가속/감속, 충돌 반경과 turn grace
+- `shared/movement-config.mjs`: fixed unit, 즉발 정속, 충돌 반경과 turn grace
 - `shared/movement-step.mjs`: 인접 목표 칸 확정, 중심선 이동, 도착 후 연속 진행과
   plain `isBlockedCell` reader를 받는 순수 1-tick 이동·충돌 계산
 - `shared/player-colors.mjs`: 빨강을 제외한 사람용 8색 ID와 기본값·서버 검증
 - `tests/fixtures/movement-golden-fixture.mjs`: client/server 공용 결정적 tick fixture
 
 server fixed movement와 client local predictor가 이 코어를 함께 사용한다. canonical
-state는 server만 commit하고 client는 prediction/replay에만 같은 수식을 사용한다.
+state는 server만 commit하고 client는 correction-free local presentation에 같은 수식을
+사용한다.
 
 ## 2. 웹 클라이언트 — `app/`
 
@@ -56,7 +57,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 
 - V2 message/entity type, envelope validation과 Oracle `?protocol=2` URL
 - hello/join/init/25청크/entity snapshot/ready 순서와 clientSeq command
-- ack/correction, chunk gap resync, disconnect 뒤 1.5초 reconnect
+- ack/stat 적용, chunk gap resync, disconnect 뒤 1.5초 reconnect
 - reconnect world metadata와 initial authoritative revision을 Store에서 재검증
 - 기본 V3 join/baseline/ready/ping/input/resume, `?protocol=2` V2 rollback 병행
 
@@ -81,9 +82,8 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `clock-sync.ts`: V3 server tick, RTT/jitter와 bounded future command lead
 - `input-sampler.ts`: V3 key state 변경 즉시 전송과 250ms held-direction heartbeat
 - `command-timeline.ts`: 전송 성공한 V3 command sequence와 bounded pending queue
-- `local-movement-predictor.ts`: shared movement fixed tick, owner restore/pending replay와
-  state를 변경하지 않는 다음 1-tick render preview
-- `correction-smoother.ts`: simulation과 분리된 render-only offset 감쇠/snap
+- `local-movement-predictor.ts`: shared movement fixed tick, owner ACK/stat 관찰,
+  correction-free local state와 다음 1-tick render preview
 - `protocol-v3.ts`: V3 client envelope parse, fixed entity projection과 typed command
 - `remote-snapshot-buffer.ts`: 원격 player별 bounded absolute history, 보간/외삽/freeze
 - `render-frame-coordinator.ts`: viewport의 단일 rAF frame을 render listener에 전달
@@ -197,7 +197,7 @@ AI module은 World Owner를 mutation하지 않고 사람과 같은 방향/폭탄
 ### `server/src/ai/bot-command-driver.mjs`
 
 - 500ms AI intent를 다음 30Hz fixed tick의 공용 input/action command로 변환
-- AI도 사람과 같은 acceleration, collision, bomb authority 경로를 사용하도록 연결
+- AI도 사람과 같은 즉발 정속, collision, bomb authority 경로를 사용하도록 연결
 - World Owner를 직접 변경하지 않고 Command Buffer만 호출
 
 ### `server/src/world/coordinates.mjs`
@@ -247,7 +247,7 @@ AI module은 World Owner를 mutation하지 않고 사람과 같은 방향/폭탄
 - `entity-projector.mjs`: World entity의 network projection, grouping과 delta 계산
 - `world-publisher.mjs`: init/interest/chunk/entity snapshot·delta와 heartbeat publication
 - `protocol-v3.mjs`: V3 command schema와 server fixed-tick envelope
-- `entity-snapshot-publisher.mjs`: 15Hz absolute owner/entity sample과 processed command ACK
+- `entity-snapshot-publisher.mjs`: 30Hz absolute owner/entity sample과 processed command ACK
 - `chunk-publisher.mjs`: V3 baseline, revision resync/delta와 interest preload
 - `connection-registry.mjs`: 10초 player lease, resume token rotation과 current session guard
 - `v3-session-flow.mjs`: provisional-free join/resume/full baseline과 V3 rate/session lifecycle
@@ -264,7 +264,7 @@ AI module은 World Owner를 mutation하지 않고 사람과 같은 방향/폭탄
 ### 현재 gameplay 시간
 
 - V2 rollback 이동 rate limit: 기본 약 333ms, speed item에 따라 단축
-- V3 fixed movement: 30Hz, entity snapshot 15Hz
+- V3 fixed movement: 30Hz, entity snapshot 30Hz
 - V3 기본 이동속도: 초당 3칸, speed item 1개당 초당 0.5칸 증가
 - AI interval: 500ms
 - world tick: 기본 1000ms
@@ -358,8 +358,8 @@ serializer를 제거했다.
   movement의 client/server golden 결과, 목표 칸 완주, 중심선, 동적 sweep, 음수 좌표와
   tick wrap 계약
 - `tests/clock-sync`, `command-timeline`, `local-movement-predictor`,
-  `correction-smoother`, `game-socket-v3`, `v3-network-harness`: V3 local prediction,
-  replay/reset과 200/300ms RTT·jitter 계약
+  `game-socket-v3`, `v3-network-harness`: V3 correction-free local prediction,
+  ACK/reset과 200/300ms RTT·jitter 계약
 - `tests/remote-snapshot-buffer.test.mjs`: 15Hz→60/120Hz 일정 속도, stale/drop/stall,
   100ms 외삽 상한, lifecycle snap과 terrain selector 격리
 - `tests/pending-bomb-presenter`, `explosion-event-presenter`, `death-event-presenter`:

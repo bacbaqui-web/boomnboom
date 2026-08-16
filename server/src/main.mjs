@@ -124,13 +124,11 @@ export function startServer({ environment = process.env, logger = console.log } 
         bombs.changed ||
         explosion.changed ||
         crateRespawn.changed;
-      if (serverTick % 2 === 0) {
-        if (v2MovementDirty) {
-          gateway?.publish();
-          v2MovementDirty = false;
-        }
-        gateway?.publishV3Snapshots(serverTick);
+      if (serverTick % 2 === 0 && v2MovementDirty) {
+        gateway?.publish();
+        v2MovementDirty = false;
       }
+      gateway?.publishV3Snapshots(serverTick);
     },
   });
   const scheduler = createSimulationScheduler({

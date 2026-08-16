@@ -1,43 +1,45 @@
-# Crate Warning Visual Sprint
+# Local Presentation and 30Hz Snapshot Sprint
 
 ## 상태
 
 - 구현·로컬 검증: PASS
-- commit/push와 Sites 배포: PASS
+- commit/push와 Oracle·Sites 배포: 대기
 
 ## 목표
 
-상자 복구 3초 전 warning을 바닥 전체 노란 장판이 아니라 곧 생길 상자의 자리 표시로
-보이게 한다.
+내 화면의 플레이어 위치는 일반 owner snapshot으로 되감거나 보정하지 않고 local
+prediction만 표시한다. 칸 이동은 첫 tick부터 정속으로 실행하며 V3 remote 위치
+snapshot을 15Hz에서 30Hz로 높인다.
 
-## 구현
+## 구현 Manifest
 
-- warning tile의 바닥 배경은 투명하게 유지한다.
-- 실제 상자와 동일한 가로·세로 82% 크기를 사용한다.
-- 중앙 실루엣은 매우 연한 노란색으로 하고 3px 반투명 점선 테두리를 사용한다.
-- warning tick, crate restore, collision과 protocol은 변경하지 않는다.
+1. owner snapshot은 ACK와 stat 갱신에만 쓰고 local presentation `px/py`를 바꾸지 않는다.
+2. join, respawn, reconnect, 새 `lifeId`와 teleport만 새 시작 위치로 reset한다.
+3. gameplay movement config의 acceleration/deceleration을 최대속도와 같게 해 첫 tick부터
+   초당 3칸 정속을 사용한다.
+4. V3 owner/entity snapshot을 30Hz fixed simulation 매 tick 발행한다.
+5. V2 rollback의 dirty publication cadence와 server gameplay authority는 유지한다.
+6. 사용되지 않는 Correction Smoother와 해당 test를 제거한다.
 
-## 완료 조건
+## Preserve와 위험
 
-- CSS contract, root build/client test, lint와 TypeScript PASS
-- server regression과 `git diff --check` PASS
-- GitHub와 Sites production 배포 완료
+- 폭탄 설치, 아이템 획득, 충돌, damage와 다른 client가 보는 위치는 server authority다.
+- local presentation과 server 위치가 달라도 일반 snapshot으로 자동 수렴하지 않는다.
+  이 차이는 이번 요청의 명시적 계약이며 이후 divergence metric으로 관찰한다.
+- 30Hz full entity snapshot은 기존 15Hz보다 전송·직렬화량이 약 두 배다. 현재 소규모
+  운영에서는 허용하되 동접 증가 전 interest/delta projection을 우선한다.
 
-## 로컬 검증 결과
+## 검증 결과
 
-- root production build와 client test 92/92 PASS
+- root production build와 client test 91/91 PASS
 - server regression 106/106 PASS
+- 200/300ms RTT, jitter와 300ms receive stall에서 owner snapshot local 이동 0
+- 첫 gameplay tick에서 speed level별 최고속도 적용 확인
+- 실제 V3 gateway owner snapshot tick `2,3,4` 연속 발행 확인
 - ESLint와 TypeScript PASS
-- `git diff --check` PASS
-
-## 배포 결과
-
-- GitHub `main` 구현 commit `6a2336a` push 완료
-- Sites version 67 production 배포 성공
-- 공개 페이지 HTTP 200 확인
-- server 규칙 변경이 없는 client-only 작업이라 Oracle server는 변경하지 않았다.
 
 ## Rollback
 
-`app/globals.css`의 `crate_warning` 두 selector만 이전 디자인으로 복원하는 client-only
-단위다.
+local owner reconcile/Correction Smoother를 복원하고 gameplay acceleration tuning과 V3
+snapshot cadence를 이전 15Hz로 되돌리는 client+server 단위다. V2 path와 protocol schema는
+바뀌지 않아 직전 Oracle/Sites version으로 각각 복구할 수 있다.

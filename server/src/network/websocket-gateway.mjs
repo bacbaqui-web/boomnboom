@@ -31,7 +31,7 @@ export function createWebSocketGateway({
   movementSystem = null,
   getV3Clock = null,
   simulationTickRate = 30,
-  snapshotRate = 15,
+  snapshotRate = 30,
   v3LeaseMs = 10_000,
   v3MaxMessagesPerSecond = 120,
   readBufferedAmount = (socket) => socket.bufferedAmount,

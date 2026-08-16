@@ -33,7 +33,7 @@ generic command framework, ECS, event bus와 전체 world rollback은 만들지 
 - fixed delta: 33.33ms
 - movement, collision, item collect, bomb placement, fuse, explosion, flame damage와
   death를 같은 단조 증가 `serverTick`에서 처리한다.
-- snapshot publication은 기본 15Hz로 두 simulation tick마다 실행한다.
+- V3 owner/entity snapshot publication은 simulation과 같은 30Hz로 매 tick 실행한다.
 - AI는 500ms마다 canonical read snapshot 하나와 공용 danger map 하나로 전술 intent를
   다시 고른다. 결과는 Bot Command Driver가 다음 fixed tick의 공용 Command Buffer에
   넣으므로, AI도 사람과 같은 30Hz 이동·충돌·폭탄 권한 경로를 사용한다.
@@ -97,7 +97,7 @@ Movement Core가 하는 일:
 - 목표 칸 중심까지 직교축을 현재 칸 중심선에 고정
 - keyup 뒤에도 확정한 목표 칸 중심까지 이동
 - 같은 방향을 누르고 있으면 도착 속도를 보존해 다음 인접 칸을 연속 확정
-- fixed acceleration/deceleration 적용
+- 방향을 확정한 첫 tick부터 속도 단계별 정속 적용
 - old position에서 next position까지 axis-separated sweep collision
 - wall, crate, confirmed bomb와 player collision 처리
 - 목표 칸 도착 시 bounded queued direction change 처리
@@ -116,7 +116,7 @@ Movement Core가 하지 않는 일:
 
 - 기본 최고속도: 초당 3칸
 - 속도 아이템: 1개당 초당 0.5칸 누적 증가
-- 최고속도 도달: 약 120ms
+- 가속·감속 단계 없음: 첫 이동 tick부터 해당 단계의 최고속도
 - queued turn grace: 2~3 simulation tick
 - moving corner assist: 교차점 중심에서 최대 `320/1024 tile`, 정지 상태에는 미적용
 - 막힌 인접 칸은 목표로 확정하지 않음
@@ -233,7 +233,7 @@ Unity의 command slack과 같은 목적이며 별도 local key delay가 아니�
 - Item Lifecycle System은 wrap-safe tick 비교로 만료 item을 World Owner에서 제거한다.
 - 사람이 먼저 획득한 item은 registry에서 이미 사라졌으므로 만료 처리로 복원하지 않는다.
 
-## 9. Correction을 위한 Server State
+## 9. Owner ACK와 Server State
 
 local player snapshot은 최소 다음을 포함한다.
 
@@ -247,9 +247,10 @@ alive
 teleport
 ```
 
-server는 매 input packet에 correction을 별도 전송하지 않고 15Hz owner snapshot에
-ACK state를 piggyback한다. bomb처럼 즉시 UI 결과가 필요한 edge action만 별도
-`action_result`를 보낸다.
+server는 매 input packet에 ACK를 별도 전송하지 않고 30Hz owner snapshot에 처리한
+command sequence와 authoritative state를 piggyback한다. local presentation은 일반 owner
+snapshot의 위치로 되감지 않으며 ACK 이하 pending command 제거와 stat 갱신에 사용한다.
+bomb처럼 즉시 UI 결과가 필요한 edge action만 별도 `action_result`를 보낸다.
 
 사람 respawn은 새 생명 경계다. 위치·fixed motion·`lifeId`와 함께 폭탄 수, 화력,
 방어막과 속도 아이템을 시작값으로 초기화하고 command sequence/queue도 새 session으로
@@ -261,19 +262,19 @@ ACK state를 piggyback한다. bomb처럼 즉시 UI 결과가 필요한 edge acti
 - player별 command queue 길이, command rate와 future lead를 제한한다.
 - duplicate/stale sequence는 idempotent하게 폐기하거나 이전 result를 재사용한다.
 - client clock은 target tick 제안에만 사용하고 server가 허용 window를 검증한다.
-- 최대 속도, acceleration, collision, bomb power와 damage는 client 값으로 바꾸지
+- 최대 속도, collision, bomb power와 damage는 client 값으로 바꾸지
   않는다.
-- catch-up backlog, simulation duration, late command와 correction error를 health
+- catch-up backlog, simulation duration, late command와 local/server 위치 차이를 health
   또는 bounded metrics로 관찰한다.
 
 ## 11. 검증 계약
 
 - shared movement fixture가 server/client에서 tick별 같은 fixed-point state 생성
-- acceleration, deceleration, reversal과 corridor turn
+- 첫 tick 정속, reversal과 corridor turn
 - 음수 좌표, wall/crate/bomb/player sweep collision과 관통 0
 - 200/300ms RTT와 50ms jitter에서 target tick scheduling
 - late/missing/duplicate command와 bounded queue
-- ACK 뒤 pending input replay 결과와 authoritative 결과 일치
+- owner ACK가 local presentation 위치를 변경하지 않음
 - bomb placement cell, owner exit pass-through와 re-entry block
 - explosion 순간과 live flame 접촉 damage
 - tick catch-up 순서와 event-loop starvation 방지

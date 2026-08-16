@@ -53,6 +53,8 @@
   input state만 intent로 보낸다.
 - key down을 일부러 지연하지 않는다. local input은 다음 predicted tick에 적용하고,
   server command buffer만 RTT와 jitter 여유를 흡수한다.
+- 방향을 확정한 첫 gameplay tick부터 해당 속도 단계의 최고속도를 사용하며 별도
+  가속·감속 곡선을 두지 않는다.
 - 키를 놓았다고 이미 승인된 이동이 원래 위치로 되돌아가지 않는다.
 - 키를 계속 누르는 동안 방향 의도를 짧은 heartbeat로 복구하며, 다른 방향키를
   놓아도 아직 눌린 이동키의 방향을 이어간다.
@@ -106,9 +108,11 @@
   아니다.
 - 지형, 움직이는 entity, 카메라와 HUD를 별도 렌더링 책임으로 둔다.
 - 지형은 chunk revision이 바뀔 때만 갱신한다.
-- authoritative/predicted movement state와 화면용 correction offset을 구분한다.
-- local player만 prediction/replay하고 remote player는 과거 server snapshot 사이를
-  보간한다.
+- authoritative server movement와 local presentation movement를 구분한다.
+- local player 화면은 owner snapshot의 위치로 되감거나 보정하지 않고 local prediction만
+  표시한다. 단, join·respawn·reconnect·새 `lifeId`는 새 수명 기준으로 초기화한다.
+- server는 폭탄·아이템·충돌·피해와 다른 접속자에게 보낼 위치의 authority를 유지한다.
+- remote player는 과거 server snapshot 사이를 보간한다.
 - 로컬 플레이어를 화면 중앙에 고정하고 카메라가 월드를 움직이는 것은
   projection이며 서버 상태를 바꾸지 않는다.
 - `requestAnimationFrame`은 보간과 transform만 수행하며 React canonical

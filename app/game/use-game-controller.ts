@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { AudioRuntime } from "./audio-runtime";
 import { ClockSync } from "./clock-sync";
 import { CommandTimeline } from "./command-timeline";
-import { CorrectionSmoother } from "./correction-smoother";
 import { DeathEventPresenter, type DeathVisual } from "./death-event-presenter";
 import {
   ExplosionEventPresenter,
@@ -49,7 +48,6 @@ export function useGameController() {
   const commandTimelineRef = useRef(new CommandTimeline());
   const localPredictorRef = useRef(new LocalMovementPredictor());
   const localRenderInterpolatorRef = useRef(new PositionInterpolator(1000 / 30));
-  const correctionSmootherRef = useRef(new CorrectionSmoother());
   const remoteSnapshotBufferRef = useRef(new RemoteSnapshotBuffer());
   const pendingBombPresenterRef = useRef(new PendingBombPresenter());
   const explosionEventPresenterRef = useRef(new ExplosionEventPresenter());
@@ -79,10 +77,7 @@ export function useGameController() {
     sample(now: number) {
       const predicted = localPredictorRef.current.position;
       return predicted
-        ? correctionSmootherRef.current.sample(
-            localRenderInterpolatorRef.current.sample(now),
-            now,
-          )
+        ? localRenderInterpolatorRef.current.sample(now)
         : { x: 0, y: 0 };
     },
   }), []);
@@ -100,7 +95,6 @@ export function useGameController() {
     commandTimelineRef.current.reset();
     localPredictorRef.current.clear();
     localRenderInterpolatorRef.current = new PositionInterpolator(1000 / 30);
-    correctionSmootherRef.current.reset();
     remoteSnapshotBufferRef.current.clear();
     pendingBombPresenterRef.current.reset();
     explosionEventPresenterRef.current.reset();
@@ -191,13 +185,6 @@ export function useGameController() {
     if (!predictor.canApplySnapshot(owner)) return;
     const timeline = commandTimelineRef.current;
     const now = performance.now();
-    const previousPosition = predictor.position;
-    const previousRender = previousPosition
-      ? correctionSmootherRef.current.sample(
-          localRenderInterpolatorRef.current.sample(now),
-          now,
-        )
-      : null;
     const lifecycleReset =
       predictor.lifeId === null ||
       predictor.lifeId !== owner.player.lifeId ||
@@ -205,33 +192,11 @@ export function useGameController() {
     if (lifecycleReset) {
       timeline.reset();
       predictor.reset(owner);
-      correctionSmootherRef.current.reset();
       updateLocalRenderTarget(now, true);
       return;
     }
     timeline.acknowledge(owner.lastProcessedCommandSeq);
-    const result = predictor.reconcile(
-      owner,
-      timeline.pending,
-      collisionReaderRef.current,
-    );
-    if (!result.applied || !result.position || !previousRender) return;
-    const corrected = previousPosition && (
-      previousPosition.x !== result.position.x ||
-      previousPosition.y !== result.position.y
-    );
-    updateLocalRenderTarget(now, Boolean(corrected));
-    if (corrected) {
-      correctionSmootherRef.current.reconcile(
-        previousRender,
-        localRenderInterpolatorRef.current.sample(now),
-        now,
-        {
-          forceSnap: result.forceSnap,
-          collisionCrossing: result.collisionCrossing,
-        },
-      );
-    }
+    predictor.observeOwnerSnapshot(owner);
   }, [updateLocalRenderTarget]);
 
   useEffect(() => {
