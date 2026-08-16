@@ -18,4 +18,6 @@
 - root production build와 client test 92/92 PASS
 - server regression 106/106 PASS
 - ESLint, TypeScript와 `git diff --check` PASS
-- GitHub push와 Sites production 배포 대기
+- GitHub `main` 구현 commit `6a2336a` push 완료
+- Sites version 67 production 배포와 공개 페이지 HTTP 200 확인
+- Oracle server 변경 없음

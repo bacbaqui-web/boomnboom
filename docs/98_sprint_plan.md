@@ -3,7 +3,7 @@
 ## 상태
 
 - 구현·로컬 검증: PASS
-- commit/push와 Sites 배포: 대기
+- commit/push와 Sites 배포: PASS
 
 ## 목표
 
@@ -29,6 +29,13 @@
 - server regression 106/106 PASS
 - ESLint와 TypeScript PASS
 - `git diff --check` PASS
+
+## 배포 결과
+
+- GitHub `main` 구현 commit `6a2336a` push 완료
+- Sites version 67 production 배포 성공
+- 공개 페이지 HTTP 200 확인
+- server 규칙 변경이 없는 client-only 작업이라 Oracle server는 변경하지 않았다.
 
 ## Rollback
 
