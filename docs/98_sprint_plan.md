@@ -3,7 +3,7 @@
 ## 상태
 
 - 구현·로컬 검증: PASS
-- commit/push와 Oracle·Sites 배포: 대기
+- commit/push와 Oracle·Sites 배포: PASS
 
 ## 목표
 
@@ -43,3 +43,13 @@ snapshot을 15Hz에서 30Hz로 높인다.
 local owner reconcile/Correction Smoother를 복원하고 gameplay acceleration tuning과 V3
 snapshot cadence를 이전 15Hz로 되돌리는 client+server 단위다. V2 path와 protocol schema는
 바뀌지 않아 직전 Oracle/Sites version으로 각각 복구할 수 있다.
+
+## 배포 결과
+
+- GitHub `main` 구현 commit `e7a3c26` push 완료
+- Oracle staging server regression 106/106 PASS 후 service 재시작
+- Oracle V3 `snapshotRate: 30`, 연속 owner tick `2220,2221,2222`와 V2 input ACK 확인
+- Oracle health `ok`, fixed backlog 0, 최근 step 0ms, RSS 약 80MB
+- 이전 server/shared는
+  `/home/ubuntu/deploy-backups/boomnboom-20260816-local-correction-before-e7a3c26`에 보존
+- Sites version 68 production 배포와 공개 페이지 HTTP 200 확인

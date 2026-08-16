@@ -25,4 +25,8 @@
 - root production build/client 91건, server regression 106건 PASS
 - 200/300ms RTT·jitter·receive stall local correction 0 확인
 - ESLint와 TypeScript PASS
-- GitHub push와 Oracle·Sites production 배포 대기
+- GitHub `main` 구현 commit `e7a3c26` push 완료
+- Oracle staging/server regression 106건과 공개 V3 30Hz·V2 ACK 확인
+- Oracle service active, health `ok`, fixed backlog 0, RSS 약 80MB
+- Sites version 68 production 배포와 공개 페이지 HTTP 200 확인
+- 이전 Oracle server/shared 복구본 보존
