@@ -3,7 +3,7 @@ import test from "node:test";
 import { entityKey } from "../app/game/protocol.ts";
 import {
   canEnterWorldCell,
-  selectNearbyChunkKeys,
+  selectViewportChunkKeys,
 } from "../app/game/world-selectors.ts";
 import { createWorldRuntimeState } from "../app/game/world-state.ts";
 
@@ -67,7 +67,7 @@ test("cell selector refuses terrain, bombs, and other players", () => {
   assert.equal(canEnterWorldCell(state, -1, -1), false);
 });
 
-test("terrain renderer keeps a 3x3 window while the store retains a 5x5 preload", () => {
+test("terrain renderer keeps only viewport-overlapping chunks while store retains preload", () => {
   const preload = [];
   for (let chunkY = -3; chunkY <= 1; chunkY += 1) {
     for (let chunkX = -3; chunkX <= 1; chunkX += 1) {
@@ -75,12 +75,11 @@ test("terrain renderer keeps a 3x3 window while the store retains a 5x5 preload"
     }
   }
 
-  const visible = selectNearbyChunkKeys(preload, -1, -1, 16);
+  const visible = selectViewportChunkKeys(preload, -1, -1, 15, 11, 16);
   assert.equal(preload.length, 25);
-  assert.equal(visible.length, 9);
+  assert.equal(visible.length, 4);
   assert.deepEqual(new Set(visible), new Set([
-    "-2,-2", "-1,-2", "0,-2",
-    "-2,-1", "-1,-1", "0,-1",
-    "-2,0", "-1,0", "0,0",
+    "-1,-1", "0,-1",
+    "-1,0", "0,0",
   ]));
 });

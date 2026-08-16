@@ -3,8 +3,8 @@
 ## 1. 목적과 현재 차이
 
 이 문서는 V3 client가 local player를 즉시 predict하고 remote player를 server
-snapshot history로 보간하는 Runtime 계약을 정의한다. 현재 production의 one-cell
-prediction과 latest-target linear interpolation은 Sprint에서 단계적으로 교체한다.
+snapshot history로 보간하는 Runtime 계약을 정의한다. 현재 production은 이 계약과
+공용 fixed movement core를 사용한다.
 
 ## 2. 최소 Runtime 구성
 
@@ -96,6 +96,17 @@ preview는 render target일 뿐 predicted state, command ACK와 bomb cell을 변
 browser는 fixed tick 진입 여부를 `requestAnimationFrame`에서 확인해 background timer
 jitter를 화면 이동에 더하지 않는다. shared Movement Core 자체는 server와 같은 30Hz다.
 
+prediction 확인, camera/local player, remote player paint는 서로 다른 rAF를 만들지
+않는다. `WorldViewport`가 소유한 단일 rAF가 다음 순서로 실행한다.
+
+1. local predictor를 현재 예상 server tick까지 진행
+2. local render position sample
+3. remote render listener 일괄 paint
+4. camera transform과 local travel pose paint
+
+React state는 fixed snapshot과 gameplay event에서만 바꾸며 위치 transform은 DOM style을
+직접 갱신한다. 같은 pixel transform과 idle pose는 반복해서 쓰지 않는다.
+
 ### Owner snapshot 수신
 
 1. stale snapshot 폐기
@@ -134,6 +145,16 @@ duration, error distance, cause와 snap count를 metric/debug overlay에서 볼 
 ## 8. Remote Snapshot Buffer
 
 remote player별 bounded ring buffer를 둔다.
+
+화면 밖 remote player는 snapshot history에는 남지만 React entity DOM을 만들지 않는다.
+화면 경계 2칸의 overscan 안에 들어왔을 때만 avatar를 만들며, enemy direction pointer는
+전체 authoritative summary를 계속 사용한다. 따라서 culling은 게임 상태나 적 탐지를
+바꾸지 않는 render-only 최적화다.
+
+Terrain Store는 player 주변 25청크 preload를 유지한다. DOM에는 15×11 viewport와
+2칸 overscan이 실제로 겹치는 청크만 선택해 최대 4청크를 만든다. camera의 sub-cell
+transform은 고정된 absolute tile DOM 위에서 움직이므로 floor pattern과 collision은
+변하지 않는다.
 
 ```text
 RemoteSample

@@ -28,21 +28,29 @@ export function knownChunkRevisions(state: WorldRuntimeState) {
   );
 }
 
-export function selectNearbyChunkKeys(
+export function selectViewportChunkKeys(
   chunkKeys: readonly string[],
   worldX: number,
   worldY: number,
+  visibleWidth: number,
+  visibleHeight: number,
   chunkSize = 16,
-  radius = 1,
+  overscan = 2,
 ) {
-  const centerX = Math.floor(worldX / chunkSize);
-  const centerY = Math.floor(worldY / chunkSize);
+  const horizontalRadius = Math.ceil(visibleWidth / 2) + overscan;
+  const verticalRadius = Math.ceil(visibleHeight / 2) + overscan;
+  const minChunkX = Math.floor((worldX - horizontalRadius) / chunkSize);
+  const maxChunkX = Math.floor((worldX + horizontalRadius) / chunkSize);
+  const minChunkY = Math.floor((worldY - verticalRadius) / chunkSize);
+  const maxChunkY = Math.floor((worldY + verticalRadius) / chunkSize);
   return chunkKeys.filter((chunkKey) => {
     if (!/^-?\d+,-?\d+$/.test(chunkKey)) return false;
     const [chunkX, chunkY] = chunkKey.split(",").map(Number);
     return (
-      Math.abs(chunkX - centerX) <= radius &&
-      Math.abs(chunkY - centerY) <= radius
+      chunkX >= minChunkX &&
+      chunkX <= maxChunkX &&
+      chunkY >= minChunkY &&
+      chunkY <= maxChunkY
     );
   });
 }

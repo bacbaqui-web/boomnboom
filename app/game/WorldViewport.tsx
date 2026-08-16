@@ -18,6 +18,7 @@ import type { RemotePositionSource } from "./remote-snapshot-buffer";
 import type { PendingBombVisual } from "./pending-bomb-presenter";
 import type { ExplosionFlameVisual } from "./explosion-event-presenter";
 import type { DeathVisual } from "./death-event-presenter";
+import { RenderFrameCoordinator } from "./render-frame-coordinator";
 import { TerrainLayer } from "./TerrainLayer";
 import type { ClientWorldStore, EntitySnapshot, WorldSnapshot } from "./world-store";
 
@@ -33,6 +34,7 @@ export function WorldViewport({
   explosionFlames,
   deathVisuals,
   onLocalStep,
+  onRenderFrame,
   children,
 }: {
   store: ClientWorldStore;
@@ -46,6 +48,7 @@ export function WorldViewport({
   explosionFlames: readonly ExplosionFlameVisual[];
   deathVisuals: readonly DeathVisual[];
   onLocalStep?: () => void;
+  onRenderFrame?: (now: number) => void;
   children?: React.ReactNode;
 }) {
   const boardRef = useRef<HTMLDivElement | null>(null);
@@ -54,12 +57,20 @@ export function WorldViewport({
   const localVisualCellRef = useRef<{ x: number; y: number } | null>(null);
   const previousLocalVisualRef = useRef<Position | null>(null);
   const lastLocalStepAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const localTravelPoseActiveRef = useRef(false);
+  const lastRootTransformRef = useRef("");
+  const onRenderFrameRef = useRef(onRenderFrame);
   const cameraRef = useRef(new CameraRuntime(175));
+  const [frameCoordinator] = useState(() => new RenderFrameCoordinator());
   const previousPlayerRef = useRef<{ x: number; y: number; alive: boolean } | null>(null);
   const [tileSize, setTileSize] = useState(0);
   const metadata = snapshot.metadata;
   const visibleWidth = metadata?.visibleWidth ?? 15;
   const visibleHeight = metadata?.visibleHeight ?? 11;
+
+  useLayoutEffect(() => {
+    onRenderFrameRef.current = onRenderFrame;
+  }, [onRenderFrame]);
 
   useLayoutEffect(() => {
     const board = boardRef.current;
@@ -96,6 +107,7 @@ export function WorldViewport({
     localVisualCellRef.current = null;
     previousLocalVisualRef.current = null;
     const paint = (now: number) => {
+      onRenderFrameRef.current?.(now);
       const board = boardRef.current;
       const root = rootRef.current;
       if (board && root && tileSize > 0) {
@@ -112,27 +124,40 @@ export function WorldViewport({
             onLocalStep?.();
           }
           localVisualCellRef.current = cell;
-          root.style.transform = CameraRuntime.transformFor(
+          const transform = CameraRuntime.transformFor(
               visual,
               board.clientWidth,
               board.clientHeight,
               tileSize,
             );
+          if (transform !== lastRootTransformRef.current) {
+            root.style.transform = transform;
+            lastRootTransformRef.current = transform;
+          }
         } else {
           visual = cameraRef.current.sample(now);
-          root.style.transform = CameraRuntime.transformFor(
+          const transform = CameraRuntime.transformFor(
               visual,
               board.clientWidth,
               board.clientHeight,
               tileSize,
             );
+          if (transform !== lastRootTransformRef.current) {
+            root.style.transform = transform;
+            lastRootTransformRef.current = transform;
+          }
         }
+        frameCoordinator.paint({ now, center: visual, visibleWidth, visibleHeight });
         if (localAvatarRef.current) {
-          paintPlayerTravelPose(
+          const moving = paintPlayerTravelPose(
             localAvatarRef.current,
             previousLocalVisualRef.current,
             visual,
           );
+          if (!moving && localTravelPoseActiveRef.current) {
+            clearPlayerTravelPose(localAvatarRef.current);
+          }
+          localTravelPoseActiveRef.current = moving;
         }
         previousLocalVisualRef.current = visual;
       }
@@ -143,7 +168,7 @@ export function WorldViewport({
       cancelAnimationFrame(frame);
       clearPlayerTravelPose(localAvatarElement);
     };
-  }, [localPlayer?.alive, localPositionSource, onLocalStep, tileSize]);
+  }, [frameCoordinator, localPlayer?.alive, localPositionSource, onLocalStep, tileSize, visibleHeight, visibleWidth]);
 
   const localBomb = localPositionSource
     ? undefined
@@ -168,6 +193,8 @@ export function WorldViewport({
               tileSize={tileSize}
               centerX={localPlayer?.x ?? 0}
               centerY={localPlayer?.y ?? 0}
+              visibleWidth={visibleWidth}
+              visibleHeight={visibleHeight}
               chunkSize={metadata?.chunkSize ?? 16}
             />
             <EntityLayer
@@ -176,6 +203,9 @@ export function WorldViewport({
               localPlayer={localPlayer}
               centerLocalBomb={!localPositionSource}
               remotePositionSource={remotePositionSource}
+              frameCoordinator={frameCoordinator}
+              visibleWidth={visibleWidth}
+              visibleHeight={visibleHeight}
               pendingBombs={pendingBombs}
               explosionFlames={explosionFlames}
               deathVisuals={deathVisuals}

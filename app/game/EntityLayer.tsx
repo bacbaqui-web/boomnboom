@@ -1,61 +1,44 @@
 "use client";
 
-import { memo, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
-import { clearPlayerTravelPose, paintPlayerTravelPose } from "./player-animation";
+import { memo, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PlayerAvatar } from "./PlayerAvatar";
 import type { PendingBombVisual } from "./pending-bomb-presenter";
 import type { ExplosionFlameVisual } from "./explosion-event-presenter";
 import type { DeathVisual } from "./death-event-presenter";
-import { PositionInterpolator } from "./position-interpolator";
 import type { PlayerEntity, WorldEntity } from "./protocol";
+import { RemotePlayerPainter } from "./remote-player-painter";
 import type { RemotePositionSource } from "./remote-snapshot-buffer";
+import type { RenderFrameCoordinator } from "./render-frame-coordinator";
+import { isWithinRenderBounds } from "./render-visibility";
 import type { ClientWorldStore } from "./world-store";
 
 function AnimatedPlayer({
   player,
   tileSize,
-  remotePositionSource,
+  painter,
 }: {
   player: PlayerEntity;
   tileSize: number;
-  remotePositionSource: RemotePositionSource | null;
+  painter: RemotePlayerPainter;
 }) {
   const elementRef = useRef<HTMLSpanElement | null>(null);
   const avatarRef = useRef<HTMLSpanElement | null>(null);
-  const motionRef = useRef(new PositionInterpolator(135));
-  const previousRef = useRef({ x: player.x, y: player.y });
-  const previousVisualRef = useRef<{ x: number; y: number } | null>(null);
+  const initialPositionRef = useRef({ x: player.x, y: player.y });
 
   useLayoutEffect(() => {
-    if (remotePositionSource) return;
-    const previous = previousRef.current;
-    const distance = Math.hypot(player.x - previous.x, player.y - previous.y);
-    const teleport = distance > 2;
-    motionRef.current.setTarget(player.x, player.y, performance.now(), { teleport });
-    if (teleport) previousVisualRef.current = null;
-    previousRef.current = { x: player.x, y: player.y };
-  }, [player.x, player.y, remotePositionSource]);
+    if (!elementRef.current || !avatarRef.current) return;
+    painter.register(
+      player.id,
+      initialPositionRef.current,
+      { element: elementRef.current, avatar: avatarRef.current },
+      performance.now(),
+    );
+    return () => painter.unregister(player.id);
+  }, [painter, player.id]);
 
-  useEffect(() => {
-    let frame = 0;
-    const avatarElement = avatarRef.current;
-    const paint = (now: number) => {
-      const visual = remotePositionSource?.sample(player.id, now) ?? motionRef.current.sample(now);
-      if (avatarRef.current) {
-        paintPlayerTravelPose(avatarRef.current, previousVisualRef.current, visual);
-      }
-      previousVisualRef.current = visual;
-      if (elementRef.current) {
-        elementRef.current.style.transform = `translate3d(${(visual.x + 0.14) * tileSize}px, ${(visual.y + 0.14) * tileSize}px, 0)`;
-      }
-      frame = requestAnimationFrame(paint);
-    };
-    frame = requestAnimationFrame(paint);
-    return () => {
-      cancelAnimationFrame(frame);
-      clearPlayerTravelPose(avatarElement);
-    };
-  }, [player.id, remotePositionSource, tileSize]);
+  useLayoutEffect(() => {
+    painter.updateTarget(player.id, { x: player.x, y: player.y }, performance.now());
+  }, [painter, player.id, player.x, player.y]);
 
   return (
     <span
@@ -96,6 +79,9 @@ export const EntityLayer = memo(function EntityLayer({
   localPlayer,
   centerLocalBomb,
   remotePositionSource,
+  frameCoordinator,
+  visibleWidth,
+  visibleHeight,
   pendingBombs,
   explosionFlames,
   deathVisuals,
@@ -105,19 +91,33 @@ export const EntityLayer = memo(function EntityLayer({
   localPlayer: PlayerEntity | undefined;
   centerLocalBomb: boolean;
   remotePositionSource: RemotePositionSource | null;
+  frameCoordinator: RenderFrameCoordinator;
+  visibleWidth: number;
+  visibleHeight: number;
   pendingBombs: readonly PendingBombVisual[];
   explosionFlames: readonly ExplosionFlameVisual[];
   deathVisuals: readonly DeathVisual[];
 }) {
+  const [painter] = useState(() => new RemotePlayerPainter());
   const snapshot = useSyncExternalStore(
     store.subscribeEntities,
     store.getEntitySnapshot,
     store.getEntitySnapshot,
   );
+  useEffect(
+    () => frameCoordinator.subscribe((frame) => {
+      painter.paint(frame, remotePositionSource, tileSize);
+    }),
+    [frameCoordinator, painter, remotePositionSource, tileSize],
+  );
+  useEffect(() => () => painter.clear(), [painter]);
   const dyingPlayerIds = new Set(deathVisuals.map((visual) => visual.playerId));
+  const center = localPlayer ?? { x: 0, y: 0 };
+  const isVisible = (position: { x: number; y: number }) =>
+    isWithinRenderBounds(position, center, visibleWidth, visibleHeight);
   return (
     <div className="entityLayer">
-      {explosionFlames.map((flame) => (
+      {explosionFlames.filter(isVisible).map((flame) => (
         <span
           key={flame.id}
           className="flame worldEntity eventFlame"
@@ -126,7 +126,7 @@ export const EntityLayer = memo(function EntityLayer({
           ✦
         </span>
       ))}
-      {pendingBombs.map((bomb) => (
+      {pendingBombs.filter(isVisible).map((bomb) => (
         <span
           key={`pending-bomb:${bomb.commandSeq}`}
           className="bomb worldEntity pendingBomb"
@@ -141,13 +141,14 @@ export const EntityLayer = memo(function EntityLayer({
         </span>
       ))}
       {snapshot.entities.map((entity: WorldEntity) => {
+        if (!isVisible(entity)) return null;
         if (entity.kind === "player") {
           return entity.id === localPlayer?.id || !entity.alive || dyingPlayerIds.has(entity.id) ? null : (
             <AnimatedPlayer
               key={`player:${entity.id}`}
               player={entity}
               tileSize={tileSize}
-              remotePositionSource={remotePositionSource}
+              painter={painter}
             />
           );
         }
@@ -197,7 +198,7 @@ export const EntityLayer = memo(function EntityLayer({
           </span>
         );
       })}
-      {deathVisuals.map((visual) => (
+      {deathVisuals.filter(isVisible).map((visual) => (
         <span
           key={visual.id}
           className="playerAnchor worldEntity deathBurst"

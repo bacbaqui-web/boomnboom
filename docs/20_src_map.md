@@ -27,7 +27,7 @@ Browser
               → V3: 30Hz fixed simulation / 15Hz entity snapshot
               → V2 rollback: chunk/entity/enemy delta
       ← authoritative snapshots, deltas와 world events
-      → chunk cache에서 15×11 crop + rAF camera/entity transform
+      → chunk cache에서 15×11 crop + 단일 rAF camera/entity transform
 ```
 
 공개 page는 D1 게임 API를 호출하지 않는다. 현재 실시간 제품 경로는
@@ -64,7 +64,7 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 
 - `world-state.ts`: world clock/metadata, chunk/entity cache의 Runtime state shape
 - `world-message-applier.ts`: snapshot/delta/stale/gap/reconnect message 적용
-- `world-selectors.ts`: 진입 가능한 cell, known chunk revision과 3×3 terrain render 범위 조회
+- `world-selectors.ts`: 진입 가능한 cell, known chunk revision과 viewport 교차 terrain 조회
 - `world-store.ts`: global/entity/chunk-key external-store subscription façade
 - chunk delta는 해당 chunk listener만 깨우고 movement/tick은 terrain input을 바꾸지 않음
 
@@ -86,15 +86,18 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `correction-smoother.ts`: simulation과 분리된 render-only offset 감쇠/snap
 - `protocol-v3.ts`: V3 client envelope parse, fixed entity projection과 typed command
 - `remote-snapshot-buffer.ts`: 원격 player별 bounded absolute history, 보간/외삽/freeze
+- `render-frame-coordinator.ts`: viewport의 단일 rAF frame을 render listener에 전달
+- `render-visibility.ts`: viewport와 2칸 overscan 안의 entity render 여부 판정
+- `remote-player-painter.ts`: 보이는 remote player의 보간 transform과 travel pose 일괄 paint
 - `pending-bomb-presenter.ts`: V3 bomb pending/result/authoritative snapshot race 표시
 - `explosion-event-presenter.ts`: exact explosion event의 late fast-forward와 flame dedupe
 - `death-event-presenter.ts`: server damaged event를 650ms 사망 visual로 dedupe/만료
 
 ### Render와 UI
 
-- `TerrainLayer.tsx`: Store의 25청크 중 player 주변 3×3만 DOM으로 만들고 chunk
-  revision selector와 절대좌표 floor pattern 유지
-- `EntityLayer.tsx`: remote player rAF 보간과 world 좌표의 bomb/item/flame/사망 렌더링
+- `TerrainLayer.tsx`: Store의 25청크 중 viewport와 겹치는 최대 4청크만 DOM으로 만들고
+  chunk revision selector와 절대좌표 floor pattern 유지
+- `EntityLayer.tsx`: 보이는 entity만 DOM으로 만들고 remote player를 공용 frame에서 paint
 - V3 remote player는 snapshot buffer를, V2 remote player는 기존 latest-target 보간을 사용
 - `player-animation.ts`: 바닥 기준 idle과 중앙→경계 최고점→다음 중앙의 위치 기반 pose;
   local, AI, 다른 플레이어가 같은 렌더 전용 점프를 사용
@@ -102,7 +105,8 @@ state는 server만 commit하고 client는 prediction/replay에만 같은 수식�
 - `PlayerAvatar.tsx`: 사람별 선택 색상, AI 전용 빨강, nickname과 shield 렌더링
 - `EnemyPointers.tsx`, `entity-selectors.ts`: V2 summary 또는 V3 player snapshot에서
   화면 밖 적 방향을 투영하고 local bomb 조회
-- `WorldViewport.tsx`: 15×11 overflow crop, local player 중앙 anchor와 rAF `translate3d`;
+- `WorldViewport.tsx`: 15×11 overflow crop, local player 중앙 anchor와 단일 rAF `translate3d`;
+  predictor/camera/local/remote paint 순서를 한 frame으로 조립하고 같은 transform 재기록 방지;
   V3 bomb은 player 중심에 고정하지 않고 월드 좌표에 남기며 local 칸 경계 이동음을 요청
 - `audio-runtime.ts`: BGM 동기화·음량과 local 이동/서버 확정 폭발 합성 효과음
 - `GameLegend.tsx`: 아이템 범례와 BGM 음량 UI

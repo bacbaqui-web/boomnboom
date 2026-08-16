@@ -50,10 +50,7 @@ export function paintPlayerTravelPose(
   current: { x: number; y: number },
 ) {
   const pose = playerTravelPose(previous, current);
-  if (!pose) {
-    clearPlayerTravelPose(element);
-    return false;
-  }
+  if (!pose) return false;
   element.style.animation = "none";
   element.style.transform = [
     `translateY(${pose.translateY.toFixed(3)}px)`,

@@ -269,24 +269,17 @@ export function useGameController() {
     store,
   ]);
 
-  useEffect(() => {
+  const advanceRenderFrame = useCallback((now: number) => {
     if (networkProtocol !== 3 || !joined || !snapshot.initialized) return;
-    let frame = 0;
-    const runPredictionFrame = (now: number) => {
-      const predictor = localPredictorRef.current;
-      if (predictor.position) {
-        const result = predictor.advanceTo(
-          clockSyncRef.current.predictionTargetTick(Date.now()),
-          commandTimelineRef.current.pending,
-          collisionReaderRef.current,
-        );
-        if (result.replayTicks > 0) updateLocalRenderTarget(now);
-        refreshExplosionFlames();
-      }
-      frame = requestAnimationFrame(runPredictionFrame);
-    };
-    frame = requestAnimationFrame(runPredictionFrame);
-    return () => cancelAnimationFrame(frame);
+    const predictor = localPredictorRef.current;
+    if (!predictor.position) return;
+    const result = predictor.advanceTo(
+      clockSyncRef.current.predictionTargetTick(Date.now()),
+      commandTimelineRef.current.pending,
+      collisionReaderRef.current,
+    );
+    if (result.replayTicks > 0) updateLocalRenderTarget(now);
+    refreshExplosionFlames();
   }, [joined, networkProtocol, refreshExplosionFlames, snapshot.initialized, updateLocalRenderTarget]);
 
   useEffect(() => {
@@ -434,6 +427,7 @@ export function useGameController() {
     respawn,
     cycleVolume,
     playLocalStep,
+    advanceRenderFrame,
     ...input,
   };
 }

@@ -23,6 +23,7 @@ export default function Home() {
       explosionFlames={game.explosionFlames}
       deathVisuals={game.deathVisuals}
       onLocalStep={game.playLocalStep}
+      onRenderFrame={game.advanceRenderFrame}
     >
       {game.joined && game.localPlayer && !game.localPlayer.alive && !game.localDeathAnimating ? (
         <DeathOverlay onRespawn={game.respawn} />

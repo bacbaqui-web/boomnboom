@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useMemo, useSyncExternalStore } from "react";
 import type { ClientWorldStore } from "./world-store";
-import { selectNearbyChunkKeys } from "./world-selectors";
+import { selectViewportChunkKeys } from "./world-selectors";
 
 const TerrainChunk = memo(function TerrainChunk({
   store,
@@ -57,6 +57,8 @@ export const TerrainLayer = memo(function TerrainLayer({
   tileSize,
   centerX,
   centerY,
+  visibleWidth,
+  visibleHeight,
   chunkSize,
 }: {
   store: ClientWorldStore;
@@ -64,11 +66,20 @@ export const TerrainLayer = memo(function TerrainLayer({
   tileSize: number;
   centerX: number;
   centerY: number;
+  visibleWidth: number;
+  visibleHeight: number;
   chunkSize: number;
 }) {
   const visibleChunkKeys = useMemo(
-    () => selectNearbyChunkKeys(chunkKeys, centerX, centerY, chunkSize),
-    [centerX, centerY, chunkKeys, chunkSize],
+    () => selectViewportChunkKeys(
+      chunkKeys,
+      centerX,
+      centerY,
+      visibleWidth,
+      visibleHeight,
+      chunkSize,
+    ),
+    [centerX, centerY, chunkKeys, chunkSize, visibleHeight, visibleWidth],
   );
   return (
     <div className="terrainLayer">

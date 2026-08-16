@@ -1,3 +1,38 @@
+# Render Hot Path Optimization Sprint
+
+## 상태
+
+- 구현: PASS
+- root build/client test, lint, TypeScript: PASS
+- server regression, 실제 배포와 Edge QA: 진행 중
+
+## 목표와 Preserve
+
+새 Tactical AI가 움직일 때도 browser가 server보다 더 많은 일을 하지 않게 한다.
+Server Authority, 30Hz fixed simulation, 15Hz snapshot, 15×11 화면, 25청크 preload,
+local prediction, remote interpolation, 점프와 효과음은 그대로 유지한다.
+
+## 구현 Manifest
+
+1. `WorldViewport`만 rAF를 소유하고 prediction/camera/local/remote paint를 한 frame에서 실행
+2. remote player별 rAF와 controller prediction rAF 제거
+3. 위치가 바뀐 경우만 `translate3d`를 쓰고 idle pose DOM style 반복 기록 제거
+4. viewport 2칸 밖 player/bomb/item/flame/death visual DOM 제외
+5. Store의 25청크는 유지하되 terrain DOM은 3×3 9청크에서 viewport 교차 최대 4청크로 축소
+6. pure visibility/selector와 shared frame/painter 회귀 테스트 추가
+
+Rollback은 새 coordinator/painter/visibility 제거 후 EntityLayer의 개별 rAF와 3×3 selector를
+복원하는 client-only 단위다. protocol, server와 canonical world state는 변경하지 않는다.
+
+## 완료 조건
+
+- source/test 전부 500줄 미만
+- root build/client tests, ESLint, TypeScript, server tests와 `git diff --check` PASS
+- public Sites 배포 뒤 Edge에서 join, 이동, remote AI, 폭탄/폭발과 enemy pointer 확인
+- 공개 `/boom-health`와 WebSocket V3 연결 정상
+
+---
+
 # Tactical AI Sprint
 
 ## 상태
